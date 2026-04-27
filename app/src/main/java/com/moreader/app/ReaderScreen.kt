@@ -171,6 +171,7 @@ fun ReaderScreen(
                     textColor = state.theme.textColor,
                     fontScale = state.fontSize / 18f,
                     onTextSelected = { viewModel.onTextSelected(it) },
+                    onLinkClicked = { viewModel.onLinkClicked(it) },
                     ttsHighlightIndex = ttsHighlightIdx,
                     modifier = Modifier.fillMaxSize().background(Color(android.graphics.Color.parseColor(state.theme.bgColor))),
                 )

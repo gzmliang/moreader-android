@@ -119,11 +119,72 @@ class ReaderViewModel(
     }
     fun nextChapter() { val s = _uiState.value; if (s.currentChapterIndex < s.chapters.size - 1) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex + 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(); saveProgress() } } }
     fun prevChapter() { val s = _uiState.value; if (s.currentChapterIndex > 0) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex - 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(); saveProgress() } } }
-    fun navigateToChapter(href: String) { val chs = _uiState.value.chapters; val cl = href.substringBefore('#'); val idx = chs.indexOfFirst { it.href == cl || it.href.endsWith(cl.removePrefix("OEBPS/")) || cl.endsWith(it.href.removePrefix("OEBPS/")) }; if (idx >= 0) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = idx, isLoading = true, currentHtml = null, showTocPanel = false, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(); saveProgress() } } }
+    fun navigateToChapter(href: String) { 
+        val chs = _uiState.value.chapters
+        val cl = href.substringBefore('#').trim()
+        
+        // Try multiple matching strategies
+        var idx = chs.indexOfFirst { it.href == cl }
+        if (idx < 0) idx = chs.indexOfFirst { it.href.endsWith(cl) }
+        if (idx < 0) idx = chs.indexOfFirst { cl.endsWith(it.href) }
+        if (idx < 0) {
+            val targetFile = cl.substringAfterLast('/')
+            idx = chs.indexOfFirst { it.href.substringAfterLast('/') == targetFile }
+        }
+        if (idx < 0) {
+            val targetNoExt = cl.substringAfterLast('/').substringBeforeLast('.')
+            idx = chs.indexOfFirst { 
+                it.href.substringAfterLast('/').substringBeforeLast('.') == targetNoExt 
+            }
+        }
+        
+        if (idx >= 0) { 
+            killPlayChain()
+            _uiState.update { it.copy(currentChapterIndex = idx, isLoading = true, currentHtml = null, showTocPanel = false, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }
+            viewModelScope.launch { loadChapterContent(); saveProgress() }
+        }
+    }
     private suspend fun saveProgress() { val s = _uiState.value; val b = s.book ?: return; val c = s.chapters.getOrNull(s.currentChapterIndex) ?: return; repository.updateProgress(b.id, c.href, s.currentChapterIndex, b.currentProgress, null) }
     fun setTheme(t: ReaderTheme) { _uiState.update { it.copy(theme = t) } }
     fun setFontSize(s: Int) { _uiState.update { it.copy(fontSize = s.coerceIn(14, 28)) } }
     fun onTextSelected(t: String) { _uiState.update { it.copy(selectedText = t, showSelectionMenu = true) } }
+    fun onLinkClicked(url: String) { 
+        // Handle internal EPUB link clicks
+        val cleanUrl = url.trim()
+        log("Link clicked: $cleanUrl")
+        
+        // Extract path and anchor
+        val path = cleanUrl.substringBefore('#')
+        val anchor = cleanUrl.substringAfter('#', "")
+        
+        // Find matching chapter
+        val chs = _uiState.value.chapters
+        var idx = chs.indexOfFirst { it.href == path }
+        if (idx < 0) idx = chs.indexOfFirst { it.href.endsWith(path) }
+        if (idx < 0) idx = chs.indexOfFirst { path.endsWith(it.href) }
+        if (idx < 0) {
+            val targetFile = path.substringAfterLast('/')
+            idx = chs.indexOfFirst { it.href.substringAfterLast('/') == targetFile }
+        }
+        if (idx < 0) {
+            val targetNoExt = path.substringAfterLast('/').substringBeforeLast('.')
+            idx = chs.indexOfFirst { 
+                it.href.substringAfterLast('/').substringBeforeLast('.') == targetNoExt 
+            }
+        }
+        
+        if (idx >= 0) {
+            killPlayChain()
+            _uiState.update { it.copy(currentChapterIndex = idx, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }
+            viewModelScope.launch { 
+                loadChapterContent()
+                // TODO: Scroll to anchor after content loaded
+                saveProgress() 
+            }
+        } else {
+            log("Could not find chapter for link: $cleanUrl")
+        }
+    }
     fun dismissSelectionMenu() { _uiState.update { it.copy(showSelectionMenu = false) } }
     fun toggleTtsDebugLog() { _uiState.update { it.copy(showTtsDebugLog = !it.showTtsDebugLog) } }
     fun translate(mode: String = "translate") { val t = _uiState.value.selectedText ?: return; val c = _uiState.value.llmConfig; if (c.apiKey.isEmpty()) { _uiState.update { it.copy(translationResult = getApplication<android.app.Application>().getString(com.moreader.app.R.string.configure_api_key_first), showTranslationPanel = true) }; return }; _uiState.update { it.copy(isTranslating = true, translationMode = mode, showTranslationPanel = true, translationResult = null) }; viewModelScope.launch { val r = translationService.translate(c, t, mode) { ch -> _uiState.update { it.copy(translationResult = (it.translationResult ?: "") + ch) } }; r.onFailure { e -> _uiState.update { it.copy(isTranslating = false, translationResult = getApplication<android.app.Application>().getString(com.moreader.app.R.string.translation_failed, e.message ?: "")) } }.onSuccess { _uiState.update { it.copy(isTranslating = false) } } } }

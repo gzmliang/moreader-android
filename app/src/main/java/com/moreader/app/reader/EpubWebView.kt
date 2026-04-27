@@ -42,12 +42,15 @@ fun EpubWebView(
     textColor: String,
     fontScale: Float,
     onTextSelected: (String) -> Unit,
+    onLinkClicked: (String) -> Unit = {},
     ttsHighlightIndex: Int = -1,
     modifier: Modifier = Modifier,
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     val callbackRef = remember { mutableStateOf<(String) -> Unit>({}) }
+    val linkCallbackRef = remember { mutableStateOf<(String) -> Unit>({}) }
     LaunchedEffect(onTextSelected) { callbackRef.value = onTextSelected }
+    LaunchedEffect(onLinkClicked) { linkCallbackRef.value = onLinkClicked }
 
     // TTS highlight: call JS when index changes
     LaunchedEffect(ttsHighlightIndex) {
@@ -116,6 +119,19 @@ fun EpubWebView(
                     setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
 
                     webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?, request: WebResourceRequest?
+                        ): Boolean {
+                            val url = request?.url?.toString() ?: return false
+                            // Intercept internal EPUB links
+                            if (url.startsWith("file:///OEBPS/") || 
+                                url.startsWith("file:///")) {
+                                linkCallbackRef.value(url)
+                                return true
+                            }
+                            return false
+                        }
+
                         override fun shouldInterceptRequest(
                             view: WebView?, request: WebResourceRequest?
                         ): WebResourceResponse? {
@@ -150,6 +166,18 @@ fun EpubWebView(
                                 };
                                 window.ttsClear=function(){document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});};
                                 
+                                // Intercept link clicks to handle internal navigation
+                                document.addEventListener('click',function(e){
+                                    var a=e.target.closest('a[href]');
+                                    if(a){
+                                        var href=a.getAttribute('href');
+                                        if(href && !href.startsWith('http') && !href.startsWith('mailto:') && !href.startsWith('tel:')){
+                                            e.preventDefault();
+                                            MoreaderBridge.onLinkClicked(href);
+                                        }
+                                    }
+                                });
+                                
                                 // For page-tap scrolling via scrollBy
                                 window.pageUp=function(){window.scrollBy(0,-window.innerHeight*0.85);};
                                 window.pageDown=function(){window.scrollBy(0,window.innerHeight*0.85);};
@@ -159,6 +187,8 @@ fun EpubWebView(
                     addJavascriptInterface(object {
                         @JavascriptInterface
                         fun onTextSelected(text: String) { callbackRef.value(text) }
+                        @JavascriptInterface
+                        fun onLinkClicked(url: String) { linkCallbackRef.value(url) }
                     }, "MoreaderBridge")
                 }
             },
