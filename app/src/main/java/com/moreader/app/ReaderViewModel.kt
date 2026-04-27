@@ -1,6 +1,7 @@
 package com.moreader.app.ui
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -58,7 +59,26 @@ class ReaderViewModel(
 
     companion object { private const val TAG = "ReaderVM" }
 
-    private val _uiState = MutableStateFlow(ReaderUiState())
+    private val prefs = application.getSharedPreferences("moreader_config", Context.MODE_PRIVATE)
+
+    private val _uiState = MutableStateFlow(
+        ReaderUiState(
+            edgeTtsEndpoint = prefs.getString("edge_endpoint", "http://powerplus.blogsyte.com:5001") ?: "http://powerplus.blogsyte.com:5001",
+            edgeTtsVoice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural",
+            aiVoiceEndpoint = prefs.getString("ai_endpoint", "https://api.siliconflow.cn/v1") ?: "https://api.siliconflow.cn/v1",
+            aiVoiceApiKey = prefs.getString("ai_apikey", "") ?: "",
+            aiVoiceModel = prefs.getString("ai_model", "fnlp/MOSS-TTSD-v0.5") ?: "fnlp/MOSS-TTSD-v0.5",
+            aiVoiceId = prefs.getString("ai_voice_id", "fnlp/MOSS-TTSD-v0.5:anna") ?: "fnlp/MOSS-TTSD-v0.5:anna",
+            llmConfig = LLMConfig(
+                provider = prefs.getString("llm_provider", "custom") ?: "custom",
+                apiKey = prefs.getString("llm_apikey", "") ?: "",
+                endpoint = prefs.getString("llm_endpoint", "") ?: "",
+                model = prefs.getString("llm_model", "") ?: "",
+            ),
+            ttsSpeed = prefs.getFloat("tts_speed", 1.0f),
+            ttsHighlightOffset = prefs.getInt("tts_highlight_offset", -1),
+        )
+    )
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
 
     private var currentTTSProvider: TTSProvider? = null
@@ -236,12 +256,15 @@ class ReaderViewModel(
     fun togglePlayPause() { val s = _uiState.value; when { s.isTtsPlaying -> ttsPause(); s.isTtsPaused -> ttsResume(); else -> readChapter() } }
 
     fun setTTSProvider(type: TTSProviderType) { log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_switch_engine, type.name)); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(ttsProvider = type) } }
-    fun setTTSSpeed(s: Float) { _uiState.update { it.copy(ttsSpeed = s.coerceIn(0.5f, 2.0f)) } }
-    fun increaseHighlightOffset() { _uiState.update { it.copy(ttsHighlightOffset = it.ttsHighlightOffset + 1) }; log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_offset_inc, _uiState.value.ttsHighlightOffset)) }
-    fun decreaseHighlightOffset() { _uiState.update { it.copy(ttsHighlightOffset = it.ttsHighlightOffset - 1) }; log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_offset_dec, _uiState.value.ttsHighlightOffset)) }
-    fun updateEdgeTTSConfig(endpoint: String, voice: String) { log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_edge_config, voice)); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(edgeTtsEndpoint = endpoint, edgeTtsVoice = voice) } }
-    fun updateAIVoiceConfig(endpoint: String, apiKey: String, model: String, voice: String) { log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_ai_config, voice)); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(aiVoiceEndpoint = endpoint, aiVoiceApiKey = apiKey, aiVoiceModel = model, aiVoiceId = voice) } }
-    fun updateLLMConfig(c: LLMConfig) { _uiState.update { it.copy(llmConfig = c) } }
+    fun setTTSSpeed(s: Float) {
+        _uiState.update { it.copy(ttsSpeed = s.coerceIn(0.5f, 2.0f)) }
+        prefs.edit().putFloat("tts_speed", s.coerceIn(0.5f, 2.0f)).apply()
+    }
+    fun increaseHighlightOffset() { _uiState.update { it.copy(ttsHighlightOffset = it.ttsHighlightOffset + 1) }; log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_offset_inc, _uiState.value.ttsHighlightOffset)); prefs.edit().putInt("tts_highlight_offset", _uiState.value.ttsHighlightOffset).apply() }
+    fun decreaseHighlightOffset() { _uiState.update { it.copy(ttsHighlightOffset = it.ttsHighlightOffset - 1) }; log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_offset_dec, _uiState.value.ttsHighlightOffset)); prefs.edit().putInt("tts_highlight_offset", _uiState.value.ttsHighlightOffset).apply() }
+    fun updateEdgeTTSConfig(endpoint: String, voice: String) { log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_edge_config, voice)); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(edgeTtsEndpoint = endpoint, edgeTtsVoice = voice) }; prefs.edit().putString("edge_endpoint", endpoint).putString("edge_voice", voice).apply() }
+    fun updateAIVoiceConfig(endpoint: String, apiKey: String, model: String, voice: String) { log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_ai_config, voice)); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(aiVoiceEndpoint = endpoint, aiVoiceApiKey = apiKey, aiVoiceModel = model, aiVoiceId = voice) }; prefs.edit().putString("ai_endpoint", endpoint).putString("ai_apikey", apiKey).putString("ai_model", model).putString("ai_voice_id", voice).apply() }
+    fun updateLLMConfig(c: LLMConfig) { _uiState.update { it.copy(llmConfig = c) }; prefs.edit().putString("llm_provider", c.provider).putString("llm_apikey", c.apiKey).putString("llm_endpoint", c.endpoint).putString("llm_model", c.model).apply() }
     fun toggleTocPanel() { _uiState.update { it.copy(showTocPanel = !it.showTocPanel) } }
     fun toggleTtsSettingsPanel() { _uiState.update { it.copy(showTtsSettingsPanel = !it.showTtsSettingsPanel) } }
     override fun onCleared() { super.onCleared(); killPlayChain(); currentTTSProvider?.destroy() }
