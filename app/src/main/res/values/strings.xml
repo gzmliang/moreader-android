@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">墨阅 Moreader</string>
+
+    <!-- General -->
+    <string name="loading">正在加载...</string>
+    <string name="large_book_hint">大型书籍可能需要一些时间</string>
+    <string name="error_book_not_found">未找到书籍</string>
+    <string name="error_parse_failed">无法解析书籍章节，EPUB 格式可能不受支持</string>
+    <string name="error_chapter_out_of_range">章节索引超出范围</string>
+    <string name="error_read_failed">无法读取章节内容</string>
+    <string name="back">返回</string>
+    <string name="close">关闭</string>
+    <string name="save">保存</string>
+    <string name="delete">删除</string>
+    <string name="cancel">取消</string>
+    <string name="confirm">确定</string>
+    <string name="follow_system">跟随系统</string>
+    <string name="lang_zh">中文</string>
+    <string name="lang_en">English</string>
+
+    <!-- Library -->
+    <string name="library_title">墨阅</string>
+    <string name="import_book">导入书籍</string>
+    <string name="empty_library_hint">导入一本 EPUB 开始阅读吧</string>
+    <string name="delete_book_title">删除书籍</string>
+    <string name="delete_book_confirm">确定要删除「%1$s」吗？</string>
+
+    <!-- Reader -->
+    <string name="load_book">正在加载书籍...</string>
+    <string name="parse_chapters">正在解析章节结构...</string>
+    <string name="load_content">正在加载章节内容...</string>
+    <string name="table_of_contents">目录</string>
+    <string name="chapter_progress">%1$d/%2$d</string>
+
+    <!-- Selection menu -->
+    <string name="ai_translate">🤖 翻译</string>
+    <string name="explain">📖 解释</string>
+    <string name="grammar_analysis">🔍 语法</string>
+    <string name="read_aloud">🔊 朗读</string>
+
+    <!-- Translation -->
+    <string name="translating">翻译中...</string>
+    <string name="ai_translate_title">AI 翻译</string>
+    <string name="explain_title">AI 解释</string>
+    <string name="grammar_title">语法分析</string>
+    <string name="translation_failed">翻译失败: %1$s</string>
+    <string name="configure_api_key_first">请先配置 API Key</string>
+
+    <!-- TTS -->
+    <string name="tts_settings">朗读设置</string>
+    <string name="tts_engine">语音引擎</string>
+    <string name="tts_speed">语速: %1$sx</string>
+    <string name="tts_speed_label">语速</string>
+    <string name="tts_server_url">服务器地址</string>
+    <string name="tts_voice">音色</string>
+    <string name="tts_voice_selection">音色选择</string>
+    <string name="tts_custom_voice">自定义音色 ID</string>
+    <string name="tts_model_selection">模型选择</string>
+    <string name="tts_model">TTS 模型</string>
+    <string name="tts_base_url">Base URL</string>
+    <string name="tts_api_key">API Key</string>
+    <string name="tts_custom_voice_hint">✏️ 输入自定义音色...</string>
+    <string name="play_chapter">朗读全文</string>
+    <string name="pause">暂停</string>
+    <string name="resume">继续</string>
+    <string name="stop">停止</string>
+    <string name="previous_chapter">上一章</string>
+    <string name="next_chapter">下一章</string>
+    <string name="font_decrease">A-</string>
+    <string name="font_increase">A+</string>
+
+    <!-- Debug -->
+    <string name="debug_log">调试日志</string>
+    <string name="debug_no_log">暂无日志，点击朗读后查看</string>
+    <string name="highlight_offset">高亮偏移</string>
+
+    <!-- Theme -->
+    <string name="theme">主题</string>
+    <string name="theme_light">默认白</string>
+    <string name="theme_parchment">羊皮纸</string>
+    <string name="theme_gray">墨水灰</string>
+    <string name="theme_dark">深夜黑</string>
+    <string name="theme_slate">石板灰</string>
+
+    <!-- Theme names (for code) -->
+    <string name="theme_name_light">默认白</string>
+    <string name="theme_name_parchment">羊皮纸</string>
+    <string name="theme_name_gray">墨水灰</string>
+    <string name="theme_name_dark">深夜黑</string>
+    <string name="theme_name_slate">石板灰</string>
+
+    <!-- AI Translation Settings -->
+    <string name="ai_translate_settings">AI 翻译设置</string>
+    <string name="endpoint_url">接口地址</string>
+    <string name="model_name">模型</string>
+
+    <!-- TTS Provider Names -->
+    <string name="tts_provider_system">系统语音</string>
+    <string name="tts_provider_edge">Edge TTS</string>
+    <string name="tts_provider_ai">AI 语音</string>
+
+    <!-- TTS voice group labels -->
+    <string name="voice_female">女声</string>
+    <string name="voice_male">男声</string>
+
+    <!-- Edge TTS Voices -->
+    <string name="voice_xiaoxiao">晓晓 (女)</string>
+    <string name="voice_yunxi">云希 (男)</string>
+    <string name="voice_yunjian">云健 (男)</string>
+    <string name="voice_xiaoyi">晓伊 (女)</string>
+    <string name="voice_hsiaochen">曉臻 (女)</string>
+    <string name="voice_yunjhe">雲哲 (男)</string>
+    <string name="voice_jenny">Jenny (女)</string>
+    <string name="voice_guy">Guy (男)</string>
+    <string name="voice_aria">Aria (女)</string>
+    <string name="voice_davis">Davis (男)</string>
+    <string name="voice_nanami">七海 (女)</string>
+    <string name="voice_keita">圭太 (男)</string>
+    <string name="voice_sunhi">선희 (女)</string>
+    <string name="voice_injun">인준 (男)</string>
+
+    <!-- AI Voice Models -->
+    <string name="model_moss">MOSS-TTSD v0.5 (中英双语)</string>
+    <string name="model_cosyvoice">CosyVoice2 0.5B (中英双语)</string>
+    <string name="model_tts1">OpenAI tts-1</string>
+    <string name="model_tts1_hd">OpenAI tts-1-hd</string>
+
+    <!-- TTS / AI voice gender labels -->
+    <string name="voice_gender_female">女</string>
+    <string name="voice_gender_male">男</string>
+    <string name="voice_gender_neutral">中性</string>
+
+    <!-- Errors -->
+    <string name="error_tts_init_failed">TTS 引擎初始化失败 (status=%1$d)</string>
+    <string name="error_tts_not_initialized">TTS 引擎未初始化</string>
+    <string name="error_tts_init_timeout">TTS 引擎初始化超时</string>
+    <string name="error_tts_no_engine">系统无可用 TTS 引擎，请使用 Edge TTS 或 AI 语音</string>
+    <string name="error_tts_init_engine_failed">引擎 %1$s 初始化失败: %2$s</string>
+    <string name="error_tts_speak_failed">TTS speak 返回错误</string>
+    <string name="error_ai_voice_request_failed">AI 语音请求失败: %1$s</string>
+    <string name="error_ai_voice_http">AI 语音 HTTP %1$d: %2$s</string>
+    <string name="error_ai_voice_empty">AI 语音返回空音频</string>
+    <string name="error_ai_voice_playback">播放错误: %1$s</string>
+    <string name="error_ai_voice_playback_code">播放错误: %1$d/%2$d</string>
+
+    <!-- TTS log messages -->
+    <string name="tts_log_full_read">========== 全文朗读 ==========</string>
+    <string name="tts_log_empty_html">[TTS] ❌ currentHtml 为空</string>
+    <string name="tts_log_no_paragraphs">[TTS] ❌ 无段落</string>
+    <string name="tts_log_pause">[TTS] ⏸ 暂停 idx=%1$d</string>
+    <string name="tts_log_invalid_restore">[TTS] ❌ 无可恢复状态（playIdx=%1$d）</string>
+    <string name="tts_log_resume">[TTS] ▶ 继续</string>
+    <string name="tts_log_stop">[TTS] ⏹ 停止</string>
+    <string name="tts_log_switch_engine">切换 TTS 引擎: %1$s</string>
+    <string name="tts_log_offset_inc">[设置] 高亮偏移 +1 = %1$d</string>
+    <string name="tts_log_offset_dec">[设置] 高亮偏移 -1 = %1$d</string>
+    <string name="tts_log_edge_config">[设置] Edge TTS: voice=%1$s</string>
+    <string name="tts_log_ai_config">[设置] AI Voice: voice=%1$s</string>
+    <string name="tts_log_engine_error">[TTS] ❌ onError idx=%1$d: %2$s</string>
+</resources>

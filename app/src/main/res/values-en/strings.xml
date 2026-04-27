@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Moreader</string>
+
+    <!-- General -->
+    <string name="loading">Loading...</string>
+    <string name="large_book_hint">Large books may take a moment</string>
+    <string name="error_book_not_found">Book not found</string>
+    <string name="error_parse_failed">Could not parse book chapters. EPUB format may not be supported.</string>
+    <string name="error_chapter_out_of_range">Chapter index out of range</string>
+    <string name="error_read_failed">Could not read chapter content</string>
+    <string name="back">Back</string>
+    <string name="close">Close</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="confirm">Confirm</string>
+    <string name="follow_system">Follow System</string>
+    <string name="lang_zh">中文</string>
+    <string name="lang_en">English</string>
+
+    <!-- Library -->
+    <string name="library_title">Moreader</string>
+    <string name="import_book">Import EPUB</string>
+    <string name="empty_library_hint">Import an EPUB to start reading</string>
+    <string name="delete_book_title">Delete Book</string>
+    <string name="delete_book_confirm">Delete "%1$s"?</string>
+
+    <!-- Reader -->
+    <string name="load_book">Loading book...</string>
+    <string name="parse_chapters">Parsing chapter structure...</string>
+    <string name="load_content">Loading chapter content...</string>
+    <string name="table_of_contents">Table of Contents</string>
+    <string name="chapter_progress">%1$d/%2$d</string>
+
+    <!-- Selection menu -->
+    <string name="ai_translate">🤖 Translate</string>
+    <string name="explain">📖 Explain</string>
+    <string name="grammar_analysis">🔍 Grammar</string>
+    <string name="read_aloud">🔊 Read Aloud</string>
+
+    <!-- Translation -->
+    <string name="translating">Translating...</string>
+    <string name="ai_translate_title">AI Translate</string>
+    <string name="explain_title">AI Explain</string>
+    <string name="grammar_title">Grammar Analysis</string>
+    <string name="translation_failed">Translation failed: %1$s</string>
+    <string name="configure_api_key_first">Please configure API Key first</string>
+
+    <!-- TTS -->
+    <string name="tts_settings">TTS Settings</string>
+    <string name="tts_engine">Engine</string>
+    <string name="tts_speed">Speed: %1$sx</string>
+    <string name="tts_speed_label">Speed</string>
+    <string name="tts_server_url">Server URL</string>
+    <string name="tts_voice">Voice</string>
+    <string name="tts_voice_selection">Voice Selection</string>
+    <string name="tts_custom_voice">Custom Voice ID</string>
+    <string name="tts_model_selection">Model</string>
+    <string name="tts_model">TTS Model</string>
+    <string name="tts_base_url">Base URL</string>
+    <string name="tts_api_key">API Key</string>
+    <string name="tts_custom_voice_hint">✏️ Enter custom voice...</string>
+    <string name="play_chapter">Read Chapter</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+    <string name="stop">Stop</string>
+    <string name="previous_chapter">Prev Chapter</string>
+    <string name="next_chapter">Next Chapter</string>
+    <string name="font_decrease">A-</string>
+    <string name="font_increase">A+</string>
+
+    <!-- Debug -->
+    <string name="debug_log">Debug Log</string>
+    <string name="debug_no_log">No logs yet. Start reading to see output.</string>
+    <string name="highlight_offset">Highlight Offset</string>
+
+    <!-- Theme -->
+    <string name="theme">Theme</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_parchment">Parchment</string>
+    <string name="theme_gray">Gray</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_slate">Slate</string>
+
+    <!-- Theme names (for code) -->
+    <string name="theme_name_light">Light</string>
+    <string name="theme_name_parchment">Parchment</string>
+    <string name="theme_name_gray">Gray</string>
+    <string name="theme_name_dark">Dark</string>
+    <string name="theme_name_slate">Slate</string>
+
+    <!-- AI Translation Settings -->
+    <string name="ai_translate_settings">AI Translation Settings</string>
+    <string name="endpoint_url">Endpoint URL</string>
+    <string name="model_name">Model</string>
+
+    <!-- TTS Provider Names -->
+    <string name="tts_provider_system">System TTS</string>
+    <string name="tts_provider_edge">Edge TTS</string>
+    <string name="tts_provider_ai">AI Voice</string>
+
+    <!-- TTS voice group labels -->
+    <string name="voice_female">Female</string>
+    <string name="voice_male">Male</string>
+
+    <!-- Edge TTS Voices (data — keep original localized names) -->
+    <string name="voice_xiaoxiao">Xiaoxiao (Female)</string>
+    <string name="voice_yunxi">Yunxi (Male)</string>
+    <string name="voice_yunjian">Yunjian (Male)</string>
+    <string name="voice_xiaoyi">Xiaoyi (Female)</string>
+    <string name="voice_hsiaochen">HsiaoChen (Female)</string>
+    <string name="voice_yunjhe">YunJhe (Male)</string>
+    <string name="voice_jenny">Jenny (Female)</string>
+    <string name="voice_guy">Guy (Male)</string>
+    <string name="voice_aria">Aria (Female)</string>
+    <string name="voice_davis">Davis (Male)</string>
+    <string name="voice_nanami">Nanami (Female)</string>
+    <string name="voice_keita">Keita (Male)</string>
+    <string name="voice_sunhi">Sun-hi (Female)</string>
+    <string name="voice_injun">In-jun (Male)</string>
+
+    <!-- AI Voice Models -->
+    <string name="model_moss">MOSS-TTSD v0.5 (BiLang)</string>
+    <string name="model_cosyvoice">CosyVoice2 0.5B (BiLang)</string>
+    <string name="model_tts1">OpenAI tts-1</string>
+    <string name="model_tts1_hd">OpenAI tts-1-hd</string>
+
+    <!-- TTS / AI voice gender labels -->
+    <string name="voice_gender_female">Female</string>
+    <string name="voice_gender_male">Male</string>
+    <string name="voice_gender_neutral">Neutral</string>
+
+    <!-- Errors -->
+    <string name="error_tts_init_failed">TTS engine init failed (status=%1$d)</string>
+    <string name="error_tts_not_initialized">TTS engine not initialized</string>
+    <string name="error_tts_init_timeout">TTS engine init timeout</string>
+    <string name="error_tts_no_engine">No TTS engine available. Please use Edge TTS or AI Voice.</string>
+    <string name="error_tts_init_engine_failed">Engine %1$s init failed: %2$s</string>
+    <string name="error_tts_speak_failed">TTS speak returned error</string>
+    <string name="error_ai_voice_request_failed">AI Voice request failed: %1$s</string>
+    <string name="error_ai_voice_http">AI Voice HTTP %1$d: %2$s</string>
+    <string name="error_ai_voice_empty">AI Voice returned empty audio</string>
+    <string name="error_ai_voice_playback">Playback error: %1$s</string>
+    <string name="error_ai_voice_playback_code">Playback error: %1$d/%2$d</string>
+
+    <!-- TTS log messages -->
+    <string name="tts_log_full_read">========== Full Read ==========</string>
+    <string name="tts_log_empty_html">[TTS] ❌ currentHtml is empty</string>
+    <string name="tts_log_no_paragraphs">[TTS] ❌ No paragraphs</string>
+    <string name="tts_log_pause">[TTS] ⏸ Pause idx=%1$d</string>
+    <string name="tts_log_invalid_restore">[TTS] ❌ Nothing to restore (playIdx=%1$d)</string>
+    <string name="tts_log_resume">[TTS] ▶ Resume</string>
+    <string name="tts_log_stop">[TTS] ⏹ Stop</string>
+    <string name="tts_log_switch_engine">Switch TTS engine: %1$s</string>
+    <string name="tts_log_offset_inc">[Settings] Offset +1 = %1$d</string>
+    <string name="tts_log_offset_dec">[Settings] Offset -1 = %1$d</string>
+    <string name="tts_log_edge_config">[Settings] Edge TTS: voice=%1$s</string>
+    <string name="tts_log_ai_config">[Settings] AI Voice: voice=%1$s</string>
+    <string name="tts_log_engine_error">[TTS] ❌ onError idx=%1$d: %2$s</string>
+</resources>
