@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.moreader.app"
+    namespace = "com.moyue.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.moreader.app"
+        applicationId = "com.moyue.app"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

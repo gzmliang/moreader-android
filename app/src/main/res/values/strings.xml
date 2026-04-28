@@ -99,6 +99,7 @@
     <string name="tts_provider_system">系统语音</string>
     <string name="tts_provider_edge">Edge TTS</string>
     <string name="tts_provider_ai">AI 语音</string>
+    <string name="tts_provider_custom">自定义 TTS</string>
 
     <!-- TTS voice group labels -->
     <string name="voice_female">女声</string>
