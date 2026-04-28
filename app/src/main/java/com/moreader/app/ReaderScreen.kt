@@ -164,6 +164,11 @@ fun ReaderScreen(
                     val idx = href.lastIndexOf('/')
                     if (idx >= 0) "file:///${href.substring(0, idx + 1)}" else null
                 }
+                
+                // Paragraph click menu state
+                var showParagraphMenu by remember { mutableStateOf(false) }
+                var clickedParagraphIndex by remember { mutableStateOf(-1) }
+                
                 EpubWebView(
                     htmlContent = state.currentHtml,
                     baseUrl = baseUrl,
@@ -172,9 +177,35 @@ fun ReaderScreen(
                     fontScale = state.fontSize / 18f,
                     onTextSelected = { viewModel.onTextSelected(it) },
                     onLinkClicked = { viewModel.onLinkClicked(it) },
+                    onParagraphClicked = { idx ->
+                        clickedParagraphIndex = idx
+                        showParagraphMenu = true
+                    },
                     ttsHighlightIndex = ttsHighlightIdx,
                     modifier = Modifier.fillMaxSize().background(Color(android.graphics.Color.parseColor(state.theme.bgColor))),
                 )
+                
+                // Paragraph click menu
+                if (showParagraphMenu) {
+                    AlertDialog(
+                        onDismissRequest = { showParagraphMenu = false },
+                        title = { Text("段落操作") },
+                        text = { Text("选择对该段落的操作") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showParagraphMenu = false
+                                    viewModel.readFromParagraph(clickedParagraphIndex)
+                                }
+                            ) { Text("从这里开始朗读") }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { showParagraphMenu = false }
+                            ) { Text("取消") }
+                        }
+                    )
+                }
             }
 
             // TOC overlay

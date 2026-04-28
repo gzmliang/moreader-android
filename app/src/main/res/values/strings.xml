@@ -158,4 +158,6 @@
     <string name="tts_log_edge_config">[设置] Edge TTS: voice=%1$s</string>
     <string name="tts_log_ai_config">[设置] AI Voice: voice=%1$s</string>
     <string name="tts_log_engine_error">[TTS] ❌ onError idx=%1$d: %2$s</string>
+    <string name="tts_log_read_from_paragraph">========== 从第 %1$d 段开始朗读 ==========</string>
+    <string name="tts_log_invalid_paragraph_index">[TTS] ❌ 无效段落索引: %1$d</string>
 </resources>

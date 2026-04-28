@@ -35,7 +35,7 @@ data class ReaderUiState(
     val ttsParagraphs: List<String> = emptyList(),
     val ttsCurrentIdx: Int = -1,       // 当前高亮索引（考虑了偏移）
     val ttsPlayIdx: Int = -1,          // 当前实际朗读的段落索引（用于恢复）
-    val ttsHighlightOffset: Int = -1,  // 高亮偏移量（负 = 高亮提前，正 = 高亮延迟），默认-1
+    val ttsHighlightOffset: Int = 0,  // 高亮偏移量（负 = 高亮提前，正 = 高亮延迟），默认0
     val ttsDebugLog: String = "",
     val showTtsDebugLog: Boolean = false,
     val llmConfig: LLMConfig = LLMConfig(),
@@ -76,7 +76,7 @@ class ReaderViewModel(
                 model = prefs.getString("llm_model", "") ?: "",
             ),
             ttsSpeed = prefs.getFloat("tts_speed", 1.0f),
-            ttsHighlightOffset = prefs.getInt("tts_highlight_offset", -1),
+            ttsHighlightOffset = prefs.getInt("tts_highlight_offset", 0),
         )
     )
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
@@ -94,8 +94,14 @@ class ReaderViewModel(
 
     private fun extractParagraphsFromHtml(html: String): List<String> {
         val doc = org.jsoup.Jsoup.parse(html)
-        val paragraphs = doc.select("p, h1, h2, h3, h4, h5, h6").map { it.text().trim() }.filter { it.length >= 2 }
-        if (paragraphs.isEmpty()) { val t = doc.body()?.text()?.trim() ?: ""; return if (t.length >= 2) listOf(t) else emptyList() }
+        // 注意：这里不能过滤，必须与 WebView 中的 querySelectorAll 结果一致
+        // WebView 中给所有 p,h1-h6 元素添加了点击监听，索引必须对应
+        val paragraphs = doc.select("p, h1, h2, h3, h4, h5, h6").map { it.text().trim() }
+        // 如果过滤后为空，返回整个 body 文本
+        if (paragraphs.isEmpty() || paragraphs.all { it.isEmpty() }) { 
+            val t = doc.body()?.text()?.trim() ?: "" 
+            return if (t.length >= 2) listOf(t) else emptyList() 
+        }
         return paragraphs
     }
 
@@ -298,10 +304,43 @@ class ReaderViewModel(
         playOne(0)
     }
 
+    /** Read from a specific paragraph index */
+    fun readFromParagraph(index: Int) {
+        log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_read_from_paragraph, index + 1))
+        playChainActive = true
+        val s = _uiState.value
+        val paragraphs = if (s.ttsParagraphs.isEmpty()) {
+            val html = s.currentHtml ?: run { log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_empty_html)); return }
+            val pl = extractParagraphsFromHtml(html); if (pl.isEmpty()) { log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_no_paragraphs)); return }
+            _uiState.update { it.copy(ttsParagraphs = pl) }; pl
+        } else s.ttsParagraphs
+        if (paragraphs.isEmpty()) return
+        if (index < 0 || index >= paragraphs.size) {
+            log(getApplication<android.app.Application>().getString(com.moreader.app.R.string.tts_log_invalid_paragraph_index, index))
+            return
+        }
+
+        killPlayChain(); audioCache.clear()
+        currentTTSProvider?.destroy(); currentTTSProvider = null
+        
+        // Calculate highlight index with offset (same logic as playOne)
+        // ttsCurrentIdx = highlight index (for UI), ttsPlayIdx = actual play index
+        val offset = s.ttsHighlightOffset
+        val highlightIdx = (index - offset).coerceIn(0, maxOf(0, paragraphs.size - 1))
+        
+        _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = highlightIdx, ttsPlayIdx = index) }
+        playChainActive = true
+
+        // Preload from current position
+        recreateProvider()
+        preloadRange(index, index + 6)
+
+        playOne(index)
+    }
+
     fun readSelection(text: String) {
         killPlayChain()
-        _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false) }
-        _uiState.update { it.copy(ttsCurrentIdx = 0) }
+        _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = -1) }
         val p = recreateProvider() ?: run { _uiState.update { it.copy(isTtsPlaying = false) }; return }
         p.speak(text, _uiState.value.ttsSpeed, object : TTSListener {
             override fun onStart() {}

@@ -43,14 +43,17 @@ fun EpubWebView(
     fontScale: Float,
     onTextSelected: (String) -> Unit,
     onLinkClicked: (String) -> Unit = {},
+    onParagraphClicked: ((Int) -> Unit)? = null,  // New: paragraph click callback
     ttsHighlightIndex: Int = -1,
     modifier: Modifier = Modifier,
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     val callbackRef = remember { mutableStateOf<(String) -> Unit>({}) }
     val linkCallbackRef = remember { mutableStateOf<(String) -> Unit>({}) }
+    val paragraphCallbackRef = remember { mutableStateOf<(Int) -> Unit>({}) }
     LaunchedEffect(onTextSelected) { callbackRef.value = onTextSelected }
     LaunchedEffect(onLinkClicked) { linkCallbackRef.value = onLinkClicked }
+    LaunchedEffect(onParagraphClicked) { paragraphCallbackRef.value = { idx -> onParagraphClicked?.invoke(idx) ?: Unit } }
 
     // TTS highlight: call JS when index changes
     LaunchedEffect(ttsHighlightIndex) {
@@ -166,6 +169,17 @@ fun EpubWebView(
                                 };
                                 window.ttsClear=function(){document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});};
                                 
+                                // Paragraph click detection for "read from here"
+                                document.querySelectorAll('p,h1,h2,h3,h4,h5,h6').forEach(function(el, idx){
+                                    el.addEventListener('click', function(e){
+                                        // Only trigger if not selecting text
+                                        var s=window.getSelection();
+                                        if(s&&s.isCollapsed){
+                                            MoreaderBridge.onParagraphClicked(idx);
+                                        }
+                                    });
+                                });
+                                
                                 // Intercept link clicks to handle internal navigation
                                 document.addEventListener('click',function(e){
                                     var a=e.target.closest('a[href]');
@@ -189,6 +203,8 @@ fun EpubWebView(
                         fun onTextSelected(text: String) { callbackRef.value(text) }
                         @JavascriptInterface
                         fun onLinkClicked(url: String) { linkCallbackRef.value(url) }
+                        @JavascriptInterface
+                        fun onParagraphClicked(index: Int) { paragraphCallbackRef.value(index) }
                     }, "MoreaderBridge")
                 }
             },
@@ -206,28 +222,6 @@ fun EpubWebView(
                 }
             },
             modifier = Modifier.fillMaxSize(),
-        )
-
-        // Left 30% tap zone — go to previous page (scroll up)
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(0.3f)
-                .align(Alignment.CenterStart)
-                .pointerInput(Unit) {
-                    detectTapGestures { webView?.evaluateJavascript("window.pageUp()", null) }
-                }
-        )
-
-        // Right 30% tap zone — go to next page (scroll down)
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .fillMaxWidth(0.3f)
-                .align(Alignment.CenterEnd)
-                .pointerInput(Unit) {
-                    detectTapGestures { webView?.evaluateJavascript("window.pageDown()", null) }
-                }
         )
     }
 }

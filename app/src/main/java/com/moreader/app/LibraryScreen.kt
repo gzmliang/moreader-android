@@ -6,8 +6,10 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -42,6 +44,8 @@ fun LibraryScreen(
     onOpenBook: (String) -> Unit,
     repository: BookRepository,
     onLanguageSwitch: () -> Unit = {},
+    sharedUris: List<Uri> = emptyList(),
+    onSharedUrisConsumed: () -> Unit = {},
     viewModel: LibraryViewModel = viewModel(
         factory = LibraryViewModelFactory(repository)
     ),
@@ -49,11 +53,23 @@ fun LibraryScreen(
     val books by viewModel.books.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    // File picker for EPUB import
+    // Handle shared files from other apps
+    LaunchedEffect(sharedUris) {
+        if (sharedUris.isNotEmpty()) {
+            sharedUris.forEach { uri ->
+                viewModel.importBook(context, uri)
+            }
+            onSharedUrisConsumed()
+        }
+    }
+
+    // File picker for EPUB import (multiple files)
     val importLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let { viewModel.importBook(context, it) }
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        uris.forEach { uri ->
+            viewModel.importBook(context, uri)
+        }
     }
 
     Scaffold(
@@ -191,6 +207,7 @@ fun LibraryScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BookCard(
     book: Book,
@@ -219,7 +236,10 @@ private fun BookCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { showDeleteConfirm = true }
+            ),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

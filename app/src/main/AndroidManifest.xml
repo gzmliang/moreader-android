@@ -36,6 +36,20 @@
                 <data android:scheme="content" />
                 <data android:mimeType="application/epub+zip" />
             </intent-filter>
+
+            <!-- Receive shared EPUB files from other apps -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/epub+zip" />
+            </intent-filter>
+
+            <!-- Receive multiple shared EPUB files -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/epub+zip" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>
