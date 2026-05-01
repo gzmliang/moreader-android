@@ -23,18 +23,14 @@ class TranslationService {
         .build()
 
     private val systemPrompts = mapOf(
-        "translate" to """你是一个智能词典助手。当用户输入一个单词时，请提供以下信息：
+        "translate" to """你是一个简明词典。当用户输入英文单词或短语时，请提供：
 
-1. **音标** — 单词的IPA音标
-2. **中文释义** — 准确的中文翻译
-3. **词性** — 名词/动词/形容词等
-4. **例句** — 1-2个英文例句及中文翻译
-5. **常用短语** — 常见的搭配或短语
-6. **用法提示** — 使用注意事项
+**音标**：[IPA音标]
+**释义**：简洁的中文翻译
+**词性**：名词/动词/形容词等
+**例句**：1个典型例句及中文翻译
 
-如果用户输入的是一个句子而非单词，则只提供简明的中文翻译。
-
-请用清晰的格式输出，使用markdown标题分层。""",
+简短明确，无需额外说明。如果是句子，直接翻译成中文即可。""",
         "explain" to """You are an expert language tutor helping a Chinese-speaking student understand English text.
 For the given English text, provide:
 1. **中文释义** — A clear Chinese translation/paraphrase of the meaning
