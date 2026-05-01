@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -70,7 +71,7 @@ fun TtsSettingsSheet(
     onClose: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(max = 580.dp),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         shadowElevation = 8.dp,
         color = MaterialTheme.colorScheme.surface,
@@ -85,6 +86,7 @@ fun TtsSettingsSheet(
             Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_engine), fontSize = 13.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 排除SYSTEM，因为Android 16上有兼容问题
                 val available = TTSProviderType.entries.filter { it != TTSProviderType.SYSTEM }
                 available.forEach { provider ->
                     FilterChip(selected = currentProvider == provider,
@@ -157,31 +159,36 @@ fun TtsSettingsSheet(
                 Text("OpenAI 兼容 TTS", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(Modifier.height(4.dp))
                 Text("适用于 MOSS-TTS-Nano、CosyVoice 等本地部署", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
 
                 var localEp by remember(customEndpoint) { mutableStateOf(customEndpoint) }
                 var localKey by remember(customApiKey) { mutableStateOf(customApiKey) }
                 var localModel by remember(customModel) { mutableStateOf(customModel) }
                 var localVoice by remember(customVoice) { mutableStateOf(customVoice) }
 
-                OutlinedTextField(value = localEp, onValueChange = { localEp = it; onCustomTTSConfigChange(it, localKey, localModel, localVoice) },
-                    label = { Text("Base URL") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("http://192.168.199.101:18083") })
-                Spacer(Modifier.height(8.dp))
+                // 使用紧凑的双列布局
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(value = localEp, onValueChange = { localEp = it; onCustomTTSConfigChange(it, localKey, localModel, localVoice) },
+                        label = { Text("Base URL") }, singleLine = true, modifier = Modifier.weight(1f),
+                        placeholder = { Text("http://192.168.199.101:18083") },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))
+                    OutlinedTextField(value = localKey, onValueChange = { localKey = it; onCustomTTSConfigChange(localEp, it, localModel, localVoice) },
+                        label = { Text("API Key") }, singleLine = true, modifier = Modifier.weight(1f),
+                        placeholder = { Text("dummy") },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))
+                }
+                Spacer(Modifier.height(4.dp))
 
-                OutlinedTextField(value = localKey, onValueChange = { localKey = it; onCustomTTSConfigChange(localEp, it, localModel, localVoice) },
-                    label = { Text("API Key") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("dummy 或 local") })
-                Spacer(Modifier.height(8.dp))
-
-                OutlinedTextField(value = localModel, onValueChange = { localModel = it; onCustomTTSConfigChange(localEp, localKey, it, localVoice) },
-                    label = { Text("TTS 模型") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("moss-tts-nano") })
-                Spacer(Modifier.height(8.dp))
-
-                OutlinedTextField(value = localVoice, onValueChange = { localVoice = it; onCustomTTSConfigChange(localEp, localKey, localModel, it) },
-                    label = { Text("音色") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Lingyu") })
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(value = localModel, onValueChange = { localModel = it; onCustomTTSConfigChange(localEp, localKey, it, localVoice) },
+                        label = { Text("模型") }, singleLine = true, modifier = Modifier.weight(1f),
+                        placeholder = { Text("moss-tts-nano") },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))
+                    OutlinedTextField(value = localVoice, onValueChange = { localVoice = it; onCustomTTSConfigChange(localEp, localKey, localModel, it) },
+                        label = { Text("音色") }, singleLine = true, modifier = Modifier.weight(1f),
+                        placeholder = { Text("Lingyu") },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))
+                }
             }
 
             // AI Voice
@@ -261,36 +268,63 @@ fun TtsSettingsSheet(
                 }
             }
 
-            // LLM Config
+            // LLM Config - AI翻译设置
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_settings), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
 
-            var llmEp by remember(llmConfig.endpoint) { mutableStateOf(llmConfig.endpoint) }
+            // 默认使用 DeepSeek API
+            val defaultEndpoint = "https://api.deepseek.com"
+            val defaultModel = "deepseek-chat"
+            
+            var llmEp by remember(llmConfig.endpoint) { mutableStateOf(llmConfig.endpoint.ifEmpty { defaultEndpoint }) }
             var llmKey by remember(llmConfig.apiKey) { mutableStateOf(llmConfig.apiKey) }
-            var llmModel by remember(llmConfig.model) { mutableStateOf(llmConfig.model) }
+            var llmModel by remember(llmConfig.model) { mutableStateOf(llmConfig.model.ifEmpty { defaultModel }) }
 
-            OutlinedTextField(value = llmEp, onValueChange = { llmEp = it },
-                label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.endpoint_url)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
+            // Base URL - 显示默认值
+            OutlinedTextField(
+                value = llmEp, 
+                onValueChange = { llmEp = it },
+                label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.endpoint_url)) }, 
+                singleLine = true, 
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text(defaultEndpoint) },
+                textStyle = LocalTextStyle.current.copy(fontSize = 12.sp)
+            )
+            Spacer(Modifier.height(4.dp))
+
+            // API Key - 用户只需要填这个
             OutlinedTextField(value = llmKey, onValueChange = { llmKey = it },
-                label = { Text("API Key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
+                label = { Text("API Key (仅需填写此项)") }, singleLine = true, 
+                visualTransformation = PasswordVisualTransformation(), 
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))
+            Spacer(Modifier.height(4.dp))
+
+            // 模型 - 显示默认值
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(value = llmModel, onValueChange = { llmModel = it },
-                    label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.model_name)) }, singleLine = true, modifier = Modifier.weight(1f))
-                Spacer(Modifier.width(8.dp))
+                    label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.model_name)) }, 
+                    singleLine = true, 
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text(defaultModel) },
+                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))
+                Spacer(Modifier.width(6.dp))
                 Button(onClick = { onLLMConfigChange(LLMConfig("custom", llmKey, llmEp, llmModel)) },
-                    shape = RoundedCornerShape(8.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.save), fontSize = 13.sp) }
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) { 
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.save), fontSize = 12.sp) 
+                }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
-            // Theme selection
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            // Theme selection - 紧凑布局
+            HorizontalDivider(Modifier.padding(vertical = 6.dp))
             Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.theme), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                ReaderTheme.entries.forEach { theme ->
+            Spacer(Modifier.height(6.dp))
+            // 分两行显示主题，更紧凑
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                ReaderTheme.entries.take(3).forEach { theme ->
                     FilterChip(
                         selected = currentTheme == theme,
                         onClick = { onThemeChange(theme) },
@@ -300,7 +334,8 @@ fun TtsSettingsSheet(
                             ReaderTheme.GRAY -> com.moyue.app.R.string.theme_name_gray
                             ReaderTheme.DARK -> com.moyue.app.R.string.theme_name_dark
                             ReaderTheme.SLATE -> com.moyue.app.R.string.theme_name_slate
-                        }), fontSize = 11.sp) },
+                        }), fontSize = 10.sp) },
+                        modifier = Modifier.weight(1f),
                         colors = FilterChipDefaults.filterChipColors(
                             containerColor = Color(android.graphics.Color.parseColor(theme.bgColor)),
                             labelColor = Color(android.graphics.Color.parseColor(theme.textColor)),
@@ -309,7 +344,29 @@ fun TtsSettingsSheet(
                     )
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                ReaderTheme.entries.drop(3).forEach { theme ->
+                    FilterChip(
+                        selected = currentTheme == theme,
+                        onClick = { onThemeChange(theme) },
+                        label = { Text(androidx.compose.ui.res.stringResource(when (theme) {
+                            ReaderTheme.LIGHT -> com.moyue.app.R.string.theme_name_light
+                            ReaderTheme.PARCHMENT -> com.moyue.app.R.string.theme_name_parchment
+                            ReaderTheme.GRAY -> com.moyue.app.R.string.theme_name_gray
+                            ReaderTheme.DARK -> com.moyue.app.R.string.theme_name_dark
+                            ReaderTheme.SLATE -> com.moyue.app.R.string.theme_name_slate
+                        }), fontSize = 10.sp) },
+                        modifier = Modifier.weight(1f),
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color(android.graphics.Color.parseColor(theme.bgColor)),
+                            labelColor = Color(android.graphics.Color.parseColor(theme.textColor)),
+                            selectedContainerColor = Color(android.graphics.Color.parseColor(theme.bgColor)),
+                        ),
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
         }
     }
 }
