@@ -89,6 +89,8 @@ class ReaderViewModel(
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
 
     private var currentTTSProvider: TTSProvider? = null
+    // Track last provider type to avoid unnecessary recreation (critical for System TTS!)
+    private var lastProviderType: TTSProviderType? = null
     // Preloaded audio bytes: index → ByteArray
     private val audioCache = mutableMapOf<Int, ByteArray>()
     // Flag to stop the current play chain
@@ -205,12 +207,22 @@ class ReaderViewModel(
 
     // ===== TTS =====
 
-    /** Get or create provider — always re-create when config may have changed */
+    /** Get or create provider — only re-create when provider TYPE changes */
     private fun recreateProvider(): TTSProvider? {
         val s = _uiState.value
+        
+        // If same type and already created, reuse it (critical for System TTS!)
+        if (s.ttsProvider == lastProviderType && currentTTSProvider != null) {
+            return currentTTSProvider
+        }
+        
+        // Type changed — destroy old and create new
         currentTTSProvider?.destroy()
         currentTTSProvider = null
+        lastProviderType = s.ttsProvider
+        
         return when (s.ttsProvider) {
+            TTSProviderType.SYSTEM -> { SystemTTSProvider(getApplication()).also { currentTTSProvider = it } }
             TTSProviderType.EDGE_TTS -> { EdgeTTSProvider(s.edgeTtsEndpoint, s.edgeTtsVoice).also { currentTTSProvider = it } }
             TTSProviderType.AI_VOICE -> { AIVoiceTTSProvider(s.aiVoiceEndpoint, s.aiVoiceApiKey, s.aiVoiceModel, s.aiVoiceId).also { currentTTSProvider = it } }
             TTSProviderType.CUSTOM_TTS -> { CustomTTSProvider(s.customTtsEndpoint, s.customTtsApiKey, s.customTtsModel, s.customTtsVoice).also { currentTTSProvider = it } }
@@ -254,7 +266,29 @@ class ReaderViewModel(
         if (!playChainActive) return
         val s = _uiState.value
         val paragraphs = s.ttsParagraphs
-        if (idx < 0 || idx >= paragraphs.size) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }; return }
+        if (idx < 0 || idx >= paragraphs.size) {
+            // End of chapter reached — auto-advance to next chapter if available
+            if (s.currentChapterIndex < s.chapters.size - 1) {
+                log("[TTS] 📖 章节读完，自动跳转下一章")
+                audioCache.clear()
+                _uiState.update { it.copy(
+                    currentChapterIndex = it.currentChapterIndex + 1,
+                    isLoading = true, ttsParagraphs = emptyList(), ttsCurrentIdx = -1
+                ) }
+                viewModelScope.launch {
+                    loadChapterContent()
+                    if (_uiState.value.ttsParagraphs.isNotEmpty()) {
+                        playOne(0)
+                    } else {
+                        _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }
+                    }
+                }
+            } else {
+                log("[TTS] 🎉 全部章节朗读完毕")
+                _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }
+            }
+            return
+        }
 
         // Highlight = current index - ttsHighlightOffset (user-adjustable, negative = earlier)
         val offset = s.ttsHighlightOffset
@@ -279,6 +313,10 @@ class ReaderViewModel(
                 is EdgeTTSProvider -> p.playRaw(cached, listener)
                 is AIVoiceTTSProvider -> p.playRaw(cached, listener)
                 is CustomTTSProvider -> p.playRaw(cached, listener)
+                is SystemTTSProvider -> {
+                    // System TTS doesn't use audio cache, speak directly
+                    p.speak(text, speed, listener)
+                }
             }
         } else {
             // Request live

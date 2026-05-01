@@ -23,7 +23,18 @@ class TranslationService {
         .build()
 
     private val systemPrompts = mapOf(
-        "translate" to "You are a professional translator. Translate the given text to Chinese. Only return the translation, no explanations.",
+        "translate" to """你是一个智能词典助手。当用户输入一个单词时，请提供以下信息：
+
+1. **音标** — 单词的IPA音标
+2. **中文释义** — 准确的中文翻译
+3. **词性** — 名词/动词/形容词等
+4. **例句** — 1-2个英文例句及中文翻译
+5. **常用短语** — 常见的搭配或短语
+6. **用法提示** — 使用注意事项
+
+如果用户输入的是一个句子而非单词，则只提供简明的中文翻译。
+
+请用清晰的格式输出，使用markdown标题分层。""",
         "explain" to """You are an expert language tutor helping a Chinese-speaking student understand English text.
 For the given English text, provide:
 1. **中文释义** — A clear Chinese translation/paraphrase of the meaning
@@ -51,7 +62,7 @@ Use Chinese for explanations.""",
             put(JSONObject().apply { put("role", "system"); put("content", prompt) })
             put(JSONObject().apply {
                 put("role", "user")
-                put("content", if (mode == "translate") "Translate to Chinese: $text" else "Text: \"$text\"")
+                put("content", if (mode == "translate") "请翻译或解释以下内容：$text" else "Text: \"$text\"")
             })
         }
 
