@@ -23,14 +23,19 @@ class TranslationService {
         .build()
 
     private val systemPrompts = mapOf(
-        "translate" to """你是一个简明词典。当用户输入英文单词或短语时，请提供：
+        "translate" to """你是词典助手。
 
-**音标**：[IPA音标]
-**释义**：简洁的中文翻译
-**词性**：名词/动词/形容词等
-**例句**：1个典型例句及中文翻译
+输入是单词时：
+**音标**：[IPA]
+**释义**：简短中文
+**词性**：名词/动词等
+**例句**：1句及中文
 
-简短明确，无需额外说明。如果是句子，直接翻译成中文即可。""",
+输入是句子时：
+**重点词汇**：关键词的中文解释
+**整句翻译**：中文翻译
+
+直接输出内容，不要解释。""",
         "explain" to """You are an expert language tutor helping a Chinese-speaking student understand English text.
 For the given English text, provide:
 1. **中文释义** — A clear Chinese translation/paraphrase of the meaning
