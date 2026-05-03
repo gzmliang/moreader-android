@@ -208,14 +208,6 @@ private fun VocabularyItem(
                         Text(stringResource(R.string.vocabulary_show_definition))
                     }
                 } else {
-                    Text(
-                        text = vocab.definition.take(50) + if (vocab.definition.length > 50) "..." else "",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
                     TextButton(
                         onClick = { showDefinition = true }
                     ) {
