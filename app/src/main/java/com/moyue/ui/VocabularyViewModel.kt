@@ -2,6 +2,7 @@ package com.moyue.app.ui
 
 import android.content.Context
 import android.content.Intent
+import android.media.MediaPlayer
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -9,9 +10,12 @@ import androidx.lifecycle.viewModelScope
 import androidx.core.content.FileProvider
 import com.moyue.app.data.BookRepository
 import com.moyue.app.data.models.LLMConfig
+import com.moyue.app.data.models.TTSProviderType
 import com.moyue.app.data.models.Vocabulary
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -30,6 +34,10 @@ class VocabularyViewModel(
     private val repository: BookRepository
 ) : ViewModel() {
 
+    private var audioPlayer: MediaPlayer? = null
+    private val _isSpeakingWord = MutableStateFlow<Long?>(null)
+    val isSpeakingWord: StateFlow<Long?> = _isSpeakingWord.asStateFlow()
+
     val vocabulary: StateFlow<List<Vocabulary>> = repository.getAllVocabulary()
         .stateIn(
             scope = viewModelScope,
@@ -41,6 +49,152 @@ class VocabularyViewModel(
         viewModelScope.launch {
             repository.deleteVocabulary(id)
         }
+    }
+
+    /** Speak a word using the app's configured TTS provider (Edge TTS / Custom TTS) */
+    fun speakWord(vocabId: Long, word: String, context: Context) {
+        // Stop any current playback
+        audioPlayer?.apply { if (isPlaying) stop(); release() }
+        audioPlayer = null
+        _isSpeakingWord.value = null
+
+        viewModelScope.launch {
+            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val prefs = context.getSharedPreferences("moreader_config", Context.MODE_PRIVATE)
+                    val providerType = prefs.getString("tts_provider", "edge_tts") ?: "edge_tts"
+                    val ttsType = try { TTSProviderType.valueOf(providerType) } catch (e: IllegalArgumentException) { TTSProviderType.EDGE_TTS }
+
+                    val audioBytes = when (ttsType) {
+                        TTSProviderType.EDGE_TTS -> {
+                            val endpoint = prefs.getString("edge_endpoint", "http://powerplus.blogsyte.com:5001") ?: "http://powerplus.blogsyte.com:5001"
+                            val voice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural"
+                            val apiKey = prefs.getString("edge_apikey", "") ?: ""
+                            fetchEdgeTTS(endpoint, voice, apiKey, word)
+                        }
+                        TTSProviderType.CUSTOM_TTS -> {
+                            val endpoint = prefs.getString("custom_endpoint", "http://192.168.199.101:18083") ?: "http://192.168.199.101:18083"
+                            val apiKey = prefs.getString("custom_apikey", "dummy") ?: "dummy"
+                            val model = prefs.getString("custom_model", "moss-tts-nano") ?: "moss-tts-nano"
+                            val voice = prefs.getString("custom_voice", "Lingyu") ?: "Lingyu"
+                            fetchCustomTTS(endpoint, apiKey, model, voice, word)
+                        }
+                        TTSProviderType.AI_VOICE -> {
+                            val endpoint = prefs.getString("ai_endpoint", "https://api.siliconflow.cn/v1") ?: "https://api.siliconflow.cn/v1"
+                            val apiKey = prefs.getString("ai_apikey", "") ?: ""
+                            val model = prefs.getString("ai_model", "fnlp/MOSS-TTSD-v0.5") ?: "fnlp/MOSS-TTSD-v0.5"
+                            val voice = prefs.getString("ai_voice_id", "fnlp/MOSS-TTSD-v0.5:anna") ?: "fnlp/MOSS-TTSD-v0.5:anna"
+                            fetchAITTS(endpoint, apiKey, model, voice, word)
+                        }
+                        else -> fetchEdgeTTS("http://powerplus.blogsyte.com:5001", "zh-CN-XiaoxiaoNeural", "", word)
+                    }
+
+                    if (audioBytes != null && audioBytes.isNotEmpty()) {
+                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            try {
+                                _isSpeakingWord.value = vocabId
+                                val tempFile = File.createTempFile("vocab_tts_", ".mp3", context.cacheDir)
+                                tempFile.writeBytes(audioBytes)
+                                audioPlayer = MediaPlayer().apply {
+                                    setDataSource(tempFile.absolutePath)
+                                    setOnCompletionListener {
+                                        audioPlayer?.release()
+                                        audioPlayer = null
+                                        _isSpeakingWord.value = null
+                                        tempFile.delete()
+                                    }
+                                    setOnErrorListener { _, _, _ ->
+                                        audioPlayer?.release()
+                                        audioPlayer = null
+                                        _isSpeakingWord.value = null
+                                        tempFile.delete()
+                                        true
+                                    }
+                                    prepare()
+                                    start()
+                                }
+                            } catch (e: Exception) {
+                                _isSpeakingWord.value = null
+                            }
+                        }
+                    } else {
+                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            _isSpeakingWord.value = null
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        _isSpeakingWord.value = null
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun fetchEdgeTTS(endpoint: String, voice: String, apiKey: String, text: String): ByteArray? {
+        return try {
+            val json = JSONObject().apply {
+                put("text", text)
+                put("voice", voice)
+                put("rate", "+0%")
+                put("pitch", "+0Hz")
+            }
+            val body = json.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("${endpoint.removeSuffix("/")}/tts")
+                .post(body)
+                .apply { if (apiKey.isNotEmpty()) addHeader("X-API-Key", apiKey) }
+                .build()
+            val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) response.body?.bytes() else null
+        } catch (e: Exception) { null }
+    }
+
+    private suspend fun fetchCustomTTS(endpoint: String, apiKey: String, model: String, voice: String, text: String): ByteArray? {
+        return try {
+            val json = JSONObject().apply {
+                put("model", model)
+                put("input", text)
+                put("voice", voice)
+            }
+            val body = json.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("${endpoint.removeSuffix("/")}/audio/speech")
+                .post(body)
+                .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Content-Type", "application/json")
+                .build()
+            val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) response.body?.bytes() else null
+        } catch (e: Exception) { null }
+    }
+
+    private suspend fun fetchAITTS(endpoint: String, apiKey: String, model: String, voice: String, text: String): ByteArray? {
+        return try {
+            val json = JSONObject().apply {
+                put("model", model)
+                put("input", text)
+                put("voice", voice)
+            }
+            val body = json.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("${endpoint.removeSuffix("/")}/audio/speech")
+                .post(body)
+                .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Content-Type", "application/json")
+                .build()
+            val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) response.body?.bytes() else null
+        } catch (e: Exception) { null }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        audioPlayer?.apply { if (isPlaying) stop(); release() }
+        audioPlayer = null
     }
 
     fun fetchDefinition(vocabId: Long, word: String, context: Context, onComplete: (Boolean, String) -> Unit) {

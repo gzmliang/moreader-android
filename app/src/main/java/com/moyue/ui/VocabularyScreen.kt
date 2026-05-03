@@ -1,6 +1,5 @@
 package com.moyue.app.ui
 
-import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,6 +35,7 @@ fun VocabularyScreen(
     )
 ) {
     val vocabulary by viewModel.vocabulary.collectAsStateWithLifecycle()
+    val speakingWordId by viewModel.isSpeakingWord.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -106,6 +106,8 @@ fun VocabularyScreen(
                 items(vocabulary, key = { it.id }) { item ->
                     VocabularyItem(
                         vocab = item,
+                        isSpeaking = speakingWordId == item.id,
+                        onSpeak = { viewModel.speakWord(item.id, item.word, context) },
                         onDelete = { viewModel.deleteVocabulary(item.id) },
                         onFetchDefinition = { viewModel.fetchDefinition(item.id, item.word, context) { success, message ->
                             scope.launch {
@@ -122,6 +124,8 @@ fun VocabularyScreen(
 @Composable
 private fun VocabularyItem(
     vocab: Vocabulary,
+    isSpeaking: Boolean,
+    onSpeak: () -> Unit,
     onDelete: () -> Unit,
     onFetchDefinition: () -> Unit
 ) {
@@ -147,31 +151,8 @@ private fun VocabularyItem(
                     modifier = Modifier.weight(1f)
                 )
                 
-                // Speaker icon for pronunciation
-                val context = LocalContext.current
-                var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-                var isSpeaking by remember { mutableStateOf(false) }
-                DisposableEffect(Unit) {
-                    val engine = TextToSpeech(context) { status ->
-                        if (status == TextToSpeech.SUCCESS) {
-                            tts?.language = Locale.ENGLISH
-                        }
-                    }
-                    tts = engine
-                    onDispose { engine.stop(); engine.shutdown(); tts = null }
-                }
                 IconButton(
-                    onClick = {
-                        if (!isSpeaking && tts != null) {
-                            isSpeaking = true
-                            tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-                                override fun onStart(utteranceId: String?) {}
-                                override fun onDone(utteranceId: String?) { isSpeaking = false }
-                                override fun onError(utteranceId: String?) { isSpeaking = false }
-                            })
-                            tts?.speak(vocab.word, TextToSpeech.QUEUE_FLUSH, null, "vocab_${vocab.id}")
-                        }
-                    },
+                    onClick = { onSpeak() },
                     enabled = !isSpeaking,
                 ) {
                     Icon(

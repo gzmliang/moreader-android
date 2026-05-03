@@ -115,6 +115,7 @@ fun EpubWebView(
                 if(!e)return;
                 e.textContent='*{background-color:${bgColor}!important;color:${textColor}!important}'+
                 'body{background-color:${bgColor}!important;color:${textColor}!important;font-family:sans-serif!important;line-height:1.8!important;margin:16px!important;font-size:${sz}%!important}'+
+                'p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${sz}%!important;line-height:1.8!important}'+
                 'p{margin-bottom:0.8em!important}'+
                 'h1,h2,h3,h4{font-weight:bold!important}'+
                 'img{max-width:100%!important;height:auto!important}'+
@@ -130,6 +131,7 @@ fun EpubWebView(
     val initCss = """<style id="mt">
         *{background-color:${bgColor}!important;color:${textColor}!important}
         body{background-color:${bgColor}!important;color:${textColor}!important;font-family:sans-serif!important;line-height:1.8!important;margin:16px!important;font-size:${(fontScale*100).toInt()}%!important}
+        p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${(fontScale*100).toInt()}%!important;line-height:1.8!important}
         p{margin-bottom:0.8em!important}
         h1,h2,h3,h4{font-weight:bold!important}
         img{max-width:100%!important;height:auto!important}
