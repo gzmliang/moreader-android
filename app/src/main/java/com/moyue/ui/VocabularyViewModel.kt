@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -45,13 +46,22 @@ class VocabularyViewModel(
     fun fetchDefinition(vocabId: Long, word: String, context: Context, onComplete: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             try {
-                val config = getStoredLLMConfig(context)
-                if (config.apiKey.isEmpty()) {
-                    onComplete(false, "请先配置 API Key")
-                    return@launch
-                }
+                withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val config = getStoredLLMConfig(context)
+                    if (config.apiKey.isEmpty()) {
+                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            onComplete(false, "请先在设置中配置 AI API Key")
+                        }
+                        return@withContext
+                    }
+                    if (config.endpoint.isEmpty()) {
+                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            onComplete(false, "请先配置 AI 服务端点 (Endpoint)")
+                        }
+                        return@withContext
+                    }
 
-                val prompt = """你是词典助手。请为以下单词提供详细信息：
+                    val prompt = """你是词典助手。请为以下单词提供详细信息：
 
 单词：$word
 
@@ -63,55 +73,76 @@ class VocabularyViewModel(
 
 直接输出内容，不要解释。"""
 
-                val messages = JSONArray().apply {
-                    put(JSONObject().apply { put("role", "system"); put("content", "你是专业的英语词典助手") })
-                    put(JSONObject().apply { put("role", "user"); put("content", prompt) })
-                }
+                    val messages = JSONArray().apply {
+                        put(JSONObject().apply { put("role", "system"); put("content", "你是专业的英语词典助手") })
+                        put(JSONObject().apply { put("role", "user"); put("content", prompt) })
+                    }
 
-                val body = JSONObject().apply {
-                    put("model", config.model)
-                    put("messages", messages)
-                    put("temperature", 0.3)
-                    put("max_tokens", 500)
-                    put("stream", false)
-                }
+                    val body = JSONObject().apply {
+                        put("model", config.model.ifEmpty { "gpt-3.5-turbo" })
+                        put("messages", messages)
+                        put("temperature", 0.3)
+                        put("max_tokens", 500)
+                        put("stream", false)
+                    }
 
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(15, TimeUnit.SECONDS)
-                    .readTimeout(30, TimeUnit.SECONDS)
-                    .build()
+                    val client = OkHttpClient.Builder()
+                        .connectTimeout(15, TimeUnit.SECONDS)
+                        .readTimeout(30, TimeUnit.SECONDS)
+                        .build()
 
-                val request = Request.Builder()
-                    .url("${config.endpoint.trimEnd('/')}/chat/completions")
-                    .post(body.toString().toRequestBody("application/json".toMediaType()))
-                    .addHeader("Authorization", "Bearer ${config.apiKey}")
-                    .addHeader("Content-Type", "application/json")
-                    .build()
+                    val endpoint = config.endpoint.trimEnd('/')
+                    val url = if (endpoint.contains("/chat/completions")) endpoint else "$endpoint/chat/completions"
 
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
+                    val request = Request.Builder()
+                        .url(url)
+                        .post(body.toString().toRequestBody("application/json".toMediaType()))
+                        .addHeader("Authorization", "Bearer ${config.apiKey}")
+                        .addHeader("Content-Type", "application/json")
+                        .build()
+
+                    val response = client.newCall(request).execute()
                     val responseBody = response.body?.string()
-                    if (responseBody != null) {
-                        val json = JSONObject(responseBody)
-                        val choices = json.optJSONArray("choices")
-                        if (choices != null && choices.length() > 0) {
-                            val content = choices.optJSONObject(0)?.optJSONObject("message")?.optString("content", "")
-                            if (!content.isNullOrEmpty()) {
-                                val pronunciation = extractField(content, "音标")
-                                val partOfSpeech = extractField(content, "词性")
-                                val definition = extractField(content, "释义")
-                                val example = extractField(content, "例句")
 
-                                repository.updateVocabularyDefinition(vocabId, pronunciation, partOfSpeech, definition, example)
+                    if (!response.isSuccessful) {
+                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            onComplete(false, "获取释义失败 (HTTP ${response.code}): ${responseBody?.take(100) ?: "无响应"}")
+                        }
+                        return@withContext
+                    }
+
+                    if (responseBody.isNullOrEmpty()) {
+                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            onComplete(false, "获取释义失败：服务器返回空响应")
+                        }
+                        return@withContext
+                    }
+
+                    val json = JSONObject(responseBody)
+                    val choices = json.optJSONArray("choices")
+                    if (choices != null && choices.length() > 0) {
+                        val content = choices.optJSONObject(0)?.optJSONObject("message")?.optString("content", "")
+                        if (!content.isNullOrEmpty()) {
+                            val pronunciation = extractField(content, "音标")
+                            val partOfSpeech = extractField(content, "词性")
+                            val definition = extractField(content, "释义")
+                            val example = extractField(content, "例句")
+
+                            repository.updateVocabularyDefinition(vocabId, pronunciation, partOfSpeech, definition, example)
+                            withContext(kotlinx.coroutines.Dispatchers.Main) {
                                 onComplete(true, "获取释义成功")
-                                return@launch
                             }
+                            return@withContext
                         }
                     }
+
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onComplete(false, "获取释义失败：AI 返回格式无法解析")
+                    }
                 }
-                onComplete(false, "获取释义失败")
             } catch (e: Exception) {
-                onComplete(false, "获取释义失败: ${e.message}")
+                val errorMsg = e.message ?: e.javaClass.simpleName
+                onComplete(false, "获取释义失败: $errorMsg")
             }
         }
     }
