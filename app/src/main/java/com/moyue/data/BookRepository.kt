@@ -4,8 +4,11 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.moyue.app.data.models.Book
+import com.moyue.app.data.models.Bookmark
 import com.moyue.app.data.models.Chapter
+import com.moyue.app.data.models.Highlight
 import com.moyue.app.data.models.TocEntry
+import com.moyue.app.data.models.Vocabulary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -540,6 +543,44 @@ class BookRepository(private val context: Context) {
         val book = dao.getBook(id) ?: return@withContext
         dao.upsert(book.copy(coverPath = coverPath))
     }
+
+    // === Bookmark operations ===
+    fun getAllBookmarks(): Flow<List<Bookmark>> = db.bookmarkDao().getAllBookmarks()
+    
+    fun getBookmarksForBook(bookId: String): Flow<List<Bookmark>> = db.bookmarkDao().getBookmarksForBook(bookId)
+    
+    suspend fun addBookmark(bookmark: Bookmark): Long = db.bookmarkDao().addBookmark(bookmark)
+    
+    suspend fun deleteBookmark(id: Long) = db.bookmarkDao().deleteBookmarkById(id)
+    
+    suspend fun deleteBookmark(bookmark: Bookmark) = db.bookmarkDao().deleteBookmark(bookmark)
+
+    // === Highlight operations ===
+    fun getAllHighlights(): Flow<List<Highlight>> = db.highlightDao().getAllHighlights()
+    
+    fun getHighlightsForBook(bookId: String): Flow<List<Highlight>> = db.highlightDao().getHighlightsForBook(bookId)
+    
+    suspend fun addHighlight(highlight: Highlight): Long = db.highlightDao().addHighlight(highlight)
+    
+    suspend fun updateHighlightNote(id: Long, note: String?) = db.highlightDao().updateHighlightNote(id, note)
+    
+    suspend fun deleteHighlight(highlight: Highlight) = db.highlightDao().deleteHighlight(highlight)
+    
+    suspend fun deleteHighlightById(id: Long) = db.highlightDao().deleteHighlightById(id)
+
+    // === Vocabulary operations ===
+    fun getAllVocabulary(): Flow<List<Vocabulary>> = db.vocabularyDao().getAllVocabulary()
+    
+    suspend fun getVocabularyByWord(word: String): Vocabulary? = db.vocabularyDao().getVocabularyByWord(word)
+    
+    suspend fun insertVocabulary(vocabulary: Vocabulary): Long = db.vocabularyDao().insertVocabulary(vocabulary)
+    
+    suspend fun updateVocabularyDefinition(id: Long, pronunciation: String?, partOfSpeech: String?, definition: String?, example: String?) = 
+        db.vocabularyDao().updateDefinition(id, pronunciation, partOfSpeech, definition, example)
+    
+    suspend fun deleteVocabulary(id: Long) = db.vocabularyDao().deleteVocabulary(id)
+    
+    suspend fun isWordExists(word: String): Boolean = db.vocabularyDao().isWordExists(word)
 
     private fun countDepth(node: org.w3c.dom.Node): Int {
         var depth = 0

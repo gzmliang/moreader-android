@@ -161,4 +161,21 @@
     <string name="tts_log_engine_error">[TTS] ❌ onError idx=%1$d: %2$s</string>
     <string name="tts_log_read_from_paragraph">========== 从第 %1$d 段开始朗读 ==========</string>
     <string name="tts_log_invalid_paragraph_index">[TTS] ❌ 无效段落索引: %1$d</string>
+
+    <!-- Bookmarks -->
+    <string name="bookmark_list_title">书签</string>
+    <string name="bookmark_empty">暂无书签</string>
+    <string name="bookmark_added">已添加书签</string>
+    <string name="bookmark_deleted">书签已删除</string>
+    <string name="bookmark_added_at">添加于 %1$s</string>
+
+    <!-- Vocabulary -->
+    <string name="vocabulary_title">生词本</string>
+    <string name="vocabulary_empty">暂无单词</string>
+    <string name="vocabulary_added">已添加到生词本</string>
+    <string name="vocabulary_already_exists">单词已在生词本中</string>
+    <string name="vocabulary_show_definition">查看释义</string>
+    <string name="vocabulary_hide_definition">隐藏释义</string>
+    <string name="vocabulary_export_csv">导出 CSV</string>
+    <string name="vocabulary_export_md">导出 Markdown</string>
 </resources>

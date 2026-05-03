@@ -42,6 +42,8 @@ import java.io.File
 @Composable
 fun LibraryScreen(
     onOpenBook: (String) -> Unit,
+    onOpenBookmarks: () -> Unit = {},
+    onOpenVocabulary: () -> Unit = {},
     repository: BookRepository,
     onLanguageSwitch: () -> Unit = {},
     sharedUris: List<Uri> = emptyList(),
@@ -79,6 +81,12 @@ fun LibraryScreen(
                     Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.library_title), fontWeight = FontWeight.Bold)
                 },
                 actions = {
+                    IconButton(onClick = onOpenBookmarks) {
+                        Icon(Icons.Default.Bookmark, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title))
+                    }
+                    IconButton(onClick = onOpenVocabulary) {
+                        Icon(Icons.Default.MenuBook, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_title))
+                    }
                     IconButton(onClick = {
                         importLauncher.launch(arrayOf("application/epub+zip"))
                     }) {

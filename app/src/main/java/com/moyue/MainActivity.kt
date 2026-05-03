@@ -12,8 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import com.moyue.app.data.BookRepository
+import com.moyue.app.ui.BookmarksScreen
 import com.moyue.app.ui.LibraryScreen
 import com.moyue.app.ui.ReaderScreen
+import com.moyue.app.ui.VocabularyScreen
 import com.moyue.app.ui.theme.MoreaderTheme
 import com.moyue.app.util.LocaleHelper
 import kotlinx.coroutines.launch
@@ -75,26 +77,57 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+sealed class Screen {
+    data object Library : Screen()
+    data class Reader(val bookId: String) : Screen()
+    data object Bookmarks : Screen()
+    data object Vocabulary : Screen()
+}
+
 @Composable
 fun MoreaderApp(repository: BookRepository, activity: ComponentActivity, sharedUris: List<Uri> = emptyList(), onSharedUrisConsumed: () -> Unit = {}) {
-    var currentBookId by remember { mutableStateOf<String?>(null) }
+    var currentScreen by remember { mutableStateOf<Screen>(Screen.Library) }
 
-    if (currentBookId == null) {
-        LibraryScreen(
-            onOpenBook = { bookId -> currentBookId = bookId },
-            repository = repository,
-            sharedUris = sharedUris,
-            onSharedUrisConsumed = onSharedUrisConsumed,
-            onLanguageSwitch = {
-                // Restart activity to apply new locale
-                activity.recreate()
-            },
-        )
-    } else {
-        ReaderScreen(
-            bookId = currentBookId!!,
-            repository = repository,
-            onBack = { currentBookId = null },
-        )
+    when (val screen = currentScreen) {
+        is Screen.Library -> {
+            LibraryScreen(
+                onOpenBook = { bookId -> currentScreen = Screen.Reader(bookId) },
+                onOpenBookmarks = { currentScreen = Screen.Bookmarks },
+                onOpenVocabulary = { currentScreen = Screen.Vocabulary },
+                repository = repository,
+                sharedUris = sharedUris,
+                onSharedUrisConsumed = onSharedUrisConsumed,
+                onLanguageSwitch = {
+                    // Restart activity to apply new locale
+                    activity.recreate()
+                },
+            )
+        }
+        is Screen.Reader -> {
+            ReaderScreen(
+                bookId = screen.bookId,
+                repository = repository,
+                onBack = { currentScreen = Screen.Library },
+                onNavigateToBookmark = { bookId, chapterIndex, progress ->
+                    // Navigate to specific bookmark location
+                    currentScreen = Screen.Reader(bookId)
+                }
+            )
+        }
+        is Screen.Bookmarks -> {
+            BookmarksScreen(
+                repository = repository,
+                onBack = { currentScreen = Screen.Library },
+                onNavigateToBookmark = { bookId, chapterIndex, progress ->
+                    currentScreen = Screen.Reader(bookId)
+                }
+            )
+        }
+        is Screen.Vocabulary -> {
+            VocabularyScreen(
+                repository = repository,
+                onBack = { currentScreen = Screen.Library }
+            )
+        }
     }
 }
