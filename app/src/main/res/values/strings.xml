@@ -175,6 +175,7 @@
     <!-- Vocabulary -->
     <string name="vocabulary_title">生词本</string>
     <string name="vocabulary_empty">暂无单词</string>
+    <string name="vocabulary_add">加入生词本</string>
     <string name="vocabulary_added">已添加到生词本</string>
     <string name="vocabulary_already_exists">单词已在生词本中</string>
     <string name="vocabulary_show_definition">查看释义</string>

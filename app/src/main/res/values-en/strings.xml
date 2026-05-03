@@ -175,6 +175,7 @@
     <!-- Vocabulary -->
     <string name="vocabulary_title">Vocabulary</string>
     <string name="vocabulary_empty">No words yet</string>
+    <string name="vocabulary_add">Add to Vocabulary</string>
     <string name="vocabulary_added">Added to vocabulary</string>
     <string name="vocabulary_already_exists">Word already in vocabulary</string>
     <string name="vocabulary_show_definition">Show definition</string>

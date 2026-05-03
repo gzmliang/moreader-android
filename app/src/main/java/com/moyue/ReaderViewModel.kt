@@ -577,5 +577,32 @@ class ReaderViewModel(
         }
     }
 
+    // ===== Vocabulary =====
+    fun addVocabulary() {
+        val s = _uiState.value
+        val book = s.book ?: return
+        val text = s.selectedText?.trim() ?: return
+        if (text.isEmpty()) return
+
+        viewModelScope.launch {
+            val existing = repository.getVocabularyByWord(text)
+            if (existing != null) {
+                _uiState.update { it.copy(showBookmarkToast = true, bookmarkToastMsg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.vocabulary_already_exists)) }
+            } else {
+                val vocab = Vocabulary(
+                    word = text,
+                    bookId = book.id.toLongOrNull(),
+                    chapterIndex = s.currentChapterIndex,
+                    createdAt = System.currentTimeMillis()
+                )
+                repository.insertVocabulary(vocab)
+                _uiState.update { it.copy(showBookmarkToast = true, bookmarkToastMsg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.vocabulary_added)) }
+            }
+            delay(2000)
+            _uiState.update { it.copy(showBookmarkToast = false) }
+            dismissSelectionMenu()
+        }
+    }
+
     override fun onCleared() { super.onCleared(); killPlayChain(); currentTTSProvider?.destroy() }
 }

@@ -165,6 +165,15 @@ fun ReaderScreen(
                             horizontalArrangement = Arrangement.spacedBy(0.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            TextButton(
+                                onClick = { viewModel.addVocabulary() },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF7C4DFF)),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            ) {
+                                Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF7C4DFF))
+                                Spacer(Modifier.width(2.dp))
+                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_add), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            }
                             if (existingHighlight != null) {
                                 TextButton(
                                     onClick = { viewModel.dismissSelectionMenu(); viewModel.removeHighlight(existingHighlight) },
