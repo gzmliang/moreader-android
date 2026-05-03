@@ -2,10 +2,14 @@ package com.moyue.app.ui
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -393,10 +397,11 @@ private fun ReaderBottomBar(
         shadowElevation = 4.dp,
     ) {
         Column(Modifier.fillMaxWidth()) {
-            // Book progress — thin elegant clickable bar
+            // Book progress — thin bar with small thumb, tap-only (no drag interference)
             val barTextColor = Color(android.graphics.Color.parseColor(textColor))
             val progressColor = Color(0xFF64B5F6)
             val trackColor = barTextColor.copy(alpha = 0.1f)
+            var trackWidth by remember { mutableStateOf(0f) }
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 0.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -405,25 +410,51 @@ private fun ReaderBottomBar(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = {
-                                val targetChapter = (bookProgress * totalChapters).toInt().coerceIn(0, totalChapters - 1)
-                                if (targetChapter != currentIndex) onNavigateToChapter(targetChapter)
+                        .height(16.dp) // Larger touch area
+                        .onGloballyPositioned { coords -> trackWidth = coords.size.width.toFloat() }
+                        .pointerInput(trackWidth, bookProgress, totalChapters, currentIndex) {
+                            if (trackWidth > 0) {
+                                detectTapGestures { offset ->
+                                    val ratio = (offset.x / trackWidth).coerceIn(0f, 1f)
+                                    val chapter = (ratio * totalChapters).toInt().coerceIn(0, totalChapters - 1)
+                                    if (chapter != currentIndex) onNavigateToChapter(chapter)
+                                }
                             }
-                        )
+                        }
                 ) {
-                    Box(modifier = Modifier.matchParentSize().background(trackColor))
+                    // Track background — centered vertically
                     Box(
                         modifier = Modifier
-                            .fillMaxHeight()
+                            .align(Alignment.Center)
+                            .height(3.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(trackColor)
+                    )
+                    // Progress fill — centered vertically
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .height(3.dp)
                             .fillMaxWidth(bookProgress)
                             .clip(RoundedCornerShape(2.dp))
                             .background(progressColor)
                     )
+                    // Small thumb indicator — positioned via Row + Spacer trick
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .fillMaxSize()
+                    ) {
+                        Spacer(modifier = Modifier.fillMaxHeight().weight(if (bookProgress > 0.001f) bookProgress else 0.001f))
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(progressColor)
+                        )
+                        Spacer(modifier = Modifier.fillMaxHeight().weight(if (bookProgress < 0.999f) 1f - bookProgress else 0.001f))
+                    }
                 }
                 Text("${currentIndex + 1}/$totalChapters", fontSize = 9.sp, color = barTextColor, modifier = Modifier.width(36.dp), textAlign = TextAlign.End)
             }
