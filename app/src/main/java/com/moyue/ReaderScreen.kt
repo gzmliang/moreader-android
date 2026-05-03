@@ -69,11 +69,6 @@ fun ReaderScreen(
     // TTS highlight index
     val ttsHighlightIdx = if (state.currentChapterIndex < state.chapters.size) state.ttsCurrentIdx else -1
 
-    // Auto-enter fullscreen when TTS starts playing
-    LaunchedEffect(state.isTtsPlaying) {
-        if (state.isTtsPlaying) viewModel.setFullscreen(true)
-    }
-
     // Translation result panel (kept as dialog, less frequent)
     if (state.showTranslationPanel) {
         AlertDialog(
@@ -121,7 +116,12 @@ fun ReaderScreen(
                         IconButton(onClick = { viewModel.toggleTocPanel() }) { Icon(Icons.Default.List, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.table_of_contents)) }
                         IconButton(onClick = { viewModel.toggleTtsSettingsPanel() }) { Icon(Icons.Default.Settings, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_settings)) }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.onSurface),
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color(android.graphics.Color.parseColor(state.theme.bgColor)),
+                        titleContentColor = Color(android.graphics.Color.parseColor(state.theme.textColor)),
+                        actionIconContentColor = Color(android.graphics.Color.parseColor(state.theme.textColor)),
+                        navigationIconContentColor = Color(android.graphics.Color.parseColor(state.theme.textColor)),
+                    ),
                 )
             }
         },
@@ -156,7 +156,7 @@ fun ReaderScreen(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                         shadowElevation = 8.dp,
                         shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+                        color = Color(android.graphics.Color.parseColor(state.theme.bgColor)).copy(alpha = 0.97f),
                     ) {
                         Row(
                             modifier = Modifier
@@ -210,6 +210,8 @@ fun ReaderScreen(
                             if (ch != null) viewModel.navigateToChapter(ch.href)
                         },
                         bookProgress = if (state.chapters.isNotEmpty()) (state.currentChapterIndex + 1).toFloat() / state.chapters.size else 0f,
+                        bgColor = state.theme.bgColor,
+                        textColor = state.theme.textColor,
                     )
                 }
             }
@@ -380,15 +382,21 @@ private fun ReaderBottomBar(
     onToggleDebug: () -> Unit,
     onNavigateToChapter: (Int) -> Unit,
     bookProgress: Float,
+    bgColor: String,
+    textColor: String,
 ) {
-    Surface(tonalElevation = 2.dp, shadowElevation = 4.dp) {
+    Surface(
+        color = Color(android.graphics.Color.parseColor(bgColor)),
+        shadowElevation = 4.dp,
+    ) {
         Column(Modifier.fillMaxWidth()) {
             // Book progress slider (thinner)
+            val barTextColor = Color(android.graphics.Color.parseColor(textColor))
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 0.dp), 
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("${(bookProgress * 100).toInt()}%", fontSize = 9.sp, modifier = Modifier.width(30.dp))
+                Text("${(bookProgress * 100).toInt()}%", fontSize = 9.sp, color = barTextColor, modifier = Modifier.width(30.dp))
                 Slider(
                     value = bookProgress,
                     onValueChange = { progress ->
@@ -399,16 +407,16 @@ private fun ReaderBottomBar(
                     steps = maxOf(0, totalChapters - 2),
                     modifier = Modifier.weight(1f).height(20.dp),
                 )
-                Text("${currentIndex + 1}/$totalChapters", fontSize = 9.sp, modifier = Modifier.width(36.dp), textAlign = TextAlign.End)
+                Text("${currentIndex + 1}/$totalChapters", fontSize = 9.sp, color = barTextColor, modifier = Modifier.width(36.dp), textAlign = TextAlign.End)
             }
 
             // Control buttons
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onPrev, enabled = currentIndex > 0) { Icon(Icons.Default.ChevronLeft, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.previous_chapter)) }
+                IconButton(onClick = onPrev, enabled = currentIndex > 0) { Icon(Icons.Default.ChevronLeft, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.previous_chapter), tint = barTextColor) }
 
-                IconButton(onClick = { onFontSizeChange(fontSize - 2) }) { Text("A-", fontSize = 14.sp, fontWeight = FontWeight.Bold) }
-                Text("$fontSize", fontSize = 11.sp)
-                IconButton(onClick = { onFontSizeChange(fontSize + 2) }) { Text("A+", fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+                IconButton(onClick = { onFontSizeChange(fontSize - 2) }) { Text("A-", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = barTextColor) }
+                Text("$fontSize", fontSize = 11.sp, color = barTextColor)
+                IconButton(onClick = { onFontSizeChange(fontSize + 2) }) { Text("A+", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = barTextColor) }
 
                 Spacer(Modifier.weight(1f))
 
@@ -419,16 +427,16 @@ private fun ReaderBottomBar(
                             tint = MaterialTheme.colorScheme.primary)
                     }
                 } else {
-                    IconButton(onClick = onPlayPause) { Icon(Icons.Default.VolumeUp, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.play_chapter)) }
+                    IconButton(onClick = onPlayPause) { Icon(Icons.Default.VolumeUp, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.play_chapter), tint = barTextColor) }
                 }
 
                 if (isTtsPlaying || isTtsPaused) {
                     IconButton(onClick = onStop) { Icon(Icons.Default.Stop, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.stop), tint = MaterialTheme.colorScheme.error) }
                 }
 
-                IconButton(onClick = onToggleDebug) { Icon(Icons.Default.BugReport, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.debug_log), modifier = Modifier.size(20.dp)) }
+                IconButton(onClick = onToggleDebug) { Icon(Icons.Default.BugReport, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.debug_log), modifier = Modifier.size(20.dp), tint = barTextColor) }
 
-                IconButton(onClick = onNext, enabled = currentIndex < totalChapters - 1) { Icon(Icons.Default.ChevronRight, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.next_chapter)) }
+                IconButton(onClick = onNext, enabled = currentIndex < totalChapters - 1) { Icon(Icons.Default.ChevronRight, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.next_chapter), tint = barTextColor) }
             }
         }
     }
