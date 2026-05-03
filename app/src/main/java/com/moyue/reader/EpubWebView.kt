@@ -202,7 +202,7 @@ fun EpubWebView(
                                             var info=MoreaderBridge._getSelectionInfo();
                                             MoreaderBridge.onTextSelected(info);
                                         }
-                                    },1500);
+                                    },800);
                                 });
                                 document.addEventListener('touchstart',function(){
                                     var s=window.getSelection();

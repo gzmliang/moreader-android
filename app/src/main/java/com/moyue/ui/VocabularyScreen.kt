@@ -1,5 +1,6 @@
 package com.moyue.app.ui
 
+import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -7,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -144,6 +146,41 @@ private fun VocabularyItem(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
+                
+                // Speaker icon for pronunciation
+                val context = LocalContext.current
+                var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+                var isSpeaking by remember { mutableStateOf(false) }
+                DisposableEffect(Unit) {
+                    val engine = TextToSpeech(context) { status ->
+                        if (status == TextToSpeech.SUCCESS) {
+                            tts?.language = Locale.ENGLISH
+                        }
+                    }
+                    tts = engine
+                    onDispose { engine.stop(); engine.shutdown(); tts = null }
+                }
+                IconButton(
+                    onClick = {
+                        if (!isSpeaking && tts != null) {
+                            isSpeaking = true
+                            tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                                override fun onStart(utteranceId: String?) {}
+                                override fun onDone(utteranceId: String?) { isSpeaking = false }
+                                override fun onError(utteranceId: String?) { isSpeaking = false }
+                            })
+                            tts?.speak(vocab.word, TextToSpeech.QUEUE_FLUSH, null, "vocab_${vocab.id}")
+                        }
+                    },
+                    enabled = !isSpeaking,
+                ) {
+                    Icon(
+                        Icons.Default.VolumeUp,
+                        contentDescription = "朗读单词",
+                        tint = if (isSpeaking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
                 
                 IconButton(onClick = onDelete) {
                     Icon(

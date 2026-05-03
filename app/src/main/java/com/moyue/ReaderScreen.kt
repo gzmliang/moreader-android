@@ -187,10 +187,10 @@ fun ReaderScreen(
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                 ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_add), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
                             }
+                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.readSelection(state.selectedText!!) }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF059669)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_aloud), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
                             TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("translate") }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate), fontSize = 11.sp, maxLines = 1) }
                             TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("explain") }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.explain), fontSize = 11.sp, maxLines = 1) }
                             TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("analyze") }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_analysis), fontSize = 11.sp, maxLines = 1) }
-                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.readSelection(state.selectedText!!) }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF059669)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_aloud), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
                         }
                     }
                 }
