@@ -4,10 +4,11 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.material3.SliderDefaults
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.foundation.lazy.LazyColumn
@@ -397,11 +398,12 @@ private fun ReaderBottomBar(
         shadowElevation = 4.dp,
     ) {
         Column(Modifier.fillMaxWidth()) {
-            // Book progress — thin bar with small thumb, tap-only (no drag interference)
+            // Book progress — thin bar with small thumb, continuous drag
             val barTextColor = Color(android.graphics.Color.parseColor(textColor))
-            val progressColor = Color(0xFF64B5F6)
+            val progressColor = Color(0xFF333333) // Dark/black line
             val trackColor = barTextColor.copy(alpha = 0.1f)
             var trackWidth by remember { mutableStateOf(0f) }
+            var lastDragChapter by remember { mutableStateOf(-1) }
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 0.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -412,12 +414,29 @@ private fun ReaderBottomBar(
                         .weight(1f)
                         .height(16.dp) // Larger touch area
                         .onGloballyPositioned { coords -> trackWidth = coords.size.width.toFloat() }
-                        .pointerInput(trackWidth, bookProgress, totalChapters, currentIndex) {
-                            if (trackWidth > 0) {
-                                detectTapGestures { offset ->
-                                    val ratio = (offset.x / trackWidth).coerceIn(0f, 1f)
-                                    val chapter = (ratio * totalChapters).toInt().coerceIn(0, totalChapters - 1)
-                                    if (chapter != currentIndex) onNavigateToChapter(chapter)
+                        .pointerInput(trackWidth, totalChapters, currentIndex) {
+                            if (trackWidth <= 0) return@pointerInput
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Main)
+                                    val change = event.changes.firstOrNull() ?: break
+                                    
+                                    if (event.type == PointerEventType.Release || event.type == PointerEventType.Unknown) {
+                                        lastDragChapter = -1
+                                        break
+                                    }
+                                    
+                                    if (event.type == PointerEventType.Press || event.type == PointerEventType.Move) {
+                                        change.consume()
+                                        val x = change.position.x.coerceIn(0f, trackWidth)
+                                        val ratio = x / trackWidth
+                                        val chapter = (ratio * totalChapters).toInt().coerceIn(0, totalChapters - 1)
+                                        // Only navigate when chapter actually changes (prevents spam)
+                                        if (chapter != lastDragChapter) {
+                                            lastDragChapter = chapter
+                                            if (chapter != currentIndex) onNavigateToChapter(chapter)
+                                        }
+                                    }
                                 }
                             }
                         }
