@@ -2,6 +2,9 @@ package com.moyue.app.ui
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -390,23 +393,38 @@ private fun ReaderBottomBar(
         shadowElevation = 4.dp,
     ) {
         Column(Modifier.fillMaxWidth()) {
-            // Book progress slider (thinner)
+            // Book progress — thin elegant clickable bar
             val barTextColor = Color(android.graphics.Color.parseColor(textColor))
+            val progressColor = Color(0xFF64B5F6)
+            val trackColor = barTextColor.copy(alpha = 0.1f)
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 0.dp), 
+                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 0.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("${(bookProgress * 100).toInt()}%", fontSize = 9.sp, color = barTextColor, modifier = Modifier.width(30.dp))
-                Slider(
-                    value = bookProgress,
-                    onValueChange = { progress ->
-                        val targetChapter = (progress * totalChapters).toInt().coerceIn(0, totalChapters - 1)
-                        if (targetChapter != currentIndex) onNavigateToChapter(targetChapter)
-                    },
-                    valueRange = 0f..1f,
-                    steps = maxOf(0, totalChapters - 2),
-                    modifier = Modifier.weight(1f).height(20.dp),
-                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = {
+                                val targetChapter = (bookProgress * totalChapters).toInt().coerceIn(0, totalChapters - 1)
+                                if (targetChapter != currentIndex) onNavigateToChapter(targetChapter)
+                            }
+                        )
+                ) {
+                    Box(modifier = Modifier.matchParentSize().background(trackColor))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(bookProgress)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(progressColor)
+                    )
+                }
                 Text("${currentIndex + 1}/$totalChapters", fontSize = 9.sp, color = barTextColor, modifier = Modifier.width(36.dp), textAlign = TextAlign.End)
             }
 
