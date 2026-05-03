@@ -156,9 +156,9 @@ fun TtsSettingsSheet(
 
             // Custom TTS (OpenAI-compatible)
             if (currentProvider == TTSProviderType.CUSTOM_TTS) {
-                Text("OpenAI 兼容 TTS", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_custom_tts_title), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(Modifier.height(4.dp))
-                Text("适用于 MOSS-TTS-Nano、CosyVoice 等本地部署", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_custom_tts_hint), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 Spacer(Modifier.height(6.dp))
 
                 var localEp by remember(customEndpoint) { mutableStateOf(customEndpoint) }
@@ -169,24 +169,24 @@ fun TtsSettingsSheet(
                 // 使用紧凑的双列布局
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedTextField(value = localEp, onValueChange = { localEp = it; onCustomTTSConfigChange(it, localKey, localModel, localVoice) },
-                        label = { Text("Base URL") }, singleLine = true, modifier = Modifier.weight(1f),
-                        placeholder = { Text("http://192.168.199.101:18083") },
+                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_base_url)) }, singleLine = true, modifier = Modifier.weight(1f),
+                        placeholder = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_hint_base_url)) },
                         textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))
                     OutlinedTextField(value = localKey, onValueChange = { localKey = it; onCustomTTSConfigChange(localEp, it, localModel, localVoice) },
-                        label = { Text("API Key") }, singleLine = true, modifier = Modifier.weight(1f),
-                        placeholder = { Text("dummy") },
+                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_api_key)) }, singleLine = true, modifier = Modifier.weight(1f),
+                        placeholder = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_hint_api_key)) },
                         textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))
                 }
                 Spacer(Modifier.height(4.dp))
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedTextField(value = localModel, onValueChange = { localModel = it; onCustomTTSConfigChange(localEp, localKey, it, localVoice) },
-                        label = { Text("模型") }, singleLine = true, modifier = Modifier.weight(1f),
-                        placeholder = { Text("moss-tts-nano") },
+                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_model)) }, singleLine = true, modifier = Modifier.weight(1f),
+                        placeholder = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_hint_model)) },
                         textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))
                     OutlinedTextField(value = localVoice, onValueChange = { localVoice = it; onCustomTTSConfigChange(localEp, localKey, localModel, it) },
-                        label = { Text("音色") }, singleLine = true, modifier = Modifier.weight(1f),
-                        placeholder = { Text("Lingyu") },
+                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_voice)) }, singleLine = true, modifier = Modifier.weight(1f),
+                        placeholder = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_hint_voice)) },
                         textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))
                 }
             }
@@ -202,11 +202,11 @@ fun TtsSettingsSheet(
                 var localVoice by remember(aiVoice) { mutableStateOf(aiVoice) }
 
                 OutlinedTextField(value = localEp, onValueChange = { localEp = it; onAIVoiceConfigChange(it, localKey, localModel, localVoice) },
-                    label = { Text("Base URL") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_base_url)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
 
                 OutlinedTextField(value = localKey, onValueChange = { localKey = it; onAIVoiceConfigChange(localEp, it, localModel, localVoice) },
-                    label = { Text("API Key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_api_key)) }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
 
                 // Model dropdown
@@ -295,7 +295,7 @@ fun TtsSettingsSheet(
 
             // API Key - 用户只需要填这个
             OutlinedTextField(value = llmKey, onValueChange = { llmKey = it },
-                label = { Text("API Key (仅需填写此项)") }, singleLine = true, 
+                label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_api_key_only_hint)) }, singleLine = true, 
                 visualTransformation = PasswordVisualTransformation(), 
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))

@@ -214,20 +214,20 @@ fun ReaderScreen(
                 if (showParagraphMenu) {
                     AlertDialog(
                         onDismissRequest = { showParagraphMenu = false },
-                        title = { Text("段落操作") },
-                        text = { Text("选择对该段落的操作") },
+                        title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.paragraph_menu_title)) },
+                        text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.paragraph_menu_message)) },
                         confirmButton = {
                             TextButton(
                                 onClick = {
                                     showParagraphMenu = false
                                     viewModel.readFromParagraph(clickedParagraphIndex)
                                 }
-                            ) { Text("从这里开始朗读") }
+                            ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_from_here)) }
                         },
                         dismissButton = {
                             TextButton(
                                 onClick = { showParagraphMenu = false }
-                            ) { Text("取消") }
+                            ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel)) }
                         }
                     )
                 }

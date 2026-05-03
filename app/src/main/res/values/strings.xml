@@ -162,7 +162,10 @@
     <string name="tts_log_read_from_paragraph">========== 从第 %1$d 段开始朗读 ==========</string>
     <string name="tts_log_invalid_paragraph_index">[TTS] ❌ 无效段落索引: %1$d</string>
 
-    <!-- Bookmarks -->
+    <!-- Paragraph Menu -->
+    <string name="paragraph_menu_title">段落操作</string>
+    <string name="paragraph_menu_message">选择对该段落的操作</string>
+    <string name="read_from_here">从这里开始朗读</string>
     <string name="bookmark_list_title">书签</string>
     <string name="bookmark_empty">暂无书签</string>
     <string name="bookmark_added">已添加书签</string>
@@ -178,4 +181,17 @@
     <string name="vocabulary_hide_definition">隐藏释义</string>
     <string name="vocabulary_export_csv">导出 CSV</string>
     <string name="vocabulary_export_md">导出 Markdown</string>
+
+    <!-- TTS Settings Labels -->
+    <string name="tts_label_base_url">Base URL</string>
+    <string name="tts_label_api_key">API Key</string>
+    <string name="tts_label_model">模型</string>
+    <string name="tts_label_voice">音色</string>
+    <string name="tts_hint_base_url">http://192.168.199.101:18083</string>
+    <string name="tts_hint_api_key">dummy</string>
+    <string name="tts_hint_model">moss-tts-nano</string>
+    <string name="tts_hint_voice">Lingyu</string>
+    <string name="tts_api_key_only_hint">API Key (仅需填写此项)</string>
+    <string name="tts_custom_tts_hint">适用于 MOSS-TTS-Nano、CosyVoice 等本地部署</string>
+    <string name="tts_custom_tts_title">OpenAI 兼容 TTS</string>
 </resources>
