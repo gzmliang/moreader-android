@@ -4,12 +4,15 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import com.moyue.app.data.BookRepository
 import com.moyue.app.data.models.*
 import com.moyue.app.reader.EpubWebView
@@ -43,6 +47,14 @@ fun ReaderScreen(
     LaunchedEffect(bookId) { viewModel.loadBook(bookId) }
 
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val highlights by viewModel.loadedHighlights.collectAsStateWithLifecycle()
+
+    // Load highlights when chapter changes
+    LaunchedEffect(state.currentChapterIndex, state.currentHtml) {
+        if (state.currentHtml != null && !state.isLoading) {
+            viewModel.loadHighlightsForChapter()
+        }
+    }
 
     // Fullscreen tap hint - shows briefly when entering fullscreen
     var showFullscreenHint by remember { mutableStateOf(false) }
@@ -83,7 +95,15 @@ fun ReaderScreen(
     }
 
     // Main layout
+    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    LaunchedEffect(state.showBookmarkToast) {
+        if (state.showBookmarkToast) {
+            snackbarHostState.showSnackbar(state.bookmarkToastMsg)
+        }
+    }
+    
     Scaffold(
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
         topBar = {
             AnimatedVisibility(visible = !state.isFullscreen) {
                 TopAppBar(
@@ -97,6 +117,7 @@ fun ReaderScreen(
                     navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.back)) } },
                     actions = {
                         IconButton(onClick = { viewModel.toggleFullscreen() }) { Icon(Icons.Default.Fullscreen, contentDescription = "全屏模式") }
+                        IconButton(onClick = { viewModel.toggleBookmarkPanel() }) { Icon(Icons.Outlined.BookmarkBorder, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title)) }
                         IconButton(onClick = { viewModel.toggleTocPanel() }) { Icon(Icons.Default.List, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.table_of_contents)) }
                         IconButton(onClick = { viewModel.toggleTtsSettingsPanel() }) { Icon(Icons.Default.Settings, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_settings)) }
                     },
@@ -128,23 +149,39 @@ fun ReaderScreen(
                     }
                 }
 
-                // Selection toolbar — floating above bottom bar, doesn't block system menu
+                // Selection toolbar — compact single row
                 if (state.showSelectionMenu && state.selectedText != null && !state.isTtsPlaying && !state.isTtsPaused) {
+                    val existingHighlight = viewModel.getExistingHighlightForSelection()
                     Surface(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                         shadowElevation = 8.dp,
-                        shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+                        shape = RoundedCornerShape(12.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
                     ) {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            modifier = Modifier
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 2.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(0.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("translate") }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate), fontSize = 12.sp) }
-                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("explain") }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.explain), fontSize = 12.sp) }
-                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("analyze") }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_analysis), fontSize = 12.sp) }
-                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.readSelection(state.selectedText!!) },
-                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF059669))) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_aloud), fontSize = 12.sp) }
+                            if (existingHighlight != null) {
+                                TextButton(
+                                    onClick = { viewModel.dismissSelectionMenu(); viewModel.removeHighlight(existingHighlight) },
+                                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_remove), fontSize = 11.sp, maxLines = 1) }
+                            } else {
+                                TextButton(
+                                    onClick = { viewModel.dismissSelectionMenu(); viewModel.addHighlight() },
+                                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFE6A800)),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_add), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
+                            }
+                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("translate") }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate), fontSize = 11.sp, maxLines = 1) }
+                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("explain") }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.explain), fontSize = 11.sp, maxLines = 1) }
+                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("analyze") }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_analysis), fontSize = 11.sp, maxLines = 1) }
+                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.readSelection(state.selectedText!!) }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF059669)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_aloud), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
                         }
                     }
                 }
@@ -207,6 +244,9 @@ fun ReaderScreen(
                         showParagraphMenu = true
                     },
                     ttsHighlightIndex = ttsHighlightIdx,
+                    scrollToParagraph = if (state.scrollToParagraph >= 0) state.scrollToParagraph else null,
+                    highlightsToRender = highlights.map { Triple(it.startParagraph, it.startOffset, it.endOffset) },
+                    highlightToRemove = state.highlightToRemove?.let { Pair(it.startOffset, it.endOffset) },
                     modifier = Modifier.fillMaxSize().background(Color(android.graphics.Color.parseColor(state.theme.bgColor))),
                 )
                 
@@ -217,12 +257,21 @@ fun ReaderScreen(
                         title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.paragraph_menu_title)) },
                         text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.paragraph_menu_message)) },
                         confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    showParagraphMenu = false
-                                    viewModel.readFromParagraph(clickedParagraphIndex)
-                                }
-                            ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_from_here)) }
+                            Row {
+                                TextButton(
+                                    onClick = {
+                                        viewModel.setCurrentParagraph(clickedParagraphIndex)
+                                        showParagraphMenu = false
+                                        viewModel.addBookmark()
+                                    }
+                                ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title)) }
+                                TextButton(
+                                    onClick = {
+                                        showParagraphMenu = false
+                                        viewModel.readFromParagraph(clickedParagraphIndex)
+                                    }
+                                ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_from_here)) }
+                            }
                         },
                         dismissButton = {
                             TextButton(
@@ -261,6 +310,25 @@ fun ReaderScreen(
             ) {
                 TocDrawer(state.toc, state.chapters.getOrNull(state.currentChapterIndex)?.href,
                     onNavigate = { viewModel.navigateToChapter(it) }, onClose = { viewModel.toggleTocPanel() })
+            }
+
+            // Bookmark panel (slide from right)
+            AnimatedVisibility(
+                visible = state.showBookmarkPanel,
+                enter = slideInHorizontally(initialOffsetX = { it }),
+                exit = slideOutHorizontally(targetOffsetX = { it }),
+                modifier = Modifier.fillMaxHeight().width(300.dp).align(Alignment.CenterEnd),
+            ) {
+                val bookmarks by repository.getBookmarksForBook(state.book?.id ?: "").collectAsStateWithLifecycle(initialValue = emptyList())
+                val scope = rememberCoroutineScope()
+                BookmarkPanel(
+                    bookmarks = bookmarks,
+                    onNavigate = { viewModel.navigateToBookmark(it) },
+                    onDelete = { bookmark ->
+                        scope.launch { repository.deleteBookmark(bookmark.id) }
+                    },
+                    onClose = { viewModel.toggleBookmarkPanel() },
+                )
             }
 
             // TTS Settings overlay (includes theme picker now)
@@ -375,6 +443,93 @@ private fun TocDrawer(toc: List<TocEntry>, currentChapterHref: String?, onNaviga
                         headlineContent = { Text(entry.label, fontSize = (14 - entry.level).coerceAtLeast(12).sp, fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                         modifier = Modifier.fillMaxWidth().clickable { onNavigate(entry.href) }.background(if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent),
                     )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BookmarkPanel(
+    bookmarks: List<Bookmark>,
+    onNavigate: (Bookmark) -> Unit,
+    onDelete: (Bookmark) -> Unit,
+    onClose: () -> Unit,
+) {
+    val dateFormat = remember { java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()) }
+    var deleteTarget by remember { mutableStateOf<Bookmark?>(null) }
+
+    if (deleteTarget != null) {
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("删除书签") },
+            text = { Text("确定要删除这个书签吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteTarget?.let { onDelete(it) }
+                    deleteTarget = null
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } },
+        )
+    }
+
+    Surface(Modifier.fillMaxHeight(), shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close)) }
+            }
+            HorizontalDivider()
+            if (bookmarks.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(bookmarks, key = { b: Bookmark -> b.id }) { bookmark ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                            onClick = { onNavigate(bookmark) },
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Default.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = bookmark.chapterTitle ?: "第 ${bookmark.chapterIndex + 1} 章",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if (bookmark.paragraphText != null) {
+                                        Text(
+                                            text = bookmark.paragraphText,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(top = 2.dp),
+                                        )
+                                    }
+                                    Text(
+                                        text = "${dateFormat.format(java.util.Date(bookmark.createdAt))} · 段落 ${bookmark.paragraphIndex + 1}",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(top = 2.dp),
+                                    )
+                                }
+                                IconButton(onClick = { deleteTarget = bookmark }) {
+                                    Icon(Icons.Default.Delete, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

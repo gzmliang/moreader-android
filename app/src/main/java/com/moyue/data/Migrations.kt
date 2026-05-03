@@ -54,7 +54,9 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 
 val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(database: SupportSQLiteDatabase) {
-        // Migration from 2 to 3 (if needed)
-        // Already has all tables from 1->2 migration
+        // Add paragraph-based precision to bookmarks
+        database.execSQL("ALTER TABLE bookmarks ADD COLUMN paragraphIndex INTEGER NOT NULL DEFAULT 0")
+        database.execSQL("ALTER TABLE bookmarks ADD COLUMN paragraphText TEXT")
+        database.execSQL("ALTER TABLE bookmarks DROP COLUMN cfi")
     }
 }

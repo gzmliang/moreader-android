@@ -107,11 +107,7 @@ fun MoreaderApp(repository: BookRepository, activity: ComponentActivity, sharedU
             ReaderScreen(
                 bookId = screen.bookId,
                 repository = repository,
-                onBack = { currentScreen = Screen.Library },
-                onNavigateToBookmark = { bookId, chapterIndex, progress ->
-                    // Navigate to specific bookmark location
-                    currentScreen = Screen.Reader(bookId)
-                }
+                onBack = { currentScreen = Screen.Library }
             )
         }
         is Screen.Bookmarks -> {

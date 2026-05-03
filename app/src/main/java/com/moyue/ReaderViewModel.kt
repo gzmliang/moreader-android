@@ -11,6 +11,17 @@ import com.moyue.app.tts.*
 import com.moyue.app.translate.TranslationService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import java.text.SimpleDateFormat
+import java.util.Locale
+import org.json.JSONObject
+
+data class SelectionInfo(
+    val text: String,
+    val paraIdx: Int,
+    val startOffset: Int,
+    val endParaIdx: Int,
+    val endOffset: Int,
+)
 
 data class ReaderUiState(
     val book: Book? = null,
@@ -24,6 +35,7 @@ data class ReaderUiState(
     val theme: ReaderTheme = ReaderTheme.LIGHT,
     val fontSize: Int = 18,
     val selectedText: String? = null,
+    val selectionInfo: SelectionInfo? = null,  // Selection with paragraph/offset info
     val translationResult: String? = null,
     val isTranslating: Boolean = false,
     val translationMode: String = "translate",
@@ -56,6 +68,13 @@ data class ReaderUiState(
     val showTtsSettingsPanel: Boolean = false,
     val showTranslationPanel: Boolean = false,
     val showSelectionMenu: Boolean = false,
+    // Bookmark
+    val showBookmarkToast: Boolean = false,
+    val bookmarkToastMsg: String = "",
+    val showBookmarkPanel: Boolean = false,
+    val currentParagraphIndex: Int = 0,       // 当前阅读/朗读的段落
+    val scrollToParagraph: Int = -1,           // 需要滚动到的段落索引（-1 表示无）
+    val highlightToRemove: Highlight? = null,    // Signal to remove a highlight in WebView
 )
 
 class ReaderViewModel(
@@ -162,7 +181,23 @@ class ReaderViewModel(
     private suspend fun saveProgress() { val s = _uiState.value; val b = s.book ?: return; val c = s.chapters.getOrNull(s.currentChapterIndex) ?: return; repository.updateProgress(b.id, c.href, s.currentChapterIndex, b.currentProgress, null) }
     fun setTheme(t: ReaderTheme) { _uiState.update { it.copy(theme = t) } }
     fun setFontSize(s: Int) { _uiState.update { it.copy(fontSize = s.coerceIn(14, 28)) } }
-    fun onTextSelected(t: String) { _uiState.update { it.copy(selectedText = t, showSelectionMenu = true) } }
+    fun onTextSelected(infoJson: String) {
+        try {
+            val obj = JSONObject(infoJson)
+            val text = obj.optString("text", "")
+            val info = SelectionInfo(
+                text = text,
+                paraIdx = obj.optInt("paraIdx", -1),
+                startOffset = obj.optInt("startOffset", -1),
+                endParaIdx = obj.optInt("endParaIdx", -1),
+                endOffset = obj.optInt("endOffset", -1),
+            )
+            _uiState.update { it.copy(selectedText = info.text, selectionInfo = info, showSelectionMenu = true) }
+        } catch (e: Exception) {
+            // Fallback for plain text (legacy)
+            _uiState.update { it.copy(selectedText = infoJson, selectionInfo = null, showSelectionMenu = true) }
+        }
+    }
     fun onLinkClicked(url: String) { 
         // Handle internal EPUB link clicks
         val cleanUrl = url.trim()
@@ -418,5 +453,129 @@ class ReaderViewModel(
     fun updateLLMConfig(c: LLMConfig) { _uiState.update { it.copy(llmConfig = c) }; prefs.edit().putString("llm_provider", c.provider).putString("llm_apikey", c.apiKey).putString("llm_endpoint", c.endpoint).putString("llm_model", c.model).apply() }
     fun toggleTocPanel() { _uiState.update { it.copy(showTocPanel = !it.showTocPanel) } }
     fun toggleTtsSettingsPanel() { _uiState.update { it.copy(showTtsSettingsPanel = !it.showTtsSettingsPanel) } }
+
+    // ===== Bookmark =====
+    fun addBookmark() {
+        val s = _uiState.value
+        val book = s.book ?: return
+        val chapter = s.chapters.getOrNull(s.currentChapterIndex) ?: return
+        
+        // 使用当前朗读/阅读的段落索引，如果没有则使用 0
+        val paraIdx = if (s.ttsCurrentIdx >= 0 && s.ttsCurrentIdx < s.ttsParagraphs.size) s.ttsCurrentIdx else s.currentParagraphIndex
+        val paraText = s.ttsParagraphs.getOrNull(paraIdx)?.take(50) // 保存前 50 字作为预览
+        
+        viewModelScope.launch {
+            val bookmark = Bookmark(
+                bookId = book.id,
+                chapterIndex = s.currentChapterIndex,
+                chapterTitle = chapter.id,
+                paragraphIndex = paraIdx,
+                paragraphText = paraText,
+                progress = s.currentChapterIndex.toFloat() / maxOf(1, s.chapters.size - 1),
+                createdAt = System.currentTimeMillis()
+            )
+            repository.addBookmark(bookmark)
+            val msg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.bookmark_added_at, java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
+            _uiState.update { it.copy(showBookmarkToast = true, bookmarkToastMsg = msg) }
+            delay(2000)
+            _uiState.update { it.copy(showBookmarkToast = false) }
+        }
+    }
+
+    fun navigateToBookmark(bookmark: Bookmark) {
+        _uiState.update { it.copy(showBookmarkPanel = false) }
+        val s = _uiState.value
+        val chapters = s.chapters
+        
+        // 如果书签不在当前章节，先跳转章节
+        if (bookmark.chapterIndex != s.currentChapterIndex) {
+            val targetChapter = chapters.getOrNull(bookmark.chapterIndex)
+            if (targetChapter != null) {
+                killPlayChain()
+                _uiState.update { it.copy(currentChapterIndex = bookmark.chapterIndex, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }
+                viewModelScope.launch {
+                    loadChapterContent()
+                    // 章节加载完成后滚动到书签段落
+                    _uiState.update { it.copy(scrollToParagraph = bookmark.paragraphIndex) }
+                }
+            }
+        } else {
+            // 同一章节，直接滚动到段落
+            _uiState.update { it.copy(scrollToParagraph = bookmark.paragraphIndex) }
+        }
+    }
+
+    fun toggleBookmarkPanel() { _uiState.update { it.copy(showBookmarkPanel = !it.showBookmarkPanel) } }
+
+    fun setCurrentParagraph(idx: Int) { _uiState.update { it.copy(currentParagraphIndex = idx) } }
+
+    fun clearScrollToParagraph() { _uiState.update { it.copy(scrollToParagraph = -1) } }
+
+    // ===== Highlight =====
+    private val _highlights = MutableStateFlow<List<Highlight>>(emptyList())
+    val loadedHighlights: StateFlow<List<Highlight>> = _highlights.asStateFlow()
+
+    fun addHighlight() {
+        val s = _uiState.value
+        val book = s.book ?: return
+        val info = s.selectionInfo ?: return
+        if (info.paraIdx < 0 || info.startOffset < 0) return
+
+        viewModelScope.launch {
+            val endPara = if (info.endParaIdx >= 0) info.endParaIdx else info.paraIdx
+            val endOff = if (info.endOffset >= 0) info.endOffset else info.startOffset + info.text.length
+
+            val highlight = Highlight(
+                bookId = book.id,
+                chapterIndex = s.currentChapterIndex,
+                startParagraph = info.paraIdx,
+                startOffset = info.startOffset,
+                endParagraph = endPara,
+                endOffset = endOff,
+                text = info.text,
+                color = 0xFFFFFF00.toInt(),
+                createdAt = System.currentTimeMillis()
+            )
+            repository.addHighlight(highlight)
+            // Add to in-memory list so EpubWebView renders it
+            _highlights.update { it + highlight }
+            _uiState.update { it.copy(selectedText = null, selectionInfo = null, showSelectionMenu = false) }
+        }
+    }
+
+    fun removeHighlight(highlight: Highlight) {
+        viewModelScope.launch {
+            repository.deleteHighlight(highlight)
+            _highlights.update { it.filter { h -> h.id != highlight.id } }
+            _uiState.update { it.copy(highlightToRemove = highlight) }
+            // Clear the remove signal after a short delay
+            kotlinx.coroutines.delay(200)
+            _uiState.update { it.copy(highlightToRemove = null) }
+        }
+    }
+
+    /** Check if selected text overlaps with an existing highlight */
+    fun getExistingHighlightForSelection(): Highlight? {
+        val s = _uiState.value
+        val info = s.selectionInfo ?: return null
+        val endPara = if (info.endParaIdx >= 0) info.endParaIdx else info.paraIdx
+        val endOff = if (info.endOffset >= 0) info.endOffset else info.startOffset + info.text.length
+        return _highlights.value.find { hl ->
+            hl.startParagraph == info.paraIdx &&
+            hl.startOffset == info.startOffset &&
+            hl.endParagraph == endPara &&
+            hl.endOffset == endOff
+        }
+    }
+
+    fun loadHighlightsForChapter() {
+        val s = _uiState.value
+        val book = s.book ?: return
+        viewModelScope.launch {
+            val all = repository.getHighlightsForBook(book.id).first()
+            _highlights.value = all.filter { it.chapterIndex == s.currentChapterIndex }
+        }
+    }
+
     override fun onCleared() { super.onCleared(); killPlayChain(); currentTTSProvider?.destroy() }
 }

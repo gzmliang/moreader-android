@@ -6,7 +6,7 @@
     <string name="loading">Loading...</string>
     <string name="large_book_hint">Large books may take a moment</string>
     <string name="error_book_not_found">Book not found</string>
-    <string name="error_parse_failed">Could not parse book chapters. EPUB format may not be supported.</string>
+    <string name="error_parse_failed">Could not parse book chapters, EPUB format may not be supported</string>
     <string name="error_chapter_out_of_range">Chapter index out of range</string>
     <string name="error_read_failed">Could not read chapter content</string>
     <string name="back">Back</string>
@@ -21,10 +21,10 @@
 
     <!-- Library -->
     <string name="library_title">Moreader</string>
-    <string name="import_book">Import EPUB</string>
+    <string name="import_book">Import Book</string>
     <string name="empty_library_hint">Import an EPUB to start reading</string>
     <string name="delete_book_title">Delete Book</string>
-    <string name="delete_book_confirm">Delete "%1$s"?</string>
+    <string name="delete_book_confirm">Delete \"%1$s\"?</string>
 
     <!-- Reader -->
     <string name="load_book">Loading book...</string>
@@ -49,14 +49,14 @@
 
     <!-- TTS -->
     <string name="tts_settings">TTS Settings</string>
-    <string name="tts_engine">Engine</string>
+    <string name="tts_engine">TTS Engine</string>
     <string name="tts_speed">Speed: %1$sx</string>
     <string name="tts_speed_label">Speed</string>
     <string name="tts_server_url">Server URL</string>
     <string name="tts_voice">Voice</string>
     <string name="tts_voice_selection">Voice Selection</string>
     <string name="tts_custom_voice">Custom Voice ID</string>
-    <string name="tts_model_selection">Model</string>
+    <string name="tts_model_selection">Model Selection</string>
     <string name="tts_model">TTS Model</string>
     <string name="tts_base_url">Base URL</string>
     <string name="tts_api_key">API Key</string>
@@ -65,14 +65,14 @@
     <string name="pause">Pause</string>
     <string name="resume">Resume</string>
     <string name="stop">Stop</string>
-    <string name="previous_chapter">Prev Chapter</string>
+    <string name="previous_chapter">Previous Chapter</string>
     <string name="next_chapter">Next Chapter</string>
     <string name="font_decrease">A-</string>
     <string name="font_increase">A+</string>
 
     <!-- Debug -->
     <string name="debug_log">Debug Log</string>
-    <string name="debug_no_log">No logs yet. Start reading to see output.</string>
+    <string name="debug_no_log">No log yet, tap read to view</string>
     <string name="highlight_offset">Highlight Offset</string>
 
     <!-- Theme -->
@@ -99,48 +99,49 @@
     <string name="tts_provider_system">System TTS</string>
     <string name="tts_provider_edge">Edge TTS</string>
     <string name="tts_provider_ai">AI Voice</string>
+    <string name="tts_provider_custom">Custom TTS</string>
 
     <!-- TTS voice group labels -->
     <string name="voice_female">Female</string>
     <string name="voice_male">Male</string>
 
-    <!-- Edge TTS Voices (data — keep original localized names) -->
-    <string name="voice_xiaoxiao">Xiaoxiao (Female)</string>
-    <string name="voice_yunxi">Yunxi (Male)</string>
-    <string name="voice_yunjian">Yunjian (Male)</string>
-    <string name="voice_xiaoyi">Xiaoyi (Female)</string>
-    <string name="voice_hsiaochen">HsiaoChen (Female)</string>
-    <string name="voice_yunjhe">YunJhe (Male)</string>
+    <!-- Edge TTS Voices -->
+    <string name="voice_xiaoxiao">晓晓 (Female)</string>
+    <string name="voice_yunxi">云希 (Male)</string>
+    <string name="voice_yunjian">云健 (Male)</string>
+    <string name="voice_xiaoyi">晓伊 (Female)</string>
+    <string name="voice_hsiaochen">曉臻 (Female)</string>
+    <string name="voice_yunjhe">雲哲 (Male)</string>
     <string name="voice_jenny">Jenny (Female)</string>
     <string name="voice_guy">Guy (Male)</string>
     <string name="voice_aria">Aria (Female)</string>
     <string name="voice_davis">Davis (Male)</string>
-    <string name="voice_nanami">Nanami (Female)</string>
-    <string name="voice_keita">Keita (Male)</string>
-    <string name="voice_sunhi">Sun-hi (Female)</string>
-    <string name="voice_injun">In-jun (Male)</string>
+    <string name="voice_nanami">七海 (Female)</string>
+    <string name="voice_keita">圭太 (Male)</string>
+    <string name="voice_sunhi">선희 (Female)</string>
+    <string name="voice_injun">인준 (Male)</string>
 
     <!-- AI Voice Models -->
-    <string name="model_moss">MOSS-TTSD v0.5 (BiLang)</string>
-    <string name="model_cosyvoice">CosyVoice2 0.5B (BiLang)</string>
+    <string name="model_moss">MOSS-TTSD v0.5</string>
+    <string name="model_cosyvoice">CosyVoice2 0.5B</string>
     <string name="model_tts1">OpenAI tts-1</string>
     <string name="model_tts1_hd">OpenAI tts-1-hd</string>
 
     <!-- TTS / AI voice gender labels -->
-    <string name="voice_gender_female">Female</string>
-    <string name="voice_gender_male">Male</string>
-    <string name="voice_gender_neutral">Neutral</string>
+    <string name="voice_gender_female">F</string>
+    <string name="voice_gender_male">M</string>
+    <string name="voice_gender_neutral">N</string>
 
     <!-- Errors -->
-    <string name="error_tts_init_failed">TTS engine init failed (status=%1$d)</string>
-    <string name="error_tts_not_initialized">TTS engine not initialized</string>
-    <string name="error_tts_init_timeout">TTS engine init timeout</string>
-    <string name="error_tts_no_engine">No TTS engine available. Please use Edge TTS or AI Voice.</string>
+    <string name="error_tts_init_failed">TTS init failed (status=%1$d)</string>
+    <string name="error_tts_not_initialized">TTS not initialized</string>
+    <string name="error_tts_init_timeout">TTS init timeout</string>
+    <string name="error_tts_no_engine">No system TTS engine, use Edge TTS or AI Voice</string>
     <string name="error_tts_init_engine_failed">Engine %1$s init failed: %2$s</string>
-    <string name="error_tts_speak_failed">TTS speak returned error</string>
-    <string name="error_ai_voice_request_failed">AI Voice request failed: %1$s</string>
-    <string name="error_ai_voice_http">AI Voice HTTP %1$d: %2$s</string>
-    <string name="error_ai_voice_empty">AI Voice returned empty audio</string>
+    <string name="error_tts_speak_failed">TTS speak error</string>
+    <string name="error_ai_voice_request_failed">AI voice request failed: %1$s</string>
+    <string name="error_ai_voice_http">AI voice HTTP %1$d: %2$s</string>
+    <string name="error_ai_voice_empty">AI voice returned empty audio</string>
     <string name="error_ai_voice_playback">Playback error: %1$s</string>
     <string name="error_ai_voice_playback_code">Playback error: %1$d/%2$d</string>
 
@@ -149,13 +150,52 @@
     <string name="tts_log_empty_html">[TTS] ❌ currentHtml is empty</string>
     <string name="tts_log_no_paragraphs">[TTS] ❌ No paragraphs</string>
     <string name="tts_log_pause">[TTS] ⏸ Pause idx=%1$d</string>
-    <string name="tts_log_invalid_restore">[TTS] ❌ Nothing to restore (playIdx=%1$d)</string>
+    <string name="tts_log_invalid_restore">[TTS] ❌ No state to restore (playIdx=%1$d)</string>
     <string name="tts_log_resume">[TTS] ▶ Resume</string>
     <string name="tts_log_stop">[TTS] ⏹ Stop</string>
     <string name="tts_log_switch_engine">Switch TTS engine: %1$s</string>
-    <string name="tts_log_offset_inc">[Settings] Offset +1 = %1$d</string>
-    <string name="tts_log_offset_dec">[Settings] Offset -1 = %1$d</string>
-    <string name="tts_log_edge_config">[Settings] Edge TTS: voice=%1$s</string>
-    <string name="tts_log_ai_config">[Settings] AI Voice: voice=%1$s</string>
+    <string name="tts_log_offset_inc">[Setting] Highlight offset +1 = %1$d</string>
+    <string name="tts_log_offset_dec">[Setting] Highlight offset -1 = %1$d</string>
+    <string name="tts_log_edge_config">[Setting] Edge TTS: voice=%1$s</string>
+    <string name="tts_log_ai_config">[Setting] AI Voice: voice=%1$s</string>
     <string name="tts_log_engine_error">[TTS] ❌ onError idx=%1$d: %2$s</string>
+    <string name="tts_log_read_from_paragraph">========== Reading from paragraph %1$d ==========</string>
+    <string name="tts_log_invalid_paragraph_index">[TTS] ❌ Invalid paragraph index: %1$d</string>
+
+    <!-- Paragraph Menu -->
+    <string name="paragraph_menu_title">Paragraph Actions</string>
+    <string name="paragraph_menu_message">Choose an action for this paragraph</string>
+    <string name="read_from_here">Read from Here</string>
+    <string name="bookmark_list_title">Bookmarks</string>
+    <string name="bookmark_empty">No bookmarks yet</string>
+    <string name="bookmark_added">Bookmark added</string>
+    <string name="bookmark_deleted">Bookmark deleted</string>
+    <string name="bookmark_added_at">Added at %1$s</string>
+
+    <!-- Vocabulary -->
+    <string name="vocabulary_title">Vocabulary</string>
+    <string name="vocabulary_empty">No words yet</string>
+    <string name="vocabulary_added">Added to vocabulary</string>
+    <string name="vocabulary_already_exists">Word already in vocabulary</string>
+    <string name="vocabulary_show_definition">Show definition</string>
+    <string name="vocabulary_hide_definition">Hide definition</string>
+    <string name="vocabulary_export_csv">Export CSV</string>
+    <string name="vocabulary_export_md">Export Markdown</string>
+
+    <!-- Highlight -->
+    <string name="highlight_add">Highlight</string>
+    <string name="highlight_remove">Remove Highlight</string>
+
+    <!-- TTS Settings Labels -->
+    <string name="tts_label_base_url">Base URL</string>
+    <string name="tts_label_api_key">API Key</string>
+    <string name="tts_label_model">Model</string>
+    <string name="tts_label_voice">Voice</string>
+    <string name="tts_hint_base_url">http://192.168.199.101:18083</string>
+    <string name="tts_hint_api_key">dummy</string>
+    <string name="tts_hint_model">moss-tts-nano</string>
+    <string name="tts_hint_voice">Lingyu</string>
+    <string name="tts_api_key_only_hint">API Key (only this field needed)</string>
+    <string name="tts_custom_tts_hint">For MOSS-TTS-Nano, CosyVoice, etc.</string>
+    <string name="tts_custom_tts_title">OpenAI Compatible TTS</string>
 </resources>

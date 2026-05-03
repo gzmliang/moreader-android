@@ -182,6 +182,10 @@
     <string name="vocabulary_export_csv">导出 CSV</string>
     <string name="vocabulary_export_md">导出 Markdown</string>
 
+    <!-- Highlight -->
+    <string name="highlight_add">高亮</string>
+    <string name="highlight_remove">取消高亮</string>
+
     <!-- TTS Settings Labels -->
     <string name="tts_label_base_url">Base URL</string>
     <string name="tts_label_api_key">API Key</string>

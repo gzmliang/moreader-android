@@ -43,9 +43,13 @@ fun EpubWebView(
     fontScale: Float,
     onTextSelected: (String) -> Unit,
     onLinkClicked: (String) -> Unit = {},
-    onParagraphClicked: ((Int) -> Unit)? = null,  // New: paragraph click callback
+    onParagraphClicked: ((Int) -> Unit)? = null,
     ttsHighlightIndex: Int = -1,
+    scrollToParagraph: Int? = null,
+    highlightsToRender: List<Triple<Int, Int, Int>> = emptyList(),  // (startParagraph, startOffset, endOffset)
+    highlightToRemove: Pair<Int, Int>? = null,  // (startOffset, endOffset)
     modifier: Modifier = Modifier,
+    onWebViewCreated: ((WebView) -> Unit)? = null,
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     val callbackRef = remember { mutableStateOf<(String) -> Unit>({}) }
@@ -66,6 +70,42 @@ fun EpubWebView(
         }
     }
 
+    // Scroll to paragraph for bookmark navigation
+    LaunchedEffect(scrollToParagraph) {
+        if (scrollToParagraph != null && scrollToParagraph >= 0) {
+            kotlinx.coroutines.delay(500)
+            webView?.evaluateJavascript("window.scrollToPara($scrollToParagraph)", null)
+        }
+    }
+
+    // Render user highlights in WebView
+    LaunchedEffect(highlightsToRender) {
+        if (highlightsToRender.isNotEmpty()) {
+            kotlinx.coroutines.delay(600)
+            val hlArray = highlightsToRender.joinToString(",", "[", "]") { "[${it.first},${it.second},${it.third}]" }
+            webView?.evaluateJavascript(
+                """(function(){
+                    var s=document.getElementById('_uh');
+                    if(!s){s=document.createElement('style');s.id='_uh';document.head.appendChild(s);}
+                    s.textContent='span.user-highlight{background:#FFE082!important;color:inherit!important;border-radius:2px!important;padding:0 2px!important}';
+                    var highlights=$hlArray;
+                    for(var i=0;i<highlights.length;i++){
+                        var h=highlights[i];
+                        if(window.applyHighlight)window.applyHighlight(h[0],h[1],h[2],'#FFE082');
+                    }
+                })()""", null
+            )
+        }
+    }
+
+    // Remove a highlight in WebView
+    LaunchedEffect(highlightToRemove) {
+        val pair = highlightToRemove ?: return@LaunchedEffect
+        webView?.evaluateJavascript(
+            "window.removeHighlight(${pair.first},${pair.second})", null
+        )
+    }
+
     // Dynamic theme update when font/bg/text changes
     LaunchedEffect(fontScale, bgColor, textColor) {
         webView?.let { wv ->
@@ -80,6 +120,7 @@ fun EpubWebView(
                 'img{max-width:100%!important;height:auto!important}'+
                 'a{color:#06C!important}'+
                 '.tts-hl{background-color:rgba(59,130,246,0.2)!important;border-left:3px solid #3b82f6!important}'+
+                '.user-highlight{background-color:rgba(255,255,0,0.35)!important;border-radius:2px!important}'+
                 '::-webkit-scrollbar{width:0!important;height:0!important}';
             })()"""
             wv.evaluateJavascript(js, null)
@@ -94,6 +135,7 @@ fun EpubWebView(
         img{max-width:100%!important;height:auto!important}
         a{color:#06C!important}
         .tts-hl{background-color:rgba(59,130,246,0.2)!important;border-left:3px solid #3b82f6!important}
+        .user-highlight{background-color:rgba(255,255,0,0.35)!important;border-radius:2px!important}
         ::-webkit-scrollbar{width:0!important;height:0!important}
         </style>"""
 
@@ -102,6 +144,7 @@ fun EpubWebView(
             factory = { ctx ->
                 WebView(ctx).apply {
                     webView = this
+                    onWebViewCreated?.invoke(this)
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
@@ -155,7 +198,10 @@ fun EpubWebView(
                                     clearTimeout(window._selTimer);
                                     window._selTimer=setTimeout(function(){
                                         var s=window.getSelection();
-                                        if(s&&!s.isCollapsed&&s.toString().trim())MoreaderBridge.onTextSelected(s.toString().trim());
+                                        if(s&&!s.isCollapsed&&s.toString().trim()){
+                                            var info=MoreaderBridge._getSelectionInfo();
+                                            MoreaderBridge.onTextSelected(info);
+                                        }
                                     },1500);
                                 });
                                 document.addEventListener('touchstart',function(){
@@ -168,17 +214,130 @@ fun EpubWebView(
                                     if(idx>=0&&idx<all.length){all[idx].classList.add('tts-hl');all[idx].scrollIntoView({behavior:'smooth',block:'center'});}
                                 };
                                 window.ttsClear=function(){document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});};
+                                window.scrollToPara=function(idx){
+                                    var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
+                                    if(idx>=0&&idx<all.length){
+                                        all[idx].scrollIntoView({behavior:'smooth',block:'center'});
+                                        all[idx].style.backgroundColor='rgba(59,130,246,0.15)';
+                                        setTimeout(function(){all[idx].style.backgroundColor='';},2000);
+                                    }
+                                };
+                                
+                                // Get selection info with paragraph index and offsets
+                                MoreaderBridge._getSelectionInfo=function(){
+                                    var s=window.getSelection();
+                                    if(!s||s.isCollapsed)return JSON.stringify({text:'',paraIdx:-1,startOffset:-1,endOffset:-1});
+                                    var text=s.toString().trim();
+                                    var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
+                                    var range=s.getRangeAt(0);
+                                    
+                                    // Find start paragraph and offset
+                                    var startNode=range.startContainer;
+                                    var endNode=range.endContainer;
+                                    var startParaIdx=-1,startOffset=range.startOffset;
+                                    var endParaIdx=-1,endOffset=range.endOffset;
+                                    
+                                    for(var i=0;i<all.length;i++){
+                                        if(all[i].contains(startNode)){
+                                            startParaIdx=i;
+                                            // Calculate offset from paragraph start
+                                            var walker=document.createTreeWalker(all[i],NodeFilter.SHOW_TEXT);
+                                            var charCount=0;
+                                            var found=false;
+                                            while(walker.nextNode()&&!found){
+                                                var node=walker.currentNode;
+                                                if(node===startNode){
+                                                    startOffset=charCount+range.startOffset;
+                                                    found=true;
+                                                }else{
+                                                    charCount+=node.textContent.length;
+                                                }
+                                            }
+                                        }
+                                        if(all[i].contains(endNode)){
+                                            endParaIdx=i;
+                                            var walker=document.createTreeWalker(all[i],NodeFilter.SHOW_TEXT);
+                                            var charCount=0;
+                                            var found=false;
+                                            while(walker.nextNode()&&!found){
+                                                var node=walker.currentNode;
+                                                if(node===endNode){
+                                                    endOffset=charCount+range.endOffset;
+                                                    found=true;
+                                                }else{
+                                                    charCount+=node.textContent.length;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    return JSON.stringify({text:text,paraIdx:startParaIdx,startOffset:startOffset,endParaIdx:endParaIdx,endOffset:endOffset});
+                                };
                                 
                                 // Paragraph click detection for "read from here"
                                 document.querySelectorAll('p,h1,h2,h3,h4,h5,h6').forEach(function(el, idx){
                                     el.addEventListener('click', function(e){
-                                        // Only trigger if not selecting text
                                         var s=window.getSelection();
                                         if(s&&s.isCollapsed){
                                             MoreaderBridge.onParagraphClicked(idx);
                                         }
                                     });
                                 });
+                                
+                                // Highlight rendering
+                                window.applyHighlight=function(paraIdx,startOffset,endOffset,color){
+                                    try{
+                                    var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
+                                    if(paraIdx<0||paraIdx>=all.length){console.log('HL bad para');return;}
+                                    var el=all[paraIdx];
+                                    var text=el.textContent;
+                                    if(startOffset<0||endOffset>text.length||startOffset>=endOffset){console.log('HL bad offset');return;}
+                                    var textNodes=[];
+                                    var walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
+                                    var charCount=0;
+                                    while(walker.nextNode()){
+                                        textNodes.push({node:walker.currentNode,start:charCount,end:charCount+walker.currentNode.textContent.length});
+                                        charCount+=walker.currentNode.textContent.length;
+                                    }
+                                    var startTN=null,startOff=0,endTN=null,endOff=0;
+                                    for(var i=0;i<textNodes.length;i++){
+                                        var tn=textNodes[i];
+                                        if(!startTN&&tn.start<=startOffset&&tn.end>startOffset){startTN=tn.node;startOff=startOffset-tn.start;}
+                                        if(tn.start<endOffset&&tn.end>=endOffset){endTN=tn.node;endOff=endOffset-tn.start;}
+                                    }
+                                    if(!startTN||!endTN){console.log('HL no nodes');return;}
+                                    var range=document.createRange();
+                                    range.setStart(startTN,startOff);
+                                    range.setEnd(endTN,endOff);
+                                    var frag=range.extractContents();
+                                    var span=document.createElement('span');
+                                    span.className='user-highlight';
+                                    span.style.setProperty('background-color',color,'important');
+                                    span.setAttribute('data-hl-start',String(startOffset));
+                                    span.setAttribute('data-hl-end',String(endOffset));
+                                    span.appendChild(frag);
+                                    range.insertNode(span);
+                                    console.log('HL OK');
+                                    }catch(e){console.log('HL err: '+e.message);}
+                                };
+                                
+                                window.removeHighlight=function(startOffset,endOffset){
+                                    var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
+                                    for(var p=0;p<all.length;p++){
+                                        var el=all[p];
+                                        var spans=el.querySelectorAll('span.user-highlight');
+                                        for(var i=0;i<spans.length;i++){
+                                            var sp=spans[i];
+                                            if(parseInt(sp.dataset.hlStart)===startOffset&&parseInt(sp.dataset.hlEnd)===endOffset){
+                                                var parent=sp.parentNode;
+                                                while(sp.firstChild)parent.insertBefore(sp.firstChild,sp);
+                                                parent.removeChild(sp);
+                                                parent.normalize();
+                                                return;
+                                            }
+                                        }
+                                    }
+                                };
                                 
                                 // Intercept link clicks to handle internal navigation
                                 document.addEventListener('click',function(e){
@@ -200,7 +359,9 @@ fun EpubWebView(
                     }
                     addJavascriptInterface(object {
                         @JavascriptInterface
-                        fun onTextSelected(text: String) { callbackRef.value(text) }
+                        fun onTextSelected(infoJson: String) { 
+                            callbackRef.value(infoJson) 
+                        }
                         @JavascriptInterface
                         fun onLinkClicked(url: String) { linkCallbackRef.value(url) }
                         @JavascriptInterface
