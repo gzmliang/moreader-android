@@ -202,6 +202,11 @@ class VocabularyViewModel(
         return text.any { it in '\u4e00'..'\u9fff' }
     }
 
+    /** Detect if word is a single Chinese character */
+    private fun isSingleChar(text: String): Boolean {
+        return text.length == 1 && text[0] in '\u4e00'..'\u9fff'
+    }
+
     /** Parse AI response JSON for English word */
     private data class DefinitionResult(
         val pronunciation: String?,
@@ -313,6 +318,7 @@ class VocabularyViewModel(
                     }
 
                     val chinese = isChinese(word)
+                    val singleChar = isSingleChar(word)
                     
                     val systemPrompt = if (chinese) {
                         "你是专业的汉语词典助手，擅长《现代汉语词典》风格的释义。"
@@ -320,7 +326,36 @@ class VocabularyViewModel(
                         "You are a professional bilingual dictionary assistant, skilled in Oxford-style English definitions."
                     }
 
-                    val prompt = if (chinese) {
+                    val prompt = if (singleChar) {
+                        """你是专业双语词典助手。请为以下**单个汉字**提供简明双语释义。
+
+原字：【$word】
+
+⚠️ 重要规则：
+1. 必须同时提供中文释义 AND 英文释义
+2. 拼音必须准确（带声调）
+3. 组词给2个最常见的搭配
+
+请严格按以下 JSON 格式返回（不要输出 JSON 以外的任何文字）：
+{
+  "pronunciation": "拼音（如 xué）",
+  "partOfSpeech": "词性（如 名词 / 动词 / 形容词）",
+  "chineseDef": "1. 中文释义1\n2. 中文释义2",
+  "englishDef": "1. English definition 1\n2. English definition 2",
+  "wordForms": ["组词1（如 学习）", "组词2（如 学校）"],
+  "example": {"text": "中文例句", "translation": "English translation"}
+}
+
+示例（字"学"）：
+{
+  "pronunciation": "xué",
+  "partOfSpeech": "动词",
+  "chineseDef": "1. 效法、模仿他人而获得知识或技能\n2. 研究、钻研",
+  "englishDef": "1. To study; to learn\n2. To imitate; to follow as a model",
+  "wordForms": ["学习（study; learn）", "学校（school）"],
+  "example": {"text": "他正在学习汉语。", "translation": "He is learning Chinese."}
+}"""
+                    } else if (chinese) {
                         """你是专业双语词典助手。请为以下**中文词语**提供《现代汉语词典》风格的双语释义。
 
 原词：【$word】

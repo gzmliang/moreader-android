@@ -240,6 +240,20 @@ class ReaderViewModel(
     fun translate(mode: String = "translate") { val t = _uiState.value.selectedText ?: return; val c = _uiState.value.llmConfig; if (c.apiKey.isEmpty()) { _uiState.update { it.copy(translationResult = getApplication<android.app.Application>().getString(com.moyue.app.R.string.configure_api_key_first), showTranslationPanel = true) }; return }; _uiState.update { it.copy(isTranslating = true, translationMode = mode, showTranslationPanel = true, translationResult = null) }; viewModelScope.launch { val r = translationService.translate(c, t, mode) { ch -> _uiState.update { it.copy(translationResult = (it.translationResult ?: "") + ch) } }; r.onFailure { e -> _uiState.update { it.copy(isTranslating = false, translationResult = getApplication<android.app.Application>().getString(com.moyue.app.R.string.translation_failed, e.message ?: "")) } }.onSuccess { _uiState.update { it.copy(isTranslating = false) } } } }
     fun dismissTranslationPanel() { _uiState.update { it.copy(showTranslationPanel = false, translationResult = null) } }
 
+    /** Speak arbitrary text (used by translation panel speaker button) */
+    fun speakTranslationText(text: String) {
+        val p = recreateProvider() ?: return
+        viewModelScope.launch {
+            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                p.speak(text, _uiState.value.ttsSpeed, object : TTSListener {
+                    override fun onStart() {}
+                    override fun onDone() {}
+                    override fun onError(msg: String) {}
+                })
+            }
+        }
+    }
+
     // ===== TTS =====
 
     /** Get or create provider — only re-create when provider TYPE changes */

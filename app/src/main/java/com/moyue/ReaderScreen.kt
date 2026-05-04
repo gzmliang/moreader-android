@@ -81,7 +81,18 @@ fun ReaderScreen(
     if (state.showTranslationPanel) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissTranslationPanel() },
-            title = { Text(when (state.translationMode) { "translate" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title); "explain" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.explain_title); "analyze" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_title); else -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title) }) },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(when (state.translationMode) { "translate" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title); "explain" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.explain_title); "analyze" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_title); else -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title) },
+                        modifier = Modifier.weight(1f))
+                    // Speaker button to read the selected text aloud
+                    if (state.selectedText != null) {
+                        IconButton(onClick = { viewModel.speakTranslationText(state.selectedText!!) }) {
+                            Icon(Icons.Default.VolumeUp, contentDescription = "朗读", tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+            },
             text = {
                 Column {
                     if (state.isTranslating) {
