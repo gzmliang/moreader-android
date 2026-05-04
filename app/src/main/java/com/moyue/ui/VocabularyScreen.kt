@@ -14,8 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.moyue.app.R
@@ -132,6 +134,10 @@ private fun VocabularyItem(
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     var showDefinition by remember { mutableStateOf(false) }
     
+    // Check if this vocab has new structured data
+    val hasStructuredData = vocab.chineseDef != null || vocab.englishDef != null
+    val hasLegacyData = vocab.definition != null
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -142,12 +148,14 @@ private fun VocabularyItem(
                 .fillMaxWidth()
                 .padding(12.dp)
         ) {
+            // Header row: word + speaker + delete
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = vocab.word,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
                 
@@ -172,68 +180,62 @@ private fun VocabularyItem(
                 }
             }
             
+            // Definition section
             if (showDefinition) {
-                if (vocab.pronunciation != null) {
-                    Text(
-                        text = vocab.pronunciation,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+                if (hasStructuredData) {
+                    StructuredDefinition(vocab)
+                } else if (hasLegacyData) {
+                    LegacyDefinition(vocab)
                 }
                 
-                if (vocab.partOfSpeech != null && vocab.definition != null) {
-                    Text(
-                        text = "${vocab.partOfSpeech} ${vocab.definition}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                } else if (vocab.definition != null) {
-                    Text(
-                        text = vocab.definition,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+                // Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (!hasStructuredData) {
+                        TextButton(
+                            onClick = { onFetchDefinition() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("🔄 重新拉取释义")
+                        }
+                    }
+                    TextButton(
+                        onClick = { showDefinition = false },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.vocabulary_hide_definition))
+                    }
                 }
-                
-                if (vocab.example != null) {
+            } else {
+                // Collapsed state: show preview or fetch button
+                if (hasStructuredData) {
                     Text(
-                        text = vocab.example,
-                        style = MaterialTheme.typography.bodySmall,
+                        text = vocab.chineseDef?.split("\n")?.firstOrNull()?.replace(Regex("^\\d+\\.\\s*"), "")
+                            ?: vocab.englishDef?.split("\n")?.firstOrNull()?.replace(Regex("^\\d+\\.\\s*"), "")
+                            ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 4.dp)
                     )
-                }
-                
-                TextButton(
-                    onClick = { showDefinition = false },
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    Text(stringResource(R.string.vocabulary_hide_definition))
-                }
-            } else {
-                if (vocab.definition == null) {
-                    TextButton(
-                        onClick = {
-                            onFetchDefinition()
-                            showDefinition = true
-                        }
-                    ) {
+                    TextButton(onClick = { showDefinition = true }) {
+                        Text(stringResource(R.string.vocabulary_show_definition))
+                    }
+                } else if (hasLegacyData) {
+                    TextButton(onClick = { showDefinition = true }) {
                         Text(stringResource(R.string.vocabulary_show_definition))
                     }
                 } else {
-                    TextButton(
-                        onClick = { showDefinition = true }
-                    ) {
+                    TextButton(onClick = { onFetchDefinition(); showDefinition = true }) {
                         Text(stringResource(R.string.vocabulary_show_definition))
                     }
                 }
             }
             
+            // Date
             Text(
                 text = stringResource(R.string.bookmark_added_at, dateFormat.format(Date(vocab.createdAt))),
                 style = MaterialTheme.typography.labelSmall,
@@ -241,5 +243,143 @@ private fun VocabularyItem(
                 modifier = Modifier.padding(top = 8.dp)
             )
         }
+    }
+}
+
+@Composable
+private fun StructuredDefinition(vocab: Vocabulary) {
+    // Pronunciation + part of speech line
+    val posLine = listOfNotNull(
+        vocab.pronunciation,
+        vocab.partOfSpeech?.let { "[${it}]" }
+    ).joinToString("  ")
+    
+    if (posLine.isNotEmpty()) {
+        Text(
+            text = posLine,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+    }
+    
+    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), thickness = 0.5.dp)
+    
+    // Chinese definition
+    if (vocab.chineseDef != null) {
+        SectionLabel("【中文释义】")
+        Text(
+            text = vocab.chineseDef,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+        )
+    }
+    
+    // English definition
+    if (vocab.englishDef != null) {
+        SectionLabel("【English Definition】")
+        Text(
+            text = vocab.englishDef,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+        )
+    }
+    
+    // Word forms / 组词
+    val wordForms = try {
+        if (vocab.wordForms != null) {
+            org.json.JSONArray(vocab.wordForms).let { arr ->
+                (0 until arr.length()).map { arr.optString(it, "") }.filter { it.isNotEmpty() }
+            }
+        } else emptyList()
+    } catch (e: Exception) { emptyList() }
+    
+    if (wordForms.isNotEmpty()) {
+        SectionLabel("【组词】Word Formation")
+        wordForms.forEach { form ->
+            BulletText(form)
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+    
+    // Example sentence
+    val example = try {
+        if (vocab.exampleJson != null) {
+            org.json.JSONObject(vocab.exampleJson)
+        } else null
+    } catch (e: Exception) { null }
+    
+    if (example != null) {
+        SectionLabel("【例句】Example")
+        Text(
+            text = example.optString("text", ""),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        Text(
+            text = example.optString("translation", ""),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun LegacyDefinition(vocab: Vocabulary) {
+    if (vocab.pronunciation != null) {
+        Text(
+            text = vocab.pronunciation,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+    if (vocab.partOfSpeech != null && vocab.definition != null) {
+        Text(
+            text = "${vocab.partOfSpeech} ${vocab.definition}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    } else if (vocab.definition != null) {
+        Text(
+            text = vocab.definition,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+    if (vocab.example != null) {
+        Text(
+            text = vocab.example,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun SectionLabel(label: String) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 4.dp)
+    )
+}
+
+@Composable
+private fun BulletText(text: String) {
+    Row(modifier = Modifier.padding(start = 8.dp, top = 2.dp)) {
+        Text("• ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }

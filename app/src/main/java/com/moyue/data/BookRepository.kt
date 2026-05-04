@@ -578,6 +578,9 @@ class BookRepository(private val context: Context) {
     suspend fun updateVocabularyDefinition(id: Long, pronunciation: String?, partOfSpeech: String?, definition: String?, example: String?) = 
         db.vocabularyDao().updateDefinition(id, pronunciation, partOfSpeech, definition, example)
     
+    suspend fun updateVocabularyStructured(id: Long, pronunciation: String?, partOfSpeech: String?, chineseDef: String?, englishDef: String?, wordForms: String?, exampleJson: String?) =
+        db.vocabularyDao().updateVocabularyStructured(id, pronunciation, partOfSpeech, chineseDef, englishDef, wordForms, exampleJson)
+    
     suspend fun deleteVocabulary(id: Long) = db.vocabularyDao().deleteVocabulary(id)
     
     suspend fun isWordExists(word: String): Boolean = db.vocabularyDao().isWordExists(word)

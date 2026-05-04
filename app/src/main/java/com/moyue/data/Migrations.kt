@@ -60,3 +60,13 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         database.execSQL("ALTER TABLE bookmarks DROP COLUMN cfi")
     }
 }
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        // Add structured vocabulary fields
+        database.execSQL("ALTER TABLE vocabulary ADD COLUMN chineseDef TEXT")
+        database.execSQL("ALTER TABLE vocabulary ADD COLUMN englishDef TEXT")
+        database.execSQL("ALTER TABLE vocabulary ADD COLUMN wordForms TEXT")
+        database.execSQL("ALTER TABLE vocabulary ADD COLUMN exampleJson TEXT")
+    }
+}

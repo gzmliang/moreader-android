@@ -197,6 +197,103 @@ class VocabularyViewModel(
         audioPlayer = null
     }
 
+    /** Detect if word is primarily Chinese */
+    private fun isChinese(text: String): Boolean {
+        return text.any { it in '\u4e00'..'\u9fff' }
+    }
+
+    /** Parse AI response JSON for English word */
+    private data class DefinitionResult(
+        val pronunciation: String?,
+        val partOfSpeech: String?,
+        val chineseDef: String?,
+        val englishDef: String?,
+        val wordForms: String?,
+        val exampleJson: String?
+    )
+
+    private fun parseEnglishResponse(content: String): DefinitionResult {
+        // Expected JSON:
+        // {
+        //   "pronunciation": "/rɪˈzɪliəns/",
+        //   "partOfSpeech": "n.",
+        //   "chineseDef": "1. 恢复力；弹力\n2. 适应力",
+        //   "englishDef": "1. The capacity to recover quickly from difficulties",
+        //   "wordForms": ["resilient (adj.) 有弹性的", "resiliently (adv.) 有适应力地"],
+        //   "example": {"text": "She showed great resilience after the setback.", "translation": "她在挫折后表现出了强大的适应力。"}
+        // }
+        return try {
+            val cleaned = content.replace("```json", "").replace("```", "").trim()
+            val json = JSONObject(cleaned)
+            val pronunciation = json.optString("pronunciation", "").takeIf { it.isNotEmpty() }
+            val partOfSpeech = json.optString("partOfSpeech", "").takeIf { it.isNotEmpty() }
+            val chineseDef = json.optString("chineseDef", "").takeIf { it.isNotEmpty() }
+            val englishDef = json.optString("englishDef", "").takeIf { it.isNotEmpty() }
+            
+            val wordForms = try {
+                val arr = json.optJSONArray("wordForms")
+                if (arr != null) {
+                    val list = (0 until arr.length()).map { arr.optString(it, "") }.filter { it.isNotEmpty() }
+                    if (list.isNotEmpty()) org.json.JSONArray(list).toString() else null
+                } else null
+            } catch (e: Exception) { null }
+            
+            val exampleJson = try {
+                val ex = json.optJSONObject("example")
+                if (ex != null && ex.has("text")) ex.toString() else null
+            } catch (e: Exception) { null }
+            
+            DefinitionResult(pronunciation, partOfSpeech, chineseDef, englishDef, wordForms, exampleJson)
+        } catch (e: Exception) {
+            // Fallback: try old regex format
+            DefinitionResult(
+                extractField(content, "音标"),
+                extractField(content, "词性"),
+                extractField(content, "释义"),
+                null,
+                null,
+                null
+            )
+        }
+    }
+
+    private fun parseChineseResponse(content: String): DefinitionResult {
+        // Expected JSON:
+        // {
+        //   "pronunciation": "jiān rèn",
+        //   "partOfSpeech": "adj.",
+        //   "chineseDef": "1. 坚固而有韧性，不易折断\n2. 比喻意志坚强",
+        //   "englishDef": "tough and tenacious; resilient",
+        //   "wordForms": ["坚韧不拔", "坚韧性"],
+        //   "example": {"text": "他的意志十分坚韧。", "translation": "He has a resilient will."}
+        // }
+        return try {
+            val cleaned = content.replace("```json", "").replace("```", "").trim()
+            val json = JSONObject(cleaned)
+            val pronunciation = json.optString("pronunciation", "").takeIf { it.isNotEmpty() }
+            val partOfSpeech = json.optString("partOfSpeech", "").takeIf { it.isNotEmpty() }
+            val chineseDef = json.optString("chineseDef", "").takeIf { it.isNotEmpty() }
+            val englishDef = json.optString("englishDef", "").takeIf { it.isNotEmpty() }
+            
+            val wordForms = try {
+                val arr = json.optJSONArray("wordForms")
+                if (arr != null) {
+                    val list = (0 until arr.length()).map { arr.optString(it, "") }.filter { it.isNotEmpty() }
+                    if (list.isNotEmpty()) org.json.JSONArray(list).toString() else null
+                } else null
+            } catch (e: Exception) { null }
+            
+            val exampleJson = try {
+                val ex = json.optJSONObject("example")
+                if (ex != null && ex.has("text")) ex.toString() else null
+            } catch (e: Exception) { null }
+            
+            DefinitionResult(pronunciation, partOfSpeech, chineseDef, englishDef, wordForms, exampleJson)
+        } catch (e: Exception) {
+            DefinitionResult(null, null, null, null, null, null)
+        }
+    }
+
     fun fetchDefinition(vocabId: Long, word: String, context: Context, onComplete: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             try {
@@ -215,20 +312,58 @@ class VocabularyViewModel(
                         return@withContext
                     }
 
-                    val prompt = """你是词典助手。请为以下单词提供详细信息：
+                    val chinese = isChinese(word)
+                    
+                    val systemPrompt = if (chinese) {
+                        "你是专业的汉语词典助手，擅长《现代汉语词典》风格的释义。"
+                    } else {
+                        "You are a professional bilingual dictionary assistant, skilled in Oxford-style English definitions."
+                    }
 
-单词：$word
+                    val prompt = if (chinese) {
+                        """你是词典助手。请为以下中文词语提供详细信息：
 
-请按以下格式输出：
-**音标**：[IPA音标]
-**词性**：名词/动词/形容词等
-**释义**：简明的中文释义
-**例句**：一个简单例句及其中文翻译
+词语：$word
 
-直接输出内容，不要解释。"""
+请严格按以下 JSON 格式返回（不要输出其他内容）：
+{
+  "pronunciation": "拼音（如 jiān rèn）",
+  "partOfSpeech": "词性缩写（如 adj. / v. / n. / adv.）",
+  "chineseDef": "1. 中文释义1\n2. 中文释义2",
+  "englishDef": "English definition in English",
+  "wordForms": ["组词1", "组词2"],
+  "example": {"text": "中文例句", "translation": "English translation"}
+}
+
+要求：
+- 中文释义用现代汉语词典风格，1-2条
+- 英文释义用简明英文
+- 组词给2个常见搭配
+- 例句1条，中英双语"""
+                    } else {
+                        """You are a dictionary assistant. Please provide detailed information for this English word:
+
+Word: $word
+
+Please respond strictly in the following JSON format (no other text):
+{
+  "pronunciation": "IPA phonetic (e.g., /rɪˈzɪliəns/)",
+  "partOfSpeech": "part of speech abbreviation (e.g., n. / v. / adj. / adv.)",
+  "chineseDef": "1. 中文释义1\n2. 中文释义2",
+  "englishDef": "1. English definition 1\n2. English definition 2",
+  "wordForms": ["derivative1 (part) 中文", "derivative2 (part) 中文"],
+  "example": {"text": "English example sentence", "translation": "中文翻译"}
+}
+
+Requirements:
+- Chinese definitions: 1-2 clear entries
+- English definitions: Oxford-style, 1-2 entries
+- Word forms: exactly 2 common derivatives with Chinese meaning
+- 1 example sentence with bilingual translation"""
+                    }
 
                     val messages = JSONArray().apply {
-                        put(JSONObject().apply { put("role", "system"); put("content", "你是专业的英语词典助手") })
+                        put(JSONObject().apply { put("role", "system"); put("content", systemPrompt) })
                         put(JSONObject().apply { put("role", "user"); put("content", prompt) })
                     }
 
@@ -236,7 +371,7 @@ class VocabularyViewModel(
                         put("model", config.model.ifEmpty { "gpt-3.5-turbo" })
                         put("messages", messages)
                         put("temperature", 0.3)
-                        put("max_tokens", 500)
+                        put("max_tokens", 800)
                         put("stream", false)
                     }
 
@@ -277,16 +412,22 @@ class VocabularyViewModel(
                     if (choices != null && choices.length() > 0) {
                         val content = choices.optJSONObject(0)?.optJSONObject("message")?.optString("content", "")
                         if (!content.isNullOrEmpty()) {
-                            val pronunciation = extractField(content, "音标")
-                            val partOfSpeech = extractField(content, "词性")
-                            val definition = extractField(content, "释义")
-                            val example = extractField(content, "例句")
-
-                            repository.updateVocabularyDefinition(vocabId, pronunciation, partOfSpeech, definition, example)
-                            withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                onComplete(true, "获取释义成功")
+                            val result = if (chinese) parseChineseResponse(content) else parseEnglishResponse(content)
+                            if (result != null && (result.chineseDef != null || result.englishDef != null)) {
+                                repository.updateVocabularyStructured(
+                                    vocabId,
+                                    result.pronunciation,
+                                    result.partOfSpeech,
+                                    result.chineseDef,
+                                    result.englishDef,
+                                    result.wordForms,
+                                    result.exampleJson
+                                )
+                                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                    onComplete(true, "获取释义成功")
+                                }
+                                return@withContext
                             }
-                            return@withContext
                         }
                     }
 

@@ -26,6 +26,9 @@ interface VocabularyDao {
     @Query("UPDATE vocabulary SET pronunciation = :pronunciation, partOfSpeech = :partOfSpeech, definition = :definition, example = :example WHERE id = :id")
     suspend fun updateDefinition(id: Long, pronunciation: String?, partOfSpeech: String?, definition: String?, example: String?)
 
+    @Query("UPDATE vocabulary SET pronunciation = :pronunciation, partOfSpeech = :partOfSpeech, chineseDef = :chineseDef, englishDef = :englishDef, wordForms = :wordForms, exampleJson = :exampleJson WHERE id = :id")
+    suspend fun updateVocabularyStructured(id: Long, pronunciation: String?, partOfSpeech: String?, chineseDef: String?, englishDef: String?, wordForms: String?, exampleJson: String?)
+
     @Query("DELETE FROM vocabulary WHERE id = :id")
     suspend fun deleteVocabulary(id: Long)
 
