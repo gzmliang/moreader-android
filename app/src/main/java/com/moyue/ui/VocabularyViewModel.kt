@@ -321,45 +321,65 @@ class VocabularyViewModel(
                     }
 
                     val prompt = if (chinese) {
-                        """你是词典助手。请为以下中文词语提供详细信息：
+                        """你是专业双语词典助手。请为以下**中文词语**提供《现代汉语词典》风格的双语释义。
 
-词语：$word
+原词：【$word】
 
-请严格按以下 JSON 格式返回（不要输出其他内容）：
+⚠️ 重要规则：
+1. 必须在 JSON 中**同时提供中文释义 AND 英文释义**，缺一不可
+2. 中文释义参照《现代汉语词典》风格，简洁准确
+3. 英文释义用简明英语解释该词含义
+4. 所有字段必须填写，不能为空
+
+请严格按以下 JSON 格式返回（不要输出 JSON 以外的任何文字）：
 {
   "pronunciation": "拼音（如 jiān rèn）",
-  "partOfSpeech": "词性缩写（如 adj. / v. / n. / adv.）",
-  "chineseDef": "1. 中文释义1\n2. 中文释义2",
-  "englishDef": "English definition in English",
-  "wordForms": ["组词1", "组词2"],
-  "example": {"text": "中文例句", "translation": "English translation"}
-}
-
-要求：
-- 中文释义用现代汉语词典风格，1-2条
-- 英文释义用简明英文
-- 组词给2个常见搭配
-- 例句1条，中英双语"""
-                    } else {
-                        """You are a dictionary assistant. Please provide detailed information for this English word:
-
-Word: $word
-
-Please respond strictly in the following JSON format (no other text):
-{
-  "pronunciation": "IPA phonetic (e.g., /rɪˈzɪliəns/)",
-  "partOfSpeech": "part of speech abbreviation (e.g., n. / v. / adj. / adv.)",
+  "partOfSpeech": "词性（如 形容词 / 动词 / 名词 / 副词）",
   "chineseDef": "1. 中文释义1\n2. 中文释义2",
   "englishDef": "1. English definition 1\n2. English definition 2",
-  "wordForms": ["derivative1 (part) 中文", "derivative2 (part) 中文"],
+  "wordForms": ["组词1（如 坚韧不拔）", "组词2（如 坚韧性）"],
+  "example": {"text": "中文例句", "translation": "English translation of the example"}
+}
+
+示例（词语"坚韧"）：
+{
+  "pronunciation": "jiān rèn",
+  "partOfSpeech": "形容词",
+  "chineseDef": "1. 坚固而有韧性，不易折断\n2. 比喻意志坚强，不屈不挠",
+  "englishDef": "1. Firm and tough; not easily broken\n2. Strong-willed and unyielding",
+  "wordForms": ["坚韧不拔（firm and indomitable）", "坚韧性（toughness; resilience）"],
+  "example": {"text": "他的意志十分坚韧。", "translation": "He has a very resilient will."}
+}"""
+                    } else {
+                        """You are a professional bilingual dictionary assistant. Please provide an Oxford-style bilingual definition for this **English word**.
+
+Original word: 【$word】
+
+⚠️ IMPORTANT RULES:
+1. You MUST provide BOTH Chinese definition AND English definition — neither can be empty
+2. Chinese definition: clear, accurate Chinese translation of the word's meaning
+3. English definition: Oxford-style definition in English
+4. All fields must be filled, none can be empty
+
+Please respond strictly in the following JSON format (no text outside JSON):
+{
+  "pronunciation": "IPA phonetic (e.g., /rɪˈzɪliəns/)",
+  "partOfSpeech": "part of speech (e.g., noun / verb / adjective / adverb)",
+  "chineseDef": "1. 中文释义1\n2. 中文释义2",
+  "englishDef": "1. English definition 1\n2. English definition 2",
+  "wordForms": ["derivative1 (词性) 中文意思", "derivative2 (词性) 中文意思"],
   "example": {"text": "English example sentence", "translation": "中文翻译"}
 }
 
-Requirements:
-- Chinese definitions: 1-2 clear entries
-- English definitions: Oxford-style, 1-2 entries
-- Word forms: exactly 2 common derivatives with Chinese meaning
-- 1 example sentence with bilingual translation"""
+Example (word "resilience"):
+{
+  "pronunciation": "/rɪˈzɪliəns/",
+  "partOfSpeech": "noun",
+  "chineseDef": "1. 恢复力；弹力\n2. 适应力；复原力",
+  "englishDef": "1. The capacity to recover quickly from difficulties; toughness\n2. The ability of a substance or object to spring back into shape; elasticity",
+  "wordForms": ["resilient (adj.) 有弹性的；适应力强的", "resiliently (adv.) 有适应力地"],
+  "example": {"text": "She showed great resilience after the setback.", "translation": "她在挫折后展现出了强大的适应力。"}
+}"""
                     }
 
                     val messages = JSONArray().apply {
