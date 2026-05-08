@@ -168,6 +168,7 @@ class ReaderViewModel(
         
         val prev = s.navHistory.last()
         val newHistory = s.navHistory.dropLast(1)
+        val targetPara = prev.paragraphIndex
         
         killPlayChain()
         _uiState.update { 
@@ -179,13 +180,14 @@ class ReaderViewModel(
                 ttsParagraphs = emptyList(),
                 ttsCurrentIdx = -1,
                 isTtsPaused = false,
+                scrollToParagraph = -1,
             )
         }
         viewModelScope.launch {
             loadChapterContent()
-            // Scroll to the paragraph we were at
-            if (prev.paragraphIndex > 0) {
-                _uiState.update { it.copy(scrollToParagraph = prev.paragraphIndex) }
+            // Scroll to the paragraph we were at — must be AFTER loadChapterContent
+            if (targetPara > 0) {
+                _uiState.update { it.copy(scrollToParagraph = targetPara) }
             }
             saveProgress()
         }

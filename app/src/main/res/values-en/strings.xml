@@ -199,4 +199,10 @@
     <string name="tts_api_key_only_hint">API Key (only this field needed)</string>
     <string name="tts_custom_tts_hint">For MOSS-TTS-Nano, CosyVoice, etc.</string>
     <string name="tts_custom_tts_title">OpenAI Compatible TTS</string>
+
+    <!-- Navigation History -->
+    <string name="nav_back">Back to previous reading position</string>
+    <string name="nav_back_label">Back</string>
+    <string name="nav_back_format">Back to %1$s</string>
+    <string name="nav_back_default">previous position</string>
 </resources>

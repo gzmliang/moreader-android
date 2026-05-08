@@ -203,4 +203,6 @@
     <!-- Navigation History -->
     <string name="nav_back">返回上次阅读位置</string>
     <string name="nav_back_label">返回</string>
+    <string name="nav_back_format">返回 %1$s</string>
+    <string name="nav_back_default">上次阅读位置</string>
 </resources>

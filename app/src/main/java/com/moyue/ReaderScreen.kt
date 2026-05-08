@@ -117,16 +117,23 @@ fun ReaderScreen(
         }
     }
     
-    // Show navigation hint after jumping
-    var showNavHint by remember { mutableStateOf(false) }
-    val prevNavEntry = state.navHistory.lastOrNull()
-    LaunchedEffect(state.currentChapterIndex) {
-        if (state.navHistory.isNotEmpty() && !state.isLoading) {
+    // Show navigation hint after jumping — persistent, no auto-dismiss
+    var showNavHint by rememberSaveable { mutableStateOf(true) }
+    var prevNavEntry by remember { mutableStateOf<NavHistoryEntry?>(null) }
+    var prevNavHistorySize by remember { mutableStateOf(0) }
+    
+    LaunchedEffect(state.navHistory) {
+        if (state.navHistory.size > prevNavHistorySize && state.navHistory.isNotEmpty()) {
+            // New entry pushed → show back button
+            prevNavEntry = state.navHistory.last()
             showNavHint = true
-            // Auto-dismiss after 5 seconds
-            kotlinx.coroutines.delay(5000)
-            showNavHint = false
+            prevNavHistorySize = state.navHistory.size
+        } else if (state.navHistory.size < prevNavHistorySize) {
+            // Entry popped (went back)
+            prevNavHistorySize = state.navHistory.size
+            prevNavEntry = state.navHistory.lastOrNull()
         }
+        // No auto-dismiss — stays until user taps back or closes
     }
     
     Scaffold(
@@ -295,7 +302,7 @@ fun ReaderScreen(
                     modifier = Modifier.fillMaxSize().background(Color(android.graphics.Color.parseColor(state.theme.bgColor))),
                 )
                 
-                // Floating navigation back button — appears after jumps
+                // Floating navigation back button — persistent, stays until user taps back or dismisses
                 AnimatedVisibility(
                     visible = showNavHint && state.canGoBack && !state.isFullscreen,
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -303,25 +310,38 @@ fun ReaderScreen(
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp),
                 ) {
                     Surface(
-                        modifier = Modifier
-                            .clickable { viewModel.goBack(); showNavHint = false }
-                            .padding(horizontal = 16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                         shape = RoundedCornerShape(20.dp),
-                        color = Color(0xFF3B82F6).copy(alpha = 0.9f),
-                        shadowElevation = 4.dp,
+                        color = Color(0xFF3B82F6).copy(alpha = 0.92f),
+                        shadowElevation = 6.dp,
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            IconButton(
+                                onClick = { viewModel.goBack(); showNavHint = false },
+                                modifier = Modifier.size(28.dp),
+                            ) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
                             Text(
-                                text = "返回 ${prevNavEntry?.chapterLabel?.substringAfterLast('/')?.substringBeforeLast('.') ?: "上次阅读位置"}",
+                                text = androidx.compose.ui.res.stringResource(
+                                    com.moyue.app.R.string.nav_back_format,
+                                    prevNavEntry?.chapterLabel?.substringAfterLast('/')?.substringBeforeLast('.')
+                                        ?: androidx.compose.ui.res.stringResource(com.moyue.app.R.string.nav_back_default)
+                                ),
                                 fontSize = 13.sp,
                                 color = Color.White,
                                 fontWeight = FontWeight.Medium,
                             )
+                            IconButton(
+                                onClick = { showNavHint = false },
+                                modifier = Modifier.size(28.dp),
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "关闭", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
+                            }
                         }
                     }
                 }
