@@ -110,9 +110,22 @@ fun ReaderScreen(
 
     // Main layout
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(state.showBookmarkToast) {
         if (state.showBookmarkToast) {
             snackbarHostState.showSnackbar(state.bookmarkToastMsg)
+        }
+    }
+    
+    // Show navigation hint after jumping
+    var showNavHint by remember { mutableStateOf(false) }
+    val prevNavEntry = state.navHistory.lastOrNull()
+    LaunchedEffect(state.currentChapterIndex) {
+        if (state.navHistory.isNotEmpty() && !state.isLoading) {
+            showNavHint = true
+            // Auto-dismiss after 5 seconds
+            kotlinx.coroutines.delay(5000)
+            showNavHint = false
         }
     }
     
@@ -219,11 +232,13 @@ fun ReaderScreen(
                         currentIndex = state.currentChapterIndex, totalChapters = state.chapters.size,
                         fontSize = state.fontSize,
                         isTtsPlaying = state.isTtsPlaying, isTtsPaused = state.isTtsPaused,
+                        canGoBack = state.canGoBack,
                         onPrev = { viewModel.prevChapter() }, onNext = { viewModel.nextChapter() },
                         onFontSizeChange = { viewModel.setFontSize(it) },
                         onPlayPause = { viewModel.togglePlayPause() },
                         onStop = { viewModel.ttsStop() },
                         onToggleDebug = { viewModel.toggleTtsDebugLog() },
+                        onGoBack = { viewModel.goBack() },
                         onNavigateToChapter = { idx ->
                             val ch = state.chapters.getOrNull(idx)
                             if (ch != null) viewModel.navigateToChapter(ch.href)
@@ -279,6 +294,37 @@ fun ReaderScreen(
                     highlightToRemove = state.highlightToRemove?.let { Pair(it.startOffset, it.endOffset) },
                     modifier = Modifier.fillMaxSize().background(Color(android.graphics.Color.parseColor(state.theme.bgColor))),
                 )
+                
+                // Floating navigation back button — appears after jumps
+                AnimatedVisibility(
+                    visible = showNavHint && state.canGoBack && !state.isFullscreen,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp),
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .clickable { viewModel.goBack(); showNavHint = false }
+                            .padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0xFF3B82F6).copy(alpha = 0.9f),
+                        shadowElevation = 4.dp,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = "返回 ${prevNavEntry?.chapterLabel?.substringAfterLast('/')?.substringBeforeLast('.') ?: "上次阅读位置"}",
+                                fontSize = 13.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                    }
+                }
                 
                 // Paragraph click menu
                 if (showParagraphMenu) {
@@ -395,7 +441,9 @@ fun ReaderScreen(
 private fun ReaderBottomBar(
     currentIndex: Int, totalChapters: Int, fontSize: Int,
     isTtsPlaying: Boolean, isTtsPaused: Boolean,
+    canGoBack: Boolean,
     onPrev: () -> Unit, onNext: () -> Unit,
+    onGoBack: () -> Unit,
     onFontSizeChange: (Int) -> Unit,
     onPlayPause: () -> Unit, onStop: () -> Unit,
     onToggleDebug: () -> Unit,
@@ -491,6 +539,14 @@ private fun ReaderBottomBar(
 
             // Control buttons
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Navigation back button (shown when history exists)
+                if (canGoBack) {
+                    IconButton(onClick = onGoBack) {
+                        Icon(Icons.Default.Undo, contentDescription = "返回上次阅读位置", tint = barTextColor)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
+
                 IconButton(onClick = onPrev, enabled = currentIndex > 0) { Icon(Icons.Default.ChevronLeft, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.previous_chapter), tint = barTextColor) }
 
                 IconButton(onClick = { onFontSizeChange(fontSize - 2) }) { Text("A-", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = barTextColor) }

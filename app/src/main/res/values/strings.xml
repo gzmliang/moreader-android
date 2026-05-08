@@ -199,4 +199,8 @@
     <string name="tts_api_key_only_hint">API Key (仅需填写此项)</string>
     <string name="tts_custom_tts_hint">适用于 MOSS-TTS-Nano、CosyVoice 等本地部署</string>
     <string name="tts_custom_tts_title">OpenAI 兼容 TTS</string>
+
+    <!-- Navigation History -->
+    <string name="nav_back">返回上次阅读位置</string>
+    <string name="nav_back_label">返回</string>
 </resources>

@@ -23,6 +23,14 @@ data class SelectionInfo(
     val endOffset: Int,
 )
 
+/** A single entry in the navigation history stack */
+data class NavHistoryEntry(
+    val chapterIndex: Int,
+    val chapterHref: String,
+    val chapterLabel: String,
+    val paragraphIndex: Int = 0,
+)
+
 data class ReaderUiState(
     val book: Book? = null,
     val chapters: List<Chapter> = emptyList(),
@@ -75,7 +83,11 @@ data class ReaderUiState(
     val currentParagraphIndex: Int = 0,       // 当前阅读/朗读的段落
     val scrollToParagraph: Int = -1,           // 需要滚动到的段落索引（-1 表示无）
     val highlightToRemove: Highlight? = null,    // Signal to remove a highlight in WebView
-)
+    // Navigation history
+    val navHistory: List<NavHistoryEntry> = emptyList(),  // Stack of previous positions
+) {
+    val canGoBack: Boolean get() = navHistory.isNotEmpty()
+}
 
 class ReaderViewModel(
     application: Application,
@@ -133,6 +145,52 @@ class ReaderViewModel(
         return paragraphs
     }
 
+    // ===== Navigation History =====
+    
+    /** Push current reading position onto the history stack (max 20 entries) */
+    private fun pushToHistory() {
+        val s = _uiState.value
+        val chapter = s.chapters.getOrNull(s.currentChapterIndex) ?: return
+        val entry = NavHistoryEntry(
+            chapterIndex = s.currentChapterIndex,
+            chapterHref = chapter.href,
+            chapterLabel = chapter.id,
+            paragraphIndex = s.currentParagraphIndex,
+        )
+        val newHistory = (s.navHistory + entry).takeLast(20)
+        _uiState.update { it.copy(navHistory = newHistory) }
+    }
+
+    /** Navigate back to the previous reading position */
+    fun goBack() {
+        val s = _uiState.value
+        if (s.navHistory.isEmpty()) return
+        
+        val prev = s.navHistory.last()
+        val newHistory = s.navHistory.dropLast(1)
+        
+        killPlayChain()
+        _uiState.update { 
+            it.copy(
+                currentChapterIndex = prev.chapterIndex,
+                isLoading = true,
+                currentHtml = null,
+                navHistory = newHistory,
+                ttsParagraphs = emptyList(),
+                ttsCurrentIdx = -1,
+                isTtsPaused = false,
+            )
+        }
+        viewModelScope.launch {
+            loadChapterContent()
+            // Scroll to the paragraph we were at
+            if (prev.paragraphIndex > 0) {
+                _uiState.update { it.copy(scrollToParagraph = prev.paragraphIndex) }
+            }
+            saveProgress()
+        }
+    }
+
     // ===== Book =====
     fun loadBook(bookId: String) { viewModelScope.launch {
         _uiState.update { it.copy(isLoading = true, loadingMessage = getApplication<android.app.Application>().getString(com.moyue.app.R.string.load_book)) }
@@ -154,6 +212,7 @@ class ReaderViewModel(
     fun nextChapter() { val s = _uiState.value; if (s.currentChapterIndex < s.chapters.size - 1) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex + 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(); saveProgress() } } }
     fun prevChapter() { val s = _uiState.value; if (s.currentChapterIndex > 0) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex - 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(); saveProgress() } } }
     fun navigateToChapter(href: String) { 
+        pushToHistory()
         val chs = _uiState.value.chapters
         val cl = href.substringBefore('#').trim()
         
@@ -200,6 +259,7 @@ class ReaderViewModel(
     }
     fun onLinkClicked(url: String) { 
         // Handle internal EPUB link clicks
+        pushToHistory()
         val cleanUrl = url.trim()
         log("Link clicked: $cleanUrl")
         
@@ -497,6 +557,7 @@ class ReaderViewModel(
     }
 
     fun navigateToBookmark(bookmark: Bookmark) {
+        pushToHistory()
         _uiState.update { it.copy(showBookmarkPanel = false) }
         val s = _uiState.value
         val chapters = s.chapters
