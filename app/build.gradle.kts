@@ -13,8 +13,8 @@ android {
         applicationId = "com.moyue.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.1.1"
+        versionCode = 15
+        versionName = "1.4.1"
     }
 
     buildTypes {
