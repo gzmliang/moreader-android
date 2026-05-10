@@ -70,3 +70,11 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         database.execSQL("ALTER TABLE vocabulary ADD COLUMN exampleJson TEXT")
     }
 }
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        // Add paragraph index and theme to books table for persistent state
+        database.execSQL("ALTER TABLE books ADD COLUMN currentParagraphIndex INTEGER NOT NULL DEFAULT 0")
+        database.execSQL("ALTER TABLE books ADD COLUMN themeId TEXT NOT NULL DEFAULT 'default'")
+    }
+}

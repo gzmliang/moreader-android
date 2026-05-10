@@ -16,6 +16,8 @@ data class Book(
     val currentChapterIndex: Int = 0,
     val currentProgress: Float = 0f,         // 0.0 ~ 1.0
     val currentCfi: String? = null,          // CFI reference for more precise position
+    val currentParagraphIndex: Int = 0,      // paragraph index within chapter
+    val themeId: String = "default",         // last used reading theme
 )
 
 // TOC entry

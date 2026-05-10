@@ -80,6 +80,7 @@ data class ReaderUiState(
     val showBookmarkToast: Boolean = false,
     val bookmarkToastMsg: String = "",
     val showBookmarkPanel: Boolean = false,
+    val showHighlightPanel: Boolean = false,
     val currentParagraphIndex: Int = 0,       // 当前阅读/朗读的段落
     val scrollToParagraph: Int = -1,           // 需要滚动到的段落索引（-1 表示无）
     val highlightToRemove: Highlight? = null,    // Signal to remove a highlight in WebView
@@ -200,7 +201,19 @@ class ReaderViewModel(
         _uiState.update { it.copy(loadingMessage = getApplication<android.app.Application>().getString(com.moyue.app.R.string.parse_chapters)) }
         val chapters = repository.parseSpine(bookId); val toc = repository.parseToc(bookId)
         if (chapters.isEmpty()) { _uiState.update { it.copy(book = book, isLoading = false, error = getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_parse_failed)) }; return@launch }
-        _uiState.update { it.copy(book = book, chapters = chapters, toc = toc, currentChapterIndex = book.currentChapterIndex.coerceIn(0, maxOf(0, chapters.size - 1)), isLoading = false, loadingMessage = "") }
+        
+        // Restore theme from saved preference
+        val restoredTheme = ReaderTheme.entries.find { it.id == book.themeId } ?: ReaderTheme.LIGHT
+        
+        _uiState.update { it.copy(
+            book = book, 
+            chapters = chapters, 
+            toc = toc, 
+            currentChapterIndex = book.currentChapterIndex.coerceIn(0, maxOf(0, chapters.size - 1)), 
+            theme = restoredTheme,
+            isLoading = false, 
+            loadingMessage = ""
+        ) }
         loadChapterContent()
     } }
     private suspend fun loadChapterContent() {
@@ -209,7 +222,26 @@ class ReaderViewModel(
         val ch = s.chapters.getOrNull(s.currentChapterIndex) ?: run { _uiState.update { it.copy(isLoading = false, error = getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_chapter_out_of_range)) }; return }
         val html = repository.getChapterContent(b.id, ch.href) ?: run { _uiState.update { it.copy(isLoading = false, error = getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_read_failed)) }; return }
         val pl = extractParagraphsFromHtml(html)
-        _uiState.update { it.copy(currentHtml = html, isLoading = false, loadingMessage = "", ttsParagraphs = pl, ttsCurrentIdx = -1) }
+        
+        // Restore paragraph position if we're loading the same chapter we left off
+        val restorePara = if (ch.href == b.currentChapterHref) b.currentParagraphIndex.coerceIn(0, maxOf(0, pl.size - 1)) else 0
+        
+        _uiState.update { 
+            it.copy(
+                currentHtml = html, 
+                isLoading = false, 
+                loadingMessage = "", 
+                ttsParagraphs = pl, 
+                ttsCurrentIdx = -1,
+                currentParagraphIndex = restorePara,
+            ) 
+        }
+        
+        // Scroll to restored paragraph after a short delay
+        if (restorePara > 0) {
+            kotlinx.coroutines.delay(300)
+            _uiState.update { it.copy(scrollToParagraph = restorePara) }
+        }
     }
     fun nextChapter() { val s = _uiState.value; if (s.currentChapterIndex < s.chapters.size - 1) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex + 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(); saveProgress() } } }
     fun prevChapter() { val s = _uiState.value; if (s.currentChapterIndex > 0) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex - 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(); saveProgress() } } }
@@ -239,8 +271,19 @@ class ReaderViewModel(
             viewModelScope.launch { loadChapterContent(); saveProgress() }
         }
     }
-    private suspend fun saveProgress() { val s = _uiState.value; val b = s.book ?: return; val c = s.chapters.getOrNull(s.currentChapterIndex) ?: return; repository.updateProgress(b.id, c.href, s.currentChapterIndex, b.currentProgress, null) }
-    fun setTheme(t: ReaderTheme) { _uiState.update { it.copy(theme = t) } }
+    private suspend fun saveProgress() { 
+        val s = _uiState.value; val b = s.book ?: return; val c = s.chapters.getOrNull(s.currentChapterIndex) ?: return
+        val paraIdx = s.currentParagraphIndex.coerceIn(0, s.ttsParagraphs.size.coerceAtMost(100) - 1)
+        repository.updateProgress(b.id, c.href, s.currentChapterIndex, b.currentProgress, null, paraIdx, s.theme.id) 
+    }
+    fun setTheme(t: ReaderTheme) { 
+        _uiState.update { it.copy(theme = t) }
+        // Persist theme to database
+        val book = _uiState.value.book ?: return
+        viewModelScope.launch {
+            repository.updateBookTheme(book.id, t.id)
+        }
+    }
     fun setFontSize(s: Int) { _uiState.update { it.copy(fontSize = s.coerceIn(14, 28)) } }
     fun onTextSelected(infoJson: String) {
         try {
@@ -583,8 +626,50 @@ class ReaderViewModel(
     }
 
     fun toggleBookmarkPanel() { _uiState.update { it.copy(showBookmarkPanel = !it.showBookmarkPanel) } }
+    fun toggleHighlightPanel() { _uiState.update { it.copy(showHighlightPanel = !it.showHighlightPanel) } }
 
-    fun setCurrentParagraph(idx: Int) { _uiState.update { it.copy(currentParagraphIndex = idx) } }
+    fun navigateToHighlight(highlight: Highlight) {
+        _uiState.update { it.copy(showHighlightPanel = false) }
+        val s = _uiState.value
+        val chapters = s.chapters
+        
+        // If highlight is in a different chapter, navigate there first
+        if (highlight.chapterIndex != s.currentChapterIndex) {
+            val targetChapter = chapters.getOrNull(highlight.chapterIndex)
+            if (targetChapter != null) {
+                pushToHistory()
+                killPlayChain()
+                _uiState.update { 
+                    it.copy(
+                        currentChapterIndex = highlight.chapterIndex, 
+                        isLoading = true, 
+                        currentHtml = null, 
+                        ttsParagraphs = emptyList(), 
+                        ttsCurrentIdx = -1, 
+                        isTtsPaused = false 
+                    ) 
+                }
+                viewModelScope.launch {
+                    loadChapterContent()
+                    // Scroll to the highlight paragraph
+                    _uiState.update { it.copy(scrollToParagraph = highlight.startParagraph) }
+                }
+            }
+        } else {
+            // Same chapter, just scroll to paragraph
+            pushToHistory()
+            _uiState.update { it.copy(scrollToParagraph = highlight.startParagraph) }
+        }
+    }
+
+    fun setCurrentParagraph(idx: Int) { 
+        _uiState.update { it.copy(currentParagraphIndex = idx) }
+        // Persist paragraph position
+        val book = _uiState.value.book ?: return
+        viewModelScope.launch {
+            repository.updateBookParagraph(book.id, idx)
+        }
+    }
 
     fun clearScrollToParagraph() { _uiState.update { it.copy(scrollToParagraph = -1) } }
 

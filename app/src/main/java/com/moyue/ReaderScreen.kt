@@ -152,6 +152,7 @@ fun ReaderScreen(
                     actions = {
                         IconButton(onClick = { viewModel.toggleFullscreen() }) { Icon(Icons.Default.Fullscreen, contentDescription = "全屏模式") }
                         IconButton(onClick = { viewModel.toggleBookmarkPanel() }) { Icon(Icons.Outlined.BookmarkBorder, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title)) }
+                        IconButton(onClick = { viewModel.toggleHighlightPanel() }) { Icon(Icons.Default.Star, contentDescription = "高亮列表") }
                         IconButton(onClick = { viewModel.toggleTocPanel() }) { Icon(Icons.Default.List, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.table_of_contents)) }
                         IconButton(onClick = { viewModel.toggleTtsSettingsPanel() }) { Icon(Icons.Default.Settings, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_settings)) }
                     },
@@ -427,6 +428,24 @@ fun ReaderScreen(
                 )
             }
 
+            // Highlight panel (slide from right, same as bookmarks)
+            AnimatedVisibility(
+                visible = state.showHighlightPanel,
+                enter = slideInHorizontally(initialOffsetX = { it }),
+                exit = slideOutHorizontally(targetOffsetX = { it }),
+                modifier = Modifier.fillMaxHeight().width(300.dp).align(Alignment.CenterEnd),
+            ) {
+                val hlScope = rememberCoroutineScope()
+                HighlightPanel(
+                    highlights = highlights,
+                    onNavigate = { viewModel.navigateToHighlight(it) },
+                    onDelete = { highlight ->
+                        hlScope.launch { repository.deleteHighlight(highlight) }
+                    },
+                    onClose = { viewModel.toggleHighlightPanel() },
+                )
+            }
+
             // TTS Settings overlay (includes theme picker now)
             AnimatedVisibility(
                 visible = state.showTtsSettingsPanel,
@@ -697,6 +716,63 @@ private fun BookmarkPanel(
                                     )
                                 }
                                 IconButton(onClick = { deleteTarget = bookmark }) {
+                                    Icon(Icons.Default.Delete, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+@Composable
+private fun HighlightPanel(
+    highlights: List<Highlight>,
+    onNavigate: (Highlight) -> Unit,
+    onDelete: (Highlight) -> Unit,
+    onClose: () -> Unit,
+) {
+    Surface(Modifier.fillMaxHeight(), shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("高亮", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close)) }
+            }
+            HorizontalDivider()
+            if (highlights.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("暂无高亮", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(highlights, key = { h: Highlight -> h.id }) { highlight ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                            onClick = { onNavigate(highlight) },
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFC107), modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "第 ${highlight.chapterIndex + 1} 章",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Text(
+                                        text = highlight.text,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(top = 2.dp),
+                                    )
+                                }
+                                IconButton(onClick = { onDelete(highlight) }) {
                                     Icon(Icons.Default.Delete, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                                 }
                             }

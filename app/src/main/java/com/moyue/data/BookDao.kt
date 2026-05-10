@@ -18,6 +18,6 @@ interface BookDao {
     @Delete
     suspend fun delete(book: Book)
 
-    @Query("UPDATE books SET lastReadAt = :timestamp, currentChapterHref = :href, currentChapterIndex = :index, currentProgress = :progress, currentCfi = :cfi WHERE id = :id")
-    suspend fun updateProgress(id: String, timestamp: Long, href: String?, index: Int, progress: Float, cfi: String?)
+    @Query("UPDATE books SET lastReadAt = :timestamp, currentChapterHref = :href, currentChapterIndex = :index, currentProgress = :progress, currentCfi = :cfi, currentParagraphIndex = :paraIdx, themeId = :theme WHERE id = :id")
+    suspend fun updateProgress(id: String, timestamp: Long, href: String?, index: Int, progress: Float, cfi: String?, paraIdx: Int, theme: String)
 }
