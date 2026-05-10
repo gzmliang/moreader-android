@@ -78,10 +78,21 @@ fun EpubWebView(
         }
     }
 
-    // Render user highlights in WebView
+    // Render user highlights in WebView — clear all then re-render on every change
     LaunchedEffect(highlightsToRender) {
+        webView?.evaluateJavascript(
+            """(function(){
+                document.querySelectorAll('span.user-highlight').forEach(function(span){
+                    var parent=span.parentNode;
+                    while(span.firstChild)parent.insertBefore(span.firstChild,span);
+                    parent.removeChild(span);
+                    parent.normalize();
+                });
+            })()""", null
+        )
+        kotlinx.coroutines.delay(100)
+        
         if (highlightsToRender.isNotEmpty()) {
-            kotlinx.coroutines.delay(600)
             val hlArray = highlightsToRender.joinToString(",", "[", "]") { "[${it.first},${it.second},${it.third}]" }
             webView?.evaluateJavascript(
                 """(function(){
