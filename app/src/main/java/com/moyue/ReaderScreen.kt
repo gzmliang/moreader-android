@@ -56,6 +56,7 @@ fun ReaderScreen(
 
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val highlights by viewModel.loadedHighlights.collectAsStateWithLifecycle()
+    val allBookHighlights by repository.getHighlightsForBook(bookId).collectAsStateWithLifecycle(initialValue = emptyList())
 
     // Load highlights when chapter changes
     LaunchedEffect(state.currentChapterIndex, state.currentHtml) {
@@ -437,7 +438,7 @@ fun ReaderScreen(
             ) {
                 val hlScope = rememberCoroutineScope()
                 HighlightPanel(
-                    highlights = highlights,
+                    highlights = allBookHighlights,
                     onNavigate = { viewModel.navigateToHighlight(it) },
                     onDelete = { highlight ->
                         hlScope.launch { repository.deleteHighlight(highlight) }
