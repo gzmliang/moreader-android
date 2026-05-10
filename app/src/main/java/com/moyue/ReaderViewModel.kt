@@ -309,7 +309,9 @@ class ReaderViewModel(
             _uiState.update { it.copy(selectedText = infoJson, selectionInfo = null, showSelectionMenu = true) }
         }
     }
-    fun onLinkClicked(url: String) { 
+    fun onLinkClicked(url: String, visibleParaIdx: Int = 0) { 
+        // Update current paragraph to visible position before pushing to history
+        _uiState.update { it.copy(currentParagraphIndex = visibleParaIdx) }
         // Handle internal EPUB link clicks
         pushToHistory()
         val cleanUrl = url.trim()

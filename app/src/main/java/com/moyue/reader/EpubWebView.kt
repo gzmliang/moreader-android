@@ -359,7 +359,15 @@ fun EpubWebView(
                                         var href=a.getAttribute('href');
                                         if(href && !href.startsWith('http') && !href.startsWith('mailto:') && !href.startsWith('tel:')){
                                             e.preventDefault();
-                                            MoreaderBridge.onLinkClicked(href);
+                                            // Get current visible paragraph index before navigating
+                                            var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
+                                            var scrollY=window.scrollY;
+                                            var visibleIdx=0;
+                                            for(var i=0;i<all.length;i++){
+                                                if(all[i].offsetTop>scrollY+window.innerHeight*0.3)break;
+                                                visibleIdx=i;
+                                            }
+                                            MoreaderBridge.onLinkClicked(href,visibleIdx);
                                         }
                                     }
                                 });
@@ -376,7 +384,7 @@ fun EpubWebView(
                             callbackRef.value(infoJson) 
                         }
                         @JavascriptInterface
-                        fun onLinkClicked(url: String) { linkCallbackRef.value(url) }
+                        fun onLinkClicked(url: String, visibleParaIdx: Int) { linkCallbackRef.value("$url|$visibleParaIdx") }
                         @JavascriptInterface
                         fun onParagraphClicked(index: Int) { paragraphCallbackRef.value(index) }
                     }, "MoreaderBridge")

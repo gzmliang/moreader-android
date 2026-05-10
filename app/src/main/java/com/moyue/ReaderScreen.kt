@@ -320,7 +320,12 @@ fun ReaderScreen(
                     textColor = state.theme.textColor,
                     fontScale = state.fontSize / 18f,
                     onTextSelected = { viewModel.onTextSelected(it) },
-                    onLinkClicked = { viewModel.onLinkClicked(it) },
+                    onLinkClicked = { 
+                        val idx = it.lastIndexOf('|')
+                        val href = if (idx >= 0) it.substring(0, idx) else it
+                        val visiblePara = if (idx >= 0) it.substring(idx + 1).toIntOrNull() ?: 0 else 0
+                        viewModel.onLinkClicked(href, visiblePara) 
+                    },
                     onParagraphClicked = { idx ->
                         clickedParagraphIndex = idx
                         showParagraphMenu = true
