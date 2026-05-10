@@ -440,9 +440,7 @@ fun ReaderScreen(
                 HighlightPanel(
                     highlights = allBookHighlights,
                     onNavigate = { viewModel.navigateToHighlight(it) },
-                    onDelete = { highlight ->
-                        hlScope.launch { repository.deleteHighlight(highlight) }
-                    },
+                    onDelete = { highlight -> viewModel.deleteHighlight(highlight) },
                     onClose = { viewModel.toggleHighlightPanel() },
                 )
             }

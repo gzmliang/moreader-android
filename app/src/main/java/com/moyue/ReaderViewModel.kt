@@ -633,6 +633,18 @@ class ReaderViewModel(
     }
 
     fun toggleBookmarkPanel() { _uiState.update { it.copy(showBookmarkPanel = !it.showBookmarkPanel) } }
+    fun deleteHighlight(highlight: Highlight) {
+        viewModelScope.launch {
+            repository.deleteHighlight(highlight)
+            // Remove from in-memory list so it disappears from rendering
+            _highlights.update { it.filter { h -> h.id != highlight.id } }
+            // Signal WebView to remove the visual highlight
+            _uiState.update { it.copy(highlightToRemove = highlight) }
+            kotlinx.coroutines.delay(200)
+            _uiState.update { it.copy(highlightToRemove = null) }
+        }
+    }
+
     fun toggleHighlightPanel() { _uiState.update { it.copy(showHighlightPanel = !it.showHighlightPanel) } }
 
     fun navigateToHighlight(highlight: Highlight) {
