@@ -96,13 +96,41 @@ fun ReaderScreen(
             },
             text = {
                 Column {
+                    // Show original text
+                    val selectedTxt = state.selectedText
+                    if (selectedTxt != null) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Column(Modifier.padding(8.dp)) {
+                                Text(
+                                    text = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.original_text_label),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = selectedTxt,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    lineHeight = 20.sp,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
                     if (state.isTranslating) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp)); Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.translating), fontSize = 14.sp)
                         }
                     }
-                    Text(state.translationResult ?: "", fontSize = 14.sp, lineHeight = 22.sp)
+                    if (state.translationResult != null) {
+                        Text(state.translationResult!!, fontSize = 14.sp, lineHeight = 22.sp)
+                    }
                 }
             },
             confirmButton = { TextButton(onClick = { viewModel.dismissTranslationPanel() }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close)) } },

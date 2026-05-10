@@ -619,16 +619,32 @@ class ReaderViewModel(
             val targetChapter = chapters.getOrNull(bookmark.chapterIndex)
             if (targetChapter != null) {
                 killPlayChain()
-                _uiState.update { it.copy(currentChapterIndex = bookmark.chapterIndex, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }
+                // Reset scrollToParagraph first to ensure the LaunchedEffect triggers
+                _uiState.update { 
+                    it.copy(
+                        currentChapterIndex = bookmark.chapterIndex, 
+                        isLoading = true, 
+                        currentHtml = null, 
+                        ttsParagraphs = emptyList(), 
+                        ttsCurrentIdx = -1, 
+                        isTtsPaused = false,
+                        scrollToParagraph = -1,
+                    ) 
+                }
                 viewModelScope.launch {
                     loadChapterContent()
-                    // 章节加载完成后滚动到书签段落
+                    // Force a fresh scroll after content is fully loaded
+                    kotlinx.coroutines.delay(200)
                     _uiState.update { it.copy(scrollToParagraph = bookmark.paragraphIndex) }
                 }
             }
         } else {
-            // 同一章节，直接滚动到段落
-            _uiState.update { it.copy(scrollToParagraph = bookmark.paragraphIndex) }
+            // 同一章节，直接滚动到段落 — 先重置再设置，确保 LaunchedEffect 触发
+            _uiState.update { it.copy(scrollToParagraph = -1) }
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(100)
+                _uiState.update { it.copy(scrollToParagraph = bookmark.paragraphIndex) }
+            }
         }
     }
 
