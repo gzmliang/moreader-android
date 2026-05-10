@@ -73,9 +73,15 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
 
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(database: SupportSQLiteDatabase) {
-        // Add paragraph index, theme, and font size to books table for persistent state
+        // Add paragraph index and theme to books table for persistent state
         database.execSQL("ALTER TABLE books ADD COLUMN currentParagraphIndex INTEGER NOT NULL DEFAULT 0")
         database.execSQL("ALTER TABLE books ADD COLUMN themeId TEXT NOT NULL DEFAULT 'default'")
+    }
+}
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        // Add font size to books table for persistent state
         database.execSQL("ALTER TABLE books ADD COLUMN fontSize INTEGER NOT NULL DEFAULT 18")
     }
 }
