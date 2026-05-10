@@ -18,6 +18,7 @@ data class Book(
     val currentCfi: String? = null,          // CFI reference for more precise position
     val currentParagraphIndex: Int = 0,      // paragraph index within chapter
     val themeId: String = "default",         // last used reading theme
+    val fontSize: Int = 18,                  // last used font size
 )
 
 // TOC entry

@@ -535,13 +535,18 @@ class BookRepository(private val context: Context) {
         book.coverPath?.let { File(it).delete() }
     }
 
-    suspend fun updateProgress(id: String, href: String?, index: Int, progress: Float, cfi: String?, paraIdx: Int = 0, theme: String = "default") {
-        dao.updateProgress(id, System.currentTimeMillis(), href, index, progress, cfi, paraIdx, theme)
+    suspend fun updateProgress(id: String, href: String?, index: Int, progress: Float, cfi: String?, paraIdx: Int = 0, theme: String = "default", fontSize: Int = 18) {
+        dao.updateProgress(id, System.currentTimeMillis(), href, index, progress, cfi, paraIdx, theme, fontSize)
     }
 
     suspend fun updateBookTheme(id: String, themeId: String) = withContext(Dispatchers.IO) {
         val book = dao.getBook(id) ?: return@withContext
         dao.upsert(book.copy(themeId = themeId))
+    }
+
+    suspend fun updateBookFontSize(id: String, size: Int) = withContext(Dispatchers.IO) {
+        val book = dao.getBook(id) ?: return@withContext
+        dao.upsert(book.copy(fontSize = size))
     }
 
     suspend fun updateBookParagraph(id: String, paraIdx: Int) = withContext(Dispatchers.IO) {

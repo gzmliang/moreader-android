@@ -202,7 +202,7 @@ class ReaderViewModel(
         val chapters = repository.parseSpine(bookId); val toc = repository.parseToc(bookId)
         if (chapters.isEmpty()) { _uiState.update { it.copy(book = book, isLoading = false, error = getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_parse_failed)) }; return@launch }
         
-        // Restore theme from saved preference
+        // Restore theme and font size from saved preference
         val restoredTheme = ReaderTheme.entries.find { it.id == book.themeId } ?: ReaderTheme.LIGHT
         
         _uiState.update { it.copy(
@@ -211,6 +211,7 @@ class ReaderViewModel(
             toc = toc, 
             currentChapterIndex = book.currentChapterIndex.coerceIn(0, maxOf(0, chapters.size - 1)), 
             theme = restoredTheme,
+            fontSize = book.fontSize,
             isLoading = false, 
             loadingMessage = ""
         ) }
@@ -274,17 +275,23 @@ class ReaderViewModel(
     private suspend fun saveProgress() { 
         val s = _uiState.value; val b = s.book ?: return; val c = s.chapters.getOrNull(s.currentChapterIndex) ?: return
         val paraIdx = s.currentParagraphIndex.coerceIn(0, s.ttsParagraphs.size.coerceAtMost(100) - 1)
-        repository.updateProgress(b.id, c.href, s.currentChapterIndex, b.currentProgress, null, paraIdx, s.theme.id) 
+        repository.updateProgress(b.id, c.href, s.currentChapterIndex, b.currentProgress, null, paraIdx, s.theme.id, s.fontSize) 
     }
     fun setTheme(t: ReaderTheme) { 
         _uiState.update { it.copy(theme = t) }
-        // Persist theme to database
         val book = _uiState.value.book ?: return
         viewModelScope.launch {
             repository.updateBookTheme(book.id, t.id)
         }
     }
-    fun setFontSize(s: Int) { _uiState.update { it.copy(fontSize = s.coerceIn(14, 28)) } }
+    fun setFontSize(s: Int) { 
+        val size = s.coerceIn(14, 28)
+        _uiState.update { it.copy(fontSize = size) }
+        val book = _uiState.value.book ?: return
+        viewModelScope.launch {
+            repository.updateBookFontSize(book.id, size)
+        }
+    }
     fun onTextSelected(infoJson: String) {
         try {
             val obj = JSONObject(infoJson)
