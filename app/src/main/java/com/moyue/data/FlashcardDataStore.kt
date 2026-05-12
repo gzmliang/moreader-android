@@ -35,10 +35,11 @@ class FlashcardDataStore(context: Context) {
         val repetition: Int = 0,
         val dueDate: Long = 0,
         val createdAt: Long = System.currentTimeMillis(),
-        val plan: String = "默认",
+        val plan: String = DEFAULT_PLAN,
     )
 
     companion object {
+        const val DEFAULT_PLAN = "默认"
         // SM-2 inspired intervals (minutes): 1 → 10 → 1day → 3days → 7days → 15days → 30days
         val INTERVALS = listOf(1L, 10L, 1440L, 4320L, 10080L, 21600L, 43200L)
     }
@@ -65,7 +66,7 @@ class FlashcardDataStore(context: Context) {
                         repetition = obj.optInt("repetition", 0),
                         dueDate = obj.optLong("dueDate", 0),
                         createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
-                        plan = obj.optString("plan", "默认"),
+                        plan = obj.optString("plan", DEFAULT_PLAN),
                     )
                 }
                 // Deduplicate by word — keep first occurrence, reassign IDs to duplicates
@@ -209,7 +210,7 @@ class FlashcardDataStore(context: Context) {
                         repetition = obj.optInt("repetition", 0),
                         dueDate = obj.optLong("dueDate", 0),
                         createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
-                        plan = obj.optString("plan", "默认"),
+                        plan = obj.optString("plan", DEFAULT_PLAN),
                     )
                 }
         } catch (e: Exception) {

@@ -231,4 +231,22 @@
     <string name="flashcard_import_exists">该单词已在闪卡中</string>
     <string name="flashcard_batch_import">批量加入闪卡</string>
     <string name="flashcard_import_result">成功导入 %1$d 个，跳过 %2$d 个</string>
+    <string name="flashcard_plan_default">默认</string>
+    <string name="flashcard_plan_new">+ 新建</string>
+    <string name="flashcard_plan_create_title">新建复习计划</string>
+    <string name="flashcard_plan_create_hint">例如：A的计划</string>
+    <string name="flashcard_plan_create_btn">创建</string>
+    <string name="flashcard_plan_delete_title">删除计划</string>
+    <string name="flashcard_plan_delete_confirm">确定要删除「%1$s」吗？该计划下所有闪卡都会被删除。</string>
+    <string name="flashcard_reset_all_title">重置复习进度</string>
+    <string name="flashcard_reset_all_confirm">所有闪卡将回到新卡状态，可以重新复习。确定吗？</string>
+    <string name="flashcard_reset_all_btn">重置全部进度</string>
+    <string name="flashcard_tts_log_title">🔊 TTS发音日志</string>
+    <string name="flashcard_tts_log_empty">暂无TTS日志\n\n请先在闪卡列表中点击🔊按钮测试发音</string>
+    <string name="flashcard_tts_log_view">查看TTS日志</string>
+    <string name="flashcard_tts_close">关闭</string>
+    <string name="flashcard_plan_label">计划</string>
+    <string name="flashcard_plan_delete">删除计划</string>
+    <string name="flashcard_speak">发音</string>
+    <string name="flashcard_import_plan_title">选择导入目标计划</string>
 </resources>

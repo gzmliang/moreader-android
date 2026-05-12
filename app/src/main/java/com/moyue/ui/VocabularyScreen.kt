@@ -47,13 +47,13 @@ fun VocabularyScreen(
     // Plan selector for imports
     var showPlanPicker by remember { mutableStateOf(false) }
     var pendingImportWords by remember { mutableStateOf<List<Vocabulary>>(emptyList()) }
-    var importPlanOptions by remember { mutableStateOf<List<String>>(listOf("默认")) }
+    var importPlanOptions by remember { mutableStateOf<List<String>>(listOf(context.getString(com.moyue.app.R.string.flashcard_plan_default))) }
     
     // Load plan options when picker is about to show
     fun openPlanPicker(words: List<Vocabulary>) {
         scope.launch {
             val dataStore = com.moyue.app.data.FlashcardDataStore(context)
-            val plans = dataStore.getPlanNames().ifEmpty { listOf("默认") }
+            val plans = dataStore.getPlanNames().ifEmpty { listOf(context.getString(com.moyue.app.R.string.flashcard_plan_default)) }
             importPlanOptions = plans
             pendingImportWords = words
             showPlanPicker = true
@@ -64,7 +64,7 @@ fun VocabularyScreen(
     if (showPlanPicker) {
         AlertDialog(
             onDismissRequest = { showPlanPicker = false },
-            title = { Text("选择导入目标计划") },
+            title = { Text(stringResource(R.string.flashcard_import_plan_title)) },
             text = {
                 Column {
                     importPlanOptions.forEach { plan ->
@@ -114,7 +114,7 @@ fun VocabularyScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showPlanPicker = false }) { Text("取消") }
+                TextButton(onClick = { showPlanPicker = false }) { Text(stringResource(android.R.string.cancel)) }
             }
         )
     }

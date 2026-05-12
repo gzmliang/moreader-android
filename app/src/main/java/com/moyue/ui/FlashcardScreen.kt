@@ -81,13 +81,13 @@ fun FlashcardScreen(
     if (showResetConfirm) {
         AlertDialog(
             onDismissRequest = { showResetConfirm = false },
-            title = { Text("重置复习进度") },
-            text = { Text("所有闪卡将回到新卡状态，可以重新复习。确定吗？") },
+            title = { Text(stringResource(R.string.flashcard_reset_all_title)) },
+            text = { Text(stringResource(R.string.flashcard_reset_all_confirm)) },
             confirmButton = {
-                TextButton(onClick = { showResetConfirm = false; viewModel.resetAllFlashcards() }) { Text("确定") }
+                TextButton(onClick = { showResetConfirm = false; viewModel.resetAllFlashcards() }) { Text(stringResource(android.R.string.ok)) }
             },
             dismissButton = {
-                TextButton(onClick = { showResetConfirm = false }) { Text("取消") }
+                TextButton(onClick = { showResetConfirm = false }) { Text(stringResource(android.R.string.cancel)) }
             }
         )
     }
@@ -95,12 +95,12 @@ fun FlashcardScreen(
     if (showNewPlanDialog) {
         AlertDialog(
             onDismissRequest = { showNewPlanDialog = false },
-            title = { Text("新建复习计划") },
+            title = { Text(stringResource(R.string.flashcard_plan_create_title)) },
             text = {
                 OutlinedTextField(
                     value = planNameInput,
                     onValueChange = { planNameInput = it },
-                    placeholder = { Text("例如：A的计划") },
+                    placeholder = { Text(stringResource(R.string.flashcard_plan_create_hint)) },
                     modifier = Modifier.fillMaxWidth()
                 )
             },
@@ -111,10 +111,10 @@ fun FlashcardScreen(
                         showNewPlanDialog = false
                         planNameInput = ""
                     }
-                }) { Text("创建") }
+                }) { Text(stringResource(R.string.flashcard_plan_create_btn)) }
             },
             dismissButton = {
-                TextButton(onClick = { showNewPlanDialog = false; planNameInput = "" }) { Text("取消") }
+                TextButton(onClick = { showNewPlanDialog = false; planNameInput = "" }) { Text(stringResource(android.R.string.cancel)) }
             }
         )
     }
@@ -122,13 +122,13 @@ fun FlashcardScreen(
     if (showDeletePlanDialog) {
         AlertDialog(
             onDismissRequest = { showDeletePlanDialog = false },
-            title = { Text("删除计划") },
-            text = { Text("确定要删除「${uiState.currentPlan}」吗？该计划下所有闪卡都会被删除。") },
+            title = { Text(stringResource(R.string.flashcard_plan_delete_title)) },
+            text = { Text(stringResource(R.string.flashcard_plan_delete_confirm, uiState.currentPlan)) },
             confirmButton = {
-                TextButton(onClick = { viewModel.deletePlan(uiState.currentPlan); showDeletePlanDialog = false }) { Text("删除") }
+                TextButton(onClick = { viewModel.deletePlan(uiState.currentPlan); showDeletePlanDialog = false }) { Text(stringResource(android.R.string.ok)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeletePlanDialog = false }) { Text("取消") }
+                TextButton(onClick = { showDeletePlanDialog = false }) { Text(stringResource(android.R.string.cancel)) }
             }
         )
     }
@@ -137,7 +137,7 @@ fun FlashcardScreen(
     if (showTtsLogDialog) {
         AlertDialog(
             onDismissRequest = { showTtsLogDialog = false },
-            title = { Text("🔊 TTS发音日志") },
+            title = { Text(stringResource(R.string.flashcard_tts_log_title)) },
             text = {
                 val scrollState = androidx.compose.foundation.rememberScrollState()
                 Column(modifier = Modifier.verticalScroll(scrollState).fillMaxWidth()) {
@@ -148,12 +148,12 @@ fun FlashcardScreen(
                             fontSize = 12.sp
                         )
                     } else {
-                        Text("暂无TTS日志\n\n请先在闪卡列表中点击🔊按钮测试发音", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                        Text(stringResource(R.string.flashcard_tts_log_empty), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showTtsLogDialog = false }) { Text("关闭") }
+                TextButton(onClick = { showTtsLogDialog = false }) { Text(stringResource(R.string.flashcard_tts_close)) }
             }
         )
     }
@@ -173,7 +173,7 @@ fun FlashcardScreen(
                         ttsLogContent = viewModel.getTtsLog()
                         showTtsLogDialog = true
                     }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "查看TTS日志")
+                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.flashcard_tts_log_view))
                     }
                 },
             )
@@ -259,7 +259,7 @@ private fun FlashcardOverview(
                 TextButton(onClick = onRequestResetAll, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.Replay, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("重置全部进度")
+                    Text(stringResource(R.string.flashcard_reset_all_btn))
                 }
             }
         }
@@ -303,10 +303,10 @@ private fun PlanSelector(
                     )
                 },
                 selected = isSelected,
-                trailingIcon = if (isSelected && plan != "默认") {
+                trailingIcon = if (isSelected && plan != stringResource(R.string.flashcard_plan_default)) {
                     @Composable {
                         IconButton(onClick = onDeletePlan, modifier = Modifier.size(18.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "删除计划", modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.flashcard_plan_delete), modifier = Modifier.size(14.dp))
                         }
                     }
                 } else null,
@@ -315,7 +315,7 @@ private fun PlanSelector(
         }
         FilterChip(
             onClick = onCreatePlan,
-            label = { Text("+ 新建", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            label = { Text(stringResource(R.string.flashcard_plan_new), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
             selected = false,
             modifier = Modifier.height(32.dp)
         )
@@ -337,7 +337,7 @@ private fun FlashcardListItem(
                 Text(text = flashcard.word, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 Text(text = dueLabel, style = MaterialTheme.typography.labelSmall, color = if (flashcard.dueDate <= System.currentTimeMillis()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
                 IconButton(onClick = onSpeak) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "发音", modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.flashcard_speak), modifier = Modifier.size(20.dp))
                 }
                 if (flashcard.repetition > 0) {
                     IconButton(onClick = onReset) {
@@ -419,7 +419,7 @@ private fun FlashcardReviewScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back), tint = MaterialTheme.colorScheme.onBackground)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("计划：${uiState.currentPlan}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text("${stringResource(R.string.flashcard_plan_label)}：${uiState.currentPlan}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     Text("${currentIndex + 1} / ${uiState.dueFlashcards.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -455,10 +455,10 @@ private fun FlashcardReviewScreen(
                         }
                         Spacer(Modifier.height(24.dp))
                         IconButton(onClick = { viewModel.speakWord(currentCard.word, context) }) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = "发音", modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+                            Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.flashcard_speak), modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
                         }
                         Spacer(Modifier.height(16.dp))
-                        Text("点击翻转", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                        Text(stringResource(R.string.flashcard_tap_to_flip), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                     }
                 }
             } else {

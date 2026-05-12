@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.moyue.app.data.BookRepository
 import com.moyue.app.data.FlashcardDataStore
 import com.moyue.app.data.FlashcardDataStore.Flashcard
+import com.moyue.app.data.FlashcardDataStore.Companion.DEFAULT_PLAN
 import com.moyue.app.data.FlashcardDataStore.Companion.INTERVALS
 import com.moyue.app.data.models.TTSProviderType
 import com.moyue.app.data.models.Vocabulary
@@ -30,8 +31,8 @@ data class FlashcardUiState(
     val allFlashcards: List<Flashcard> = emptyList(),
     val dueCount: Int = 0,
     // Plan management
-    val plans: List<String> = listOf("默认"),
-    val currentPlan: String = "默认",
+    val plans: List<String> = listOf(DEFAULT_PLAN),
+    val currentPlan: String = DEFAULT_PLAN,
     // Review mode
     val isReviewMode: Boolean = false,
     val dueFlashcards: List<Flashcard> = emptyList(),
@@ -61,7 +62,7 @@ class FlashcardViewModel(
     fun refreshAll() {
         viewModelScope.launch {
             val all = dataStore.getAllFlashcards()
-            val plans = dataStore.getPlanNames().ifEmpty { listOf("默认") }
+            val plans = dataStore.getPlanNames().ifEmpty { listOf(DEFAULT_PLAN) }
             val currentPlan = _uiState.value.currentPlan.takeIf { plans.contains(it) } ?: plans.first()
             val planCards = all.filter { it.plan == currentPlan }
             val dueCount = planCards.count { it.dueDate <= System.currentTimeMillis() }
@@ -90,18 +91,18 @@ class FlashcardViewModel(
 
     fun deletePlan(name: String) {
         val current = _uiState.value.plans
-        if (current.size <= 1 || name == "默认") return
+        if (current.size <= 1 || name == DEFAULT_PLAN) return
         viewModelScope.launch {
             dataStore.deletePlan(name)
             val newPlans = current - name
-            val newPlan = newPlans.firstOrNull() ?: "默认"
+            val newPlan = newPlans.firstOrNull() ?: DEFAULT_PLAN
             _uiState.update { it.copy(plans = newPlans.sorted(), currentPlan = newPlan) }
             refreshAll()
         }
     }
 
     /** Import a single vocabulary word to flashcard */
-    suspend fun importFromVocabulary(vocab: Vocabulary, plan: String = "默认"): Boolean = withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun importFromVocabulary(vocab: Vocabulary, plan: String = DEFAULT_PLAN): Boolean = withContext(kotlinx.coroutines.Dispatchers.IO) {
         if (dataStore.isWordExists(vocab.word)) return@withContext false
 
         // Parse example JSON if available
@@ -342,7 +343,7 @@ class FlashcardViewModel(
     )
 
     /** Batch import vocabulary words */
-    suspend fun batchImportFromVocabulary(vocabs: List<Vocabulary>, plan: String = "默认"): Pair<Int, Int> = withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun batchImportFromVocabulary(vocabs: List<Vocabulary>, plan: String = DEFAULT_PLAN): Pair<Int, Int> = withContext(kotlinx.coroutines.Dispatchers.IO) {
         var imported = 0
         var skipped = 0
         vocabs.forEach { vocab ->
