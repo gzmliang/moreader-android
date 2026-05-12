@@ -252,6 +252,15 @@ private fun FlashcardReviewScreen(
     val currentIndex = uiState.currentCardIndex.coerceAtMost(uiState.dueFlashcards.size - 1)
     val currentCard = uiState.dueFlashcards[currentIndex]
     var isFlipped by remember { mutableStateOf(false) }
+    val isLoadingDefinition = uiState.fetchingWord.equals(currentCard.word, ignoreCase = true)
+
+    // Auto-fetch definition when flipped and card has no definitions
+    LaunchedEffect(isFlipped, currentCard.id) {
+        if (isFlipped && (currentCard.chineseDef.isNullOrBlank() && currentCard.englishDef.isNullOrBlank())
+            && !uiState.fetchingWord.equals(currentCard.word, ignoreCase = true)) {
+            viewModel.fetchDefinition(currentCard.word, context)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -308,13 +317,14 @@ private fun FlashcardReviewScreen(
                     }
                 }
             } else {
-                // Back: full definition
+                // Back: bilingual definitions
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                 ) {
                     Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+                        // Word header
                         Text(
                             text = currentCard.word,
                             style = MaterialTheme.typography.headlineMedium,
@@ -326,31 +336,74 @@ private fun FlashcardReviewScreen(
                         currentCard.pronunciation?.let { pron ->
                             Text(pron, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
                         }
-                        Spacer(Modifier.height(16.dp))
+                        currentCard.partOfSpeech?.let { pos ->
+                            Text("[${pos}]", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+                        }
+                        
+                        Spacer(Modifier.height(12.dp))
                         HorizontalDivider()
+                        Spacer(Modifier.height(8.dp))
 
-                        if (!currentCard.chineseDef.isNullOrBlank()) {
-                            Spacer(Modifier.height(12.dp))
-                            Text("【中文释义】", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            Text(currentCard.chineseDef, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 4.dp))
-                        }
-                        if (!currentCard.englishDef.isNullOrBlank()) {
-                            Spacer(Modifier.height(12.dp))
-                            Text("【English Definition】", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            Text(currentCard.englishDef, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 4.dp))
-                        }
-                        if (!currentCard.exampleText.isNullOrBlank()) {
-                            Spacer(Modifier.height(12.dp))
-                            HorizontalDivider()
-                            Spacer(Modifier.height(12.dp))
-                            Text("【例句】Example", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            Text(currentCard.exampleText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 4.dp))
-                            currentCard.exampleTranslation?.let {
-                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+                        // If no definitions and loading — show spinner
+                        if (isLoadingDefinition && currentCard.chineseDef.isNullOrBlank() && currentCard.englishDef.isNullOrBlank()) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
+                                Spacer(Modifier.height(12.dp))
+                                Text("正在获取释义…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else {
+                            // Chinese definition (always shown if available)
+                            if (!currentCard.chineseDef.isNullOrBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("🇨🇳 ", fontSize = 16.sp)
+                                    Text("中文释义", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFF2196F3))
+                                }
+                                Text(currentCard.chineseDef, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
+                                Spacer(Modifier.height(12.dp))
+                            }
+
+                            // English definition / translation (always shown if available)
+                            if (!currentCard.englishDef.isNullOrBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("🇬🇧 ", fontSize = 16.sp)
+                                    Text("English Definition", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+                                }
+                                Text(currentCard.englishDef, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
+                                Spacer(Modifier.height(12.dp))
+                            }
+
+                            // Example sentence
+                            if (!currentCard.exampleText.isNullOrBlank()) {
+                                HorizontalDivider()
+                                Spacer(Modifier.height(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("📖 ", fontSize = 16.sp)
+                                    Text("例句 Example", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFFFF9800))
+                                }
+                                Text(currentCard.exampleText, style = MaterialTheme.typography.bodyMedium, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
+                                currentCard.exampleTranslation?.let {
+                                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
+                                }
+                                Spacer(Modifier.height(8.dp))
+                            }
+
+                            // If still no definitions after loading — show tip
+                            if (currentCard.chineseDef.isNullOrBlank() && currentCard.englishDef.isNullOrBlank() && !isLoadingDefinition) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text("⚠️", fontSize = 24.sp)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text("暂无释义", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("请检查 AI 词典 API 配置", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                                }
                             }
                         }
 
-                        Spacer(Modifier.height(16.dp))
                         Text("点击返回正面", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     }
                 }

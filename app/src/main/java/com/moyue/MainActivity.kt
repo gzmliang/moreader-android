@@ -8,10 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CopyAll
 import androidx.compose.material3.*
@@ -80,6 +78,10 @@ class MainActivity : ComponentActivity() {
             runCatching { crashLogFile.readText() }.getOrNull()
         } else null
         previousCrash?.let { crashLogFile.delete() }
+
+        // Clean up old fetch logs silently
+        val oldFetchLog = File(getCacheDir(), "flashcard_fetch_log.txt")
+        if (oldFetchLog.exists()) oldFetchLog.delete()
 
         setContent {
             MoreaderTheme {

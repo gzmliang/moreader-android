@@ -21,6 +21,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -36,6 +37,8 @@ data class FlashcardUiState(
     val sessionReviewed: Int = 0,
     val sessionRemembered: Int = 0,
     val reviewComplete: Boolean = false,
+    // Track which word is currently being fetched (to prevent duplicates)
+    val fetchingWord: String? = null,
 )
 
 class FlashcardViewModel(
@@ -90,6 +93,215 @@ class FlashcardViewModel(
         refreshAll()
         return@withContext true
     }
+
+    /** Fetch definition for a flashcard using the same AI dictionary API */
+    fun fetchDefinition(word: String, context: android.content.Context) {
+        // Prevent duplicate fetches for the same word
+        if (_uiState.value.fetchingWord.equals(word, ignoreCase = true)) return
+
+        viewModelScope.launch {
+            // Mark this word as being fetched
+            _uiState.update { it.copy(fetchingWord = word) }
+
+            withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val prefs = context.getSharedPreferences("moreader_config", android.content.Context.MODE_PRIVATE)
+                val llmEndpoint = prefs.getString("llm_endpoint", null)
+                val llmApiKey = prefs.getString("llm_apikey", null)
+                val llmModel = prefs.getString("llm_model", null)
+
+                try {
+                    // If card already has definitions, skip
+                    val all = dataStore.getAllFlashcards()
+                    val card = all.find { it.word.equals(word, ignoreCase = true) }
+                        ?: run { _uiState.update { it.copy(fetchingWord = null) }; return@withContext }
+                    if (!card.chineseDef.isNullOrBlank() || !card.englishDef.isNullOrBlank()) {
+                        _uiState.update { it.copy(fetchingWord = null) }
+                        return@withContext
+                    }
+
+                    val log = StringBuilder()
+                    log.append("=== Flashcard Definition Fetch Log ===\n")
+                    log.append("Word: $word\n")
+                    log.append("llm_endpoint from prefs: ${llmEndpoint ?: "(null)"}\n")
+                    log.append("llm_apikey from prefs (first 10 chars): ${llmApiKey?.take(10) ?: "(null)"}\n")
+                    log.append("llm_model from prefs: ${llmModel ?: "(null)"}\n\n")
+
+                    val config = DictionaryConfig(
+                        endpoint = llmEndpoint ?: "https://api.siliconflow.cn/v1",
+                        apiKey = llmApiKey ?: "",
+                        model = llmModel ?: "Qwen/Qwen2.5-72B-Instruct",
+                    )
+                    log.append("Resolved endpoint: ${config.endpoint}\n")
+                    log.append("Resolved apikey length: ${config.apiKey.length}\n")
+                    log.append("Resolved model: ${config.model}\n\n")
+
+                    if (config.apiKey.isEmpty()) {
+                        log.append("ERROR: apiKey is empty! Aborting.\n")
+                        saveFetchLog(context, log.toString())
+                        _uiState.update { it.copy(fetchingWord = null) }
+                        return@withContext
+                    }
+                    if (config.endpoint.isEmpty()) {
+                        log.append("ERROR: endpoint is empty! Aborting.\n")
+                        saveFetchLog(context, log.toString())
+                        _uiState.update { it.copy(fetchingWord = null) }
+                        return@withContext
+                    }
+
+                    log.append("--- Calling API ---\n")
+                    val result = callDictionaryAPI(config, word, log)
+                    if (result != null) {
+                        log.append("SUCCESS: Got definition\n")
+                        log.append("chineseDef: ${result.chineseDef?.take(50)}\n")
+                        log.append("englishDef: ${result.englishDef?.take(50)}\n")
+                        val updated = card.copy(
+                            pronunciation = result.pronunciation ?: card.pronunciation,
+                            partOfSpeech = result.partOfSpeech ?: card.partOfSpeech,
+                            chineseDef = result.chineseDef,
+                            englishDef = result.englishDef,
+                            exampleText = result.exampleText,
+                            exampleTranslation = result.exampleTranslation,
+                        )
+                        dataStore.updateFlashcard(updated)
+                        refreshAll()
+
+                        // Update dueFlashcards in the current review session immediately
+                        _uiState.update { state ->
+                            val newDueCards = state.dueFlashcards.map {
+                                if (it.id == card.id) updated else it
+                            }
+                            state.copy(dueFlashcards = newDueCards, fetchingWord = null)
+                        }
+                    } else {
+                        log.append("ERROR: API returned null result\n")
+                        _uiState.update { it.copy(fetchingWord = null) }
+                    }
+                    saveFetchLog(context, log.toString())
+                } catch (e: Exception) {
+                    val log = StringBuilder()
+                    log.append("=== Flashcard Definition Fetch Log ===\n")
+                    log.append("Word: $word\n")
+                    log.append("EXCEPTION: ${e.javaClass.name}: ${e.message}\n")
+                    log.append(android.util.Log.getStackTraceString(e))
+                    saveFetchLog(context, log.toString())
+                    _uiState.update { it.copy(fetchingWord = null) }
+                }
+            }
+        }
+    }
+
+    private fun saveFetchLog(context: android.content.Context, log: String) {
+        try {
+            val logFile = java.io.File(context.cacheDir, "flashcard_fetch_log.txt")
+            logFile.writeText(log)
+        } catch (_: Exception) {}
+    }
+
+    private suspend fun callDictionaryAPI(config: DictionaryConfig, word: String, log: StringBuilder): DefinitionResult? {
+        val chinese = word.any { it in '\u4e00'..'\u9fff' }
+        val systemPrompt = if (chinese) {
+            "你是专业的汉语词典助手，擅长《现代汉语词典》风格的释义。"
+        } else {
+            "You are a professional bilingual dictionary assistant, skilled in Oxford-style English definitions."
+        }
+
+        val prompt = "Please provide a bilingual definition for the word: **$word**\n\n" +
+            "Return ONLY a JSON object (no markdown, no explanation):\n" +
+            """{
+  "pronunciation": "IPA phonetic (e.g., /kənˈsɜːrn/)",
+  "partOfSpeech": "part of speech (e.g., noun / verb / adjective)",
+  "chineseDef": "1. 中文释义1\n2. 中文释义2",
+  "englishDef": "1. English definition 1\n2. English definition 2",
+  "example": {"text": "English example sentence", "translation": "中文翻译"}
+}"""
+
+        log.append("System prompt: ${systemPrompt.take(60)}...\n")
+        log.append("User prompt: ${prompt.take(60)}...\n")
+
+        val messages = JSONArray().apply {
+            put(JSONObject().apply { put("role", "system"); put("content", systemPrompt) })
+            put(JSONObject().apply { put("role", "user"); put("content", prompt) })
+        }
+
+        val body = JSONObject().apply {
+            put("model", config.model.ifEmpty { "Qwen/Qwen2.5-72B-Instruct" })
+            put("messages", messages)
+            put("temperature", 0.3)
+            put("max_tokens", 800)
+            put("stream", false)
+        }
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+
+        val endpoint = config.endpoint.trimEnd('/')
+        val url = if (endpoint.contains("/chat/completions")) endpoint else "$endpoint/chat/completions"
+        log.append("Request URL: $url\n")
+
+        val request = Request.Builder()
+            .url(url)
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .addHeader("Authorization", "Bearer ${config.apiKey}")
+            .addHeader("Content-Type", "application/json")
+            .build()
+
+        val response = client.newCall(request).execute()
+        val responseBody = response.body?.string()
+        log.append("Response code: ${response.code}\n")
+        log.append("Response body (first 300 chars): ${responseBody?.take(300)}\n")
+
+        if (!response.isSuccessful) return null
+        if (responseBody.isNullOrEmpty()) return null
+
+        val json = JSONObject(responseBody)
+        val choices = json.optJSONArray("choices") ?: return null
+        if (choices.length() == 0) return null
+
+        val content = choices.optJSONObject(0)?.optJSONObject("message")?.optString("content", "") ?: return null
+        log.append("AI content: $content\n")
+        return parseDefinitionJSON(content)
+    }
+
+    data class DefinitionResult(
+        val pronunciation: String?,
+        val partOfSpeech: String?,
+        val chineseDef: String?,
+        val englishDef: String?,
+        val exampleText: String?,
+        val exampleTranslation: String?,
+    )
+
+    private fun parseDefinitionJSON(content: String): DefinitionResult? {
+        return try {
+            // Strip markdown code block wrapping (AI returns ```json ... ```)
+            val cleaned = content.replace("```json", "").replace("```", "").trim()
+            val json = JSONObject(cleaned)
+            val pronunciation = json.optString("pronunciation", "")?.takeIf { it.isNotEmpty() }
+            val partOfSpeech = json.optString("partOfSpeech", "")?.takeIf { it.isNotEmpty() }
+            val chineseDef = json.optString("chineseDef", "")?.takeIf { it.isNotEmpty() }
+            val englishDef = json.optString("englishDef", "")?.takeIf { it.isNotEmpty() }
+            var exampleText: String? = null
+            var exampleTranslation: String? = null
+            try {
+                val ex = json.optJSONObject("example")
+                if (ex != null) {
+                    exampleText = ex.optString("text", "")?.takeIf { it.isNotEmpty() }
+                    exampleTranslation = ex.optString("translation", "")?.takeIf { it.isNotEmpty() }
+                }
+            } catch (_: Exception) {}
+            DefinitionResult(pronunciation, partOfSpeech, chineseDef, englishDef, exampleText, exampleTranslation)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    data class DictionaryConfig(
+        val endpoint: String,
+        val apiKey: String,
+        val model: String,
+    )
 
     /** Batch import vocabulary words */
     suspend fun batchImportFromVocabulary(vocabs: List<Vocabulary>): Pair<Int, Int> = withContext(kotlinx.coroutines.Dispatchers.IO) {
