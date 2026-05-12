@@ -239,15 +239,17 @@ class FlashcardViewModel(
     private suspend fun callDictionaryAPI(config: DictionaryConfig, word: String, log: StringBuilder): DefinitionResult? {
         val chinese = word.any { it in '\u4e00'..'\u9fff' }
         val systemPrompt = if (chinese) {
-            "你是专业的汉语词典助手，擅长《现代汉语词典》风格的释义。"
+            "你是专业的汉语词典助手，擅长《现代汉语词典》风格的释义。请务必为每个汉字标注标准拼音。"
         } else {
             "You are a professional bilingual dictionary assistant, skilled in Oxford-style English definitions."
         }
 
+        val pronunciationType = if (chinese) "Standard Pinyin (e.g., píng guǒ)" else "IPA phonetic (e.g., /kənˈsɜːrn/)"
+        
         val prompt = "Please provide a bilingual definition for the word: **$word**\n\n" +
             "Return ONLY a JSON object (no markdown, no explanation):\n" +
             """{
-  "pronunciation": "IPA phonetic (e.g., /kənˈsɜːrn/)",
+  "pronunciation": "$pronunciationType",
   "partOfSpeech": "part of speech (e.g., noun / verb / adjective)",
   "chineseDef": "1. 中文释义1\n2. 中文释义2",
   "englishDef": "1. English definition 1\n2. English definition 2",
@@ -463,49 +465,76 @@ class FlashcardViewModel(
         }
     }
 
-    /** Mark card as remembered (spaced repetition) */
+    /** Mark card as remembered -> Remove from current review queue immediately */
     fun markRemembered() {
         viewModelScope.launch {
             val state = _uiState.value
             if (state.dueFlashcards.isEmpty() || state.currentCardIndex >= state.dueFlashcards.size) return@launch
             val card = state.dueFlashcards[state.currentCardIndex]
 
-            val newRepetition = card.repetition + 1
-            val intervalIndex = newRepetition.coerceAtMost(INTERVALS.lastIndex)
-            val newInterval = INTERVALS[intervalIndex]
-            val newDueDate = System.currentTimeMillis() + newInterval * 60 * 1000
-
+            // Persist to DB
             val updated = card.copy(
-                intervalMinutes = newInterval,
-                repetition = newRepetition,
-                dueDate = newDueDate,
+                intervalMinutes = card.intervalMinutes + 10, // Arbitrary increment
+                repetition = card.repetition + 1,
+                dueDate = System.currentTimeMillis() + 24 * 60 * 60 * 1000, // 1 day
             )
             dataStore.updateFlashcard(updated)
 
-            _uiState.update {
-                it.copy(sessionReviewed = it.sessionReviewed + 1, sessionRemembered = it.sessionRemembered + 1)
+            // Remove from current review queue
+            val newDueCards = state.dueFlashcards.toMutableList()
+            newDueCards.removeAt(state.currentCardIndex)
+
+            if (newDueCards.isEmpty()) {
+                _uiState.update {
+                    it.copy(
+                        dueFlashcards = emptyList(),
+                        reviewComplete = true,
+                        sessionReviewed = it.sessionReviewed + 1,
+                        sessionRemembered = it.sessionRemembered + 1
+                    )
+                }
+            } else {
+                // Stay at same index, next card slides in
+                _uiState.update {
+                    it.copy(
+                        dueFlashcards = newDueCards,
+                        isFlipped = false,
+                        sessionReviewed = it.sessionReviewed + 1,
+                        sessionRemembered = it.sessionRemembered + 1
+                    )
+                }
             }
-            nextCard()
         }
     }
 
-    /** Mark card as forgotten (reset interval) */
+    /** Mark card as forgotten -> Move to end of current review queue */
     fun markForgotten() {
         viewModelScope.launch {
             val state = _uiState.value
             if (state.dueFlashcards.isEmpty() || state.currentCardIndex >= state.dueFlashcards.size) return@launch
             val card = state.dueFlashcards[state.currentCardIndex]
 
-            val newDueDate = System.currentTimeMillis() + 1 * 60 * 1000
+            // Reset interval in DB
             val updated = card.copy(
-                intervalMinutes = 1,
+                intervalMinutes = 0,
                 repetition = 0,
-                dueDate = newDueDate,
+                dueDate = System.currentTimeMillis(),
             )
             dataStore.updateFlashcard(updated)
 
-            _uiState.update { it.copy(sessionReviewed = it.sessionReviewed + 1) }
-            nextCard()
+            // Move current card to end of list
+            val newDueCards = state.dueFlashcards.toMutableList()
+            val removedCard = newDueCards.removeAt(state.currentCardIndex)
+            newDueCards.add(removedCard) // Add to end
+
+            _uiState.update {
+                it.copy(
+                    dueFlashcards = newDueCards,
+                    isFlipped = false,
+                    sessionReviewed = it.sessionReviewed + 1,
+                    // Note: index stays same, now pointing to next card
+                )
+            }
         }
     }
 

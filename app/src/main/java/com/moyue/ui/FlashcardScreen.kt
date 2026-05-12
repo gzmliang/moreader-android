@@ -451,9 +451,6 @@ private fun FlashcardReviewScreen(
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        currentCard.pronunciation?.let { pron ->
-                            Text(pron, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-                        }
                         Spacer(Modifier.height(24.dp))
                         IconButton(onClick = { viewModel.speakWord(currentCard.word, context) }) {
                             Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.flashcard_speak), modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
