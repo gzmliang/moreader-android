@@ -44,6 +44,81 @@ fun VocabularyScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showExportMenu by remember { mutableStateOf(false) }
     
+    // Plan selector for imports
+    var showPlanPicker by remember { mutableStateOf(false) }
+    var pendingImportWords by remember { mutableStateOf<List<Vocabulary>>(emptyList()) }
+    var importPlanOptions by remember { mutableStateOf<List<String>>(listOf("默认")) }
+    
+    // Load plan options when picker is about to show
+    fun openPlanPicker(words: List<Vocabulary>) {
+        scope.launch {
+            val dataStore = com.moyue.app.data.FlashcardDataStore(context)
+            val plans = dataStore.getPlanNames().ifEmpty { listOf("默认") }
+            importPlanOptions = plans
+            pendingImportWords = words
+            showPlanPicker = true
+        }
+    }
+    
+    // Plan picker dialog
+    if (showPlanPicker) {
+        AlertDialog(
+            onDismissRequest = { showPlanPicker = false },
+            title = { Text("选择导入目标计划") },
+            text = {
+                Column {
+                    importPlanOptions.forEach { plan ->
+                        TextButton(
+                            onClick = {
+                                showPlanPicker = false
+                                // Perform import
+                                scope.launch {
+                                    val dataStore = com.moyue.app.data.FlashcardDataStore(context)
+                                    var imported = 0
+                                    var skipped = 0
+                                    pendingImportWords.forEach { vocab ->
+                                        var exampleText: String? = null
+                                        var exampleTranslation: String? = null
+                                        if (!vocab.exampleJson.isNullOrEmpty()) {
+                                            try {
+                                                val ex = org.json.JSONObject(vocab.exampleJson)
+                                                exampleText = ex.optString("text", null)
+                                                exampleTranslation = ex.optString("translation", null)
+                                            } catch (_: Exception) {}
+                                        }
+                                        val card = com.moyue.app.data.FlashcardDataStore.Flashcard(
+                                            id = dataStore.generateId(), word = vocab.word,
+                                            pronunciation = vocab.pronunciation, partOfSpeech = vocab.partOfSpeech,
+                                            chineseDef = vocab.chineseDef, englishDef = vocab.englishDef,
+                                            exampleText = exampleText, exampleTranslation = exampleTranslation,
+                                            dueDate = System.currentTimeMillis(),
+                                            plan = plan,
+                                        )
+                                        if (dataStore.addFlashcard(card)) imported++ else skipped++
+                                    }
+                                    val msg = if (pendingImportWords.size > 1) {
+                                        context.getString(R.string.flashcard_import_result, imported, skipped)
+                                    } else if (imported > 0) {
+                                        context.getString(R.string.flashcard_import_success)
+                                    } else {
+                                        context.getString(R.string.flashcard_import_exists)
+                                    }
+                                    snackbarHostState.showSnackbar("$msg → ${plan}")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(plan, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPlanPicker = false }) { Text("取消") }
+            }
+        )
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -55,37 +130,8 @@ fun VocabularyScreen(
                     }
                 },
                 actions = {
-                    // Batch import to flashcards
-                    IconButton(onClick = {
-                        val dataStore = com.moyue.app.data.FlashcardDataStore(context)
-                        scope.launch {
-                            var imported = 0
-                            var skipped = 0
-                            vocabulary.forEach { vocab ->
-                                var exampleText: String? = null
-                                var exampleTranslation: String? = null
-                                try {
-                                    if (!vocab.exampleJson.isNullOrEmpty()) {
-                                        val ex = org.json.JSONObject(vocab.exampleJson)
-                                        exampleText = ex.optString("text", null)
-                                        exampleTranslation = ex.optString("translation", null)
-                                    }
-                                } catch (_: Exception) {}
-                                val card = com.moyue.app.data.FlashcardDataStore.Flashcard(
-                                    id = dataStore.generateId(), word = vocab.word,
-                                    pronunciation = vocab.pronunciation, partOfSpeech = vocab.partOfSpeech,
-                                    chineseDef = vocab.chineseDef, englishDef = vocab.englishDef,
-                                    exampleText = exampleText, exampleTranslation = exampleTranslation,
-                                    dueDate = System.currentTimeMillis(),
-                                    plan = "默认",
-                                )
-                                if (dataStore.addFlashcard(card)) imported++ else skipped++
-                            }
-                            snackbarHostState.showSnackbar(
-                                context.getString(R.string.flashcard_import_result, imported, skipped)
-                            )
-                        }
-                    }) {
+                    // Batch import to flashcards — opens plan picker
+                    IconButton(onClick = { openPlanPicker(vocabulary) }) {
                         Icon(Icons.Default.Bolt, contentDescription = stringResource(R.string.flashcard_batch_import))
                     }
                     Box {
@@ -151,31 +197,7 @@ fun VocabularyScreen(
                             }
                         }},
                         onAddToFlashcard = { vocab ->
-                            val dataStore = com.moyue.app.data.FlashcardDataStore(context)
-                            scope.launch {
-                                var exampleText: String? = null
-                                var exampleTranslation: String? = null
-                                if (!vocab.exampleJson.isNullOrEmpty()) {
-                                    try {
-                                        val ex = org.json.JSONObject(vocab.exampleJson)
-                                        exampleText = ex.optString("text", null)
-                                        exampleTranslation = ex.optString("translation", null)
-                                    } catch (_: Exception) {}
-                                }
-                                val card = com.moyue.app.data.FlashcardDataStore.Flashcard(
-                                    id = dataStore.generateId(), word = vocab.word,
-                                    pronunciation = vocab.pronunciation, partOfSpeech = vocab.partOfSpeech,
-                                    chineseDef = vocab.chineseDef, englishDef = vocab.englishDef,
-                                    exampleText = exampleText, exampleTranslation = exampleTranslation,
-                                    dueDate = System.currentTimeMillis(),
-                                    plan = "默认",
-                                )
-                                val success = dataStore.addFlashcard(card)
-                                snackbarHostState.showSnackbar(
-                                    if (success) context.getString(R.string.flashcard_import_success)
-                                    else context.getString(R.string.flashcard_import_exists)
-                                )
-                            }
+                            openPlanPicker(listOf(vocab))
                         }
                     )
                 }
