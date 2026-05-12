@@ -274,7 +274,8 @@ class ReaderViewModel(
     }
     private suspend fun saveProgress() { 
         val s = _uiState.value; val b = s.book ?: return; val c = s.chapters.getOrNull(s.currentChapterIndex) ?: return
-        val paraIdx = s.currentParagraphIndex.coerceIn(0, s.ttsParagraphs.size.coerceAtMost(100) - 1)
+        val maxIdx = s.ttsParagraphs.size.coerceAtMost(100) - 1
+        val paraIdx = if (maxIdx < 0) 0 else s.currentParagraphIndex.coerceIn(0, maxIdx)
         repository.updateProgress(b.id, c.href, s.currentChapterIndex, b.currentProgress, null, paraIdx, s.theme.id, s.fontSize) 
     }
     fun setTheme(t: ReaderTheme) { 
