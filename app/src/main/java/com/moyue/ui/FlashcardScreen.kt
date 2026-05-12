@@ -38,6 +38,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import com.moyue.app.R
 import com.moyue.app.data.BookRepository
 import com.moyue.app.data.FlashcardDataStore
+import com.moyue.app.data.FlashcardDataStore.Companion.DEFAULT_PLAN
 import com.moyue.app.data.FlashcardDataStore.Flashcard
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -303,7 +304,7 @@ private fun PlanSelector(
                     )
                 },
                 selected = isSelected,
-                trailingIcon = if (isSelected && plan != stringResource(R.string.flashcard_plan_default)) {
+                trailingIcon = if (isSelected && plan != DEFAULT_PLAN) {
                     @Composable {
                         IconButton(onClick = onDeletePlan, modifier = Modifier.size(18.dp)) {
                             Icon(Icons.Default.Close, contentDescription = stringResource(R.string.flashcard_plan_delete), modifier = Modifier.size(14.dp))
@@ -497,14 +498,14 @@ private fun FlashcardReviewScreen(
                             ) {
                                 CircularProgressIndicator(modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
                                 Spacer(Modifier.height(12.dp))
-                                Text("正在获取释义…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(stringResource(R.string.flashcard_fetching_definition), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         } else {
                             // Chinese definition (always shown if available)
                             if (!currentCard.chineseDef.isNullOrBlank()) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text("🇨🇳 ", fontSize = 16.sp)
-                                    Text("中文释义", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFF2196F3))
+                                    Text(stringResource(R.string.flashcard_chinese_def), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFF2196F3))
                                 }
                                 Text(currentCard.chineseDef, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
                                 Spacer(Modifier.height(12.dp))
@@ -526,7 +527,7 @@ private fun FlashcardReviewScreen(
                                 Spacer(Modifier.height(8.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text("📖 ", fontSize = 16.sp)
-                                    Text("例句 Example", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFFFF9800))
+                                    Text(stringResource(R.string.flashcard_example_sentence), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFFFF9800))
                                 }
                                 Text(currentCard.exampleText, style = MaterialTheme.typography.bodyMedium, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
                                 currentCard.exampleTranslation?.let {
@@ -543,13 +544,13 @@ private fun FlashcardReviewScreen(
                                 ) {
                                     Text("⚠️", fontSize = 24.sp)
                                     Spacer(Modifier.height(8.dp))
-                                    Text("暂无释义", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text("请检查 AI 词典 API 配置", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                                    Text(stringResource(R.string.flashcard_no_definition), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(stringResource(R.string.flashcard_no_definition_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                                 }
                             }
                         }
 
-                        Text("点击返回正面", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                        Text(stringResource(R.string.flashcard_tap_back_front), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }

@@ -249,4 +249,10 @@
     <string name="flashcard_plan_delete">删除计划</string>
     <string name="flashcard_speak">发音</string>
     <string name="flashcard_import_plan_title">选择导入目标计划</string>
+    <string name="flashcard_fetching_definition">正在获取释义…</string>
+    <string name="flashcard_chinese_def">中文释义</string>
+    <string name="flashcard_example_sentence">例句 Example</string>
+    <string name="flashcard_no_definition">暂无释义</string>
+    <string name="flashcard_no_definition_hint">请检查 AI 词典 API 配置</string>
+    <string name="flashcard_tap_back_front">点击返回正面</string>
 </resources>
