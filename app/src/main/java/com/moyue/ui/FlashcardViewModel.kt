@@ -508,15 +508,82 @@ class FlashcardViewModel(
         }
     }
 
-    // ========================
-    // TTS
-    // ========================
-
-    fun getTtsLog(context: android.content.Context): String? {
+    // Copy of working TTS fetch methods from VocabularyViewModel
+    private suspend fun fetchEdgeTTSWorking(endpoint: String, voice: String, apiKey: String, text: String, log: StringBuilder): ByteArray? {
         return try {
-            val logFile = java.io.File(context.cacheDir, "flashcard_tts_log.txt")
-            if (logFile.exists()) logFile.readText() else null
-        } catch (_: Exception) { null }
+            val json = JSONObject().apply {
+                put("text", text)
+                put("voice", voice)
+                put("rate", "+0%")
+                put("pitch", "+0Hz")
+            }
+            val body = json.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("${endpoint.removeSuffix("/")}/tts")
+                .post(body)
+                .apply { if (apiKey.isNotEmpty()) addHeader("X-API-Key", apiKey) }
+                .build()
+            val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+            val response = client.newCall(request).execute()
+            log.append("Edge TTS response: code=${response.code} size=${response.body?.contentLength()}\n")
+            if (response.isSuccessful) response.body?.bytes() else null
+        } catch (e: Exception) {
+            log.append("Edge TTS exception: ${e.javaClass.name}: ${e.message}\n")
+            null
+        }
+    }
+
+    private suspend fun fetchCustomTTSWorking(endpoint: String, apiKey: String, model: String, voice: String, text: String, log: StringBuilder): ByteArray? {
+        return try {
+            val json = JSONObject().apply {
+                put("model", model)
+                put("input", text)
+                put("voice", voice)
+            }
+            val body = json.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("${endpoint.removeSuffix("/")}/audio/speech")
+                .post(body)
+                .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Content-Type", "application/json")
+                .build()
+            val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+            val response = client.newCall(request).execute()
+            log.append("Custom TTS response: code=${response.code} size=${response.body?.contentLength()}\n")
+            if (response.isSuccessful) response.body?.bytes() else null
+        } catch (e: Exception) {
+            log.append("Custom TTS exception: ${e.javaClass.name}: ${e.message}\n")
+            null
+        }
+    }
+
+    private suspend fun fetchAITTSWorking(endpoint: String, apiKey: String, model: String, voice: String, text: String, log: StringBuilder): ByteArray? {
+        return try {
+            val json = JSONObject().apply {
+                put("model", model)
+                put("input", text)
+                put("voice", voice)
+            }
+            val body = json.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("${endpoint.removeSuffix("/")}/audio/speech")
+                .post(body)
+                .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Content-Type", "application/json")
+                .build()
+            val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+            val response = client.newCall(request).execute()
+            log.append("AI TTS response: code=${response.code} size=${response.body?.contentLength()}\n")
+            if (response.isSuccessful) response.body?.bytes() else null
+        } catch (e: Exception) {
+            log.append("AI TTS exception: ${e.javaClass.name}: ${e.message}\n")
+            null
+        }
+    }
+    private var lastTtsLog: String = ""
+
+    fun getTtsLog(): String? {
+        return if (lastTtsLog.isNotEmpty()) lastTtsLog else null
     }
 
     fun speakWord(word: String, context: Context) {
@@ -527,6 +594,7 @@ class FlashcardViewModel(
         log.append("=== Flashcard TTS Log ===\n")
         log.append("Word: $word\n")
         log.append("Time: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}\n\n")
+        lastTtsLog = log.toString()
 
         viewModelScope.launch {
             withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -535,146 +603,79 @@ class FlashcardViewModel(
                     val providerType = prefs.getString("tts_provider", "edge_tts") ?: "edge_tts"
                     val ttsType = try { TTSProviderType.valueOf(providerType) } catch (e: IllegalArgumentException) { TTSProviderType.EDGE_TTS }
 
-                    log.append("Provider: $providerType\n")
+                    log.append("Provider from prefs: '$providerType' -> resolved: $ttsType\n")
 
                     val audioBytes = when (ttsType) {
                         TTSProviderType.EDGE_TTS -> {
                             val endpoint = prefs.getString("edge_endpoint", "http://powerplus.blogsyte.com:5001") ?: "http://powerplus.blogsyte.com:5001"
-                            val voice = prefs.getString("edge_voice", "en-US-JennyNeural") ?: "en-US-JennyNeural"
+                            val voice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural"
                             val apiKey = prefs.getString("edge_apikey", "") ?: ""
-                            log.append("Edge TTS config:\n")
-                            log.append("  endpoint: $endpoint\n")
-                            log.append("  voice: $voice\n")
-                            log.append("  apiKey length: ${apiKey.length}\n")
-                            fetchEdgeTTS(endpoint, voice, apiKey, word, log)
+                            log.append("Edge TTS: endpoint=$endpoint voice=$voice apiKey_len=${apiKey.length}\n")
+                            fetchEdgeTTSWorking(endpoint, voice, apiKey, word, log)
                         }
                         TTSProviderType.CUSTOM_TTS -> {
                             val endpoint = prefs.getString("custom_endpoint", "http://192.168.199.101:18083") ?: "http://192.168.199.101:18083"
                             val apiKey = prefs.getString("custom_apikey", "dummy") ?: "dummy"
                             val model = prefs.getString("custom_model", "moss-tts-nano") ?: "moss-tts-nano"
                             val voice = prefs.getString("custom_voice", "Lingyu") ?: "Lingyu"
-                            log.append("Custom TTS config:\n")
-                            log.append("  endpoint: $endpoint\n")
-                            log.append("  model: $model\n")
-                            log.append("  voice: $voice\n")
-                            fetchCustomTTS(endpoint, apiKey, model, voice, word, log)
+                            log.append("Custom TTS: endpoint=$endpoint model=$model voice=$voice\n")
+                            fetchCustomTTSWorking(endpoint, apiKey, model, voice, word, log)
                         }
                         TTSProviderType.AI_VOICE -> {
                             val endpoint = prefs.getString("ai_endpoint", "https://api.siliconflow.cn/v1") ?: "https://api.siliconflow.cn/v1"
                             val apiKey = prefs.getString("ai_apikey", "") ?: ""
                             val model = prefs.getString("ai_model", "fnlp/MOSS-TTSD-v0.5") ?: "fnlp/MOSS-TTSD-v0.5"
                             val voice = prefs.getString("ai_voice_id", "fnlp/MOSS-TTSD-v0.5:anna") ?: "fnlp/MOSS-TTSD-v0.5:anna"
-                            log.append("AI TTS config:\n")
-                            log.append("  endpoint: $endpoint\n")
-                            log.append("  model: $model\n")
-                            log.append("  voice: $voice\n")
-                            fetchAITTS(endpoint, apiKey, model, voice, word, log)
+                            log.append("AI TTS: endpoint=$endpoint model=$model voice=$voice\n")
+                            fetchAITTSWorking(endpoint, apiKey, model, voice, word, log)
                         }
-                        else -> fetchEdgeTTS("http://powerplus.blogsyte.com:5001", "en-US-JennyNeural", "", word, log)
+                        TTSProviderType.SYSTEM -> {
+                            log.append("SYSTEM TTS not supported for flashcard, falling back to Edge TTS\n")
+                            fetchEdgeTTSWorking("http://powerplus.blogsyte.com:5001", "zh-CN-XiaoxiaoNeural", "", word, log)
+                        }
                     }
 
-                    log.append("Audio bytes size: ${audioBytes?.size ?: 0}\n")
+                    log.append("Audio bytes: ${audioBytes?.size ?: 0}\n")
 
                     if (audioBytes != null && audioBytes.isNotEmpty()) {
-                        log.append("Audio received, attempting playback...\n")
                         withContext(kotlinx.coroutines.Dispatchers.Main) {
                             try {
                                 val tempFile = File.createTempFile("flashcard_tts_", ".mp3", context.cacheDir)
                                 tempFile.writeBytes(audioBytes)
-                                log.append("Temp file: ${tempFile.absolutePath} (${tempFile.length()} bytes)\n")
                                 audioPlayer = MediaPlayer().apply {
                                     setDataSource(tempFile.absolutePath)
                                     setOnCompletionListener {
                                         log.append("Playback completed\n")
-                                        saveTtsLog(context, log.toString())
+                                        lastTtsLog = log.toString()
                                         audioPlayer?.release(); audioPlayer = null; tempFile.delete()
                                     }
                                     setOnErrorListener { _, what, extra ->
                                         log.append("MediaPlayer error: what=$what extra=$extra\n")
-                                        saveTtsLog(context, log.toString())
+                                        lastTtsLog = log.toString()
                                         audioPlayer?.release(); audioPlayer = null; tempFile.delete()
                                         true
                                     }
                                     prepare()
                                     start()
-                                    log.append("MediaPlayer started successfully\n")
+                                    log.append("MediaPlayer started\n")
+                                    lastTtsLog = log.toString()
                                 }
                             } catch (e: Exception) {
-                                log.append("MediaPlayer prepare failed: ${e.javaClass.name}: ${e.message}\n")
+                                log.append("MediaPlayer failed: ${e.javaClass.name}: ${e.message}\n")
                                 log.append(android.util.Log.getStackTraceString(e))
-                                saveTtsLog(context, log.toString())
+                                lastTtsLog = log.toString()
                             }
                         }
                     } else {
-                        log.append("ERROR: TTS returned empty/null audio\n")
-                        saveTtsLog(context, log.toString())
+                        log.append("TTS returned empty audio\n")
+                        lastTtsLog = log.toString()
                     }
                 } catch (e: Exception) {
-                    log.append("FATAL ERROR: ${e.javaClass.name}: ${e.message}\n")
+                    log.append("FATAL: ${e.javaClass.name}: ${e.message}\n")
                     log.append(android.util.Log.getStackTraceString(e))
-                    saveTtsLog(context, log.toString())
+                    lastTtsLog = log.toString()
                 }
             }
-        }
-    }
-
-    private fun saveTtsLog(context: android.content.Context, log: String) {
-        try {
-            val logFile = java.io.File(context.cacheDir, "flashcard_tts_log.txt")
-            logFile.writeText(log)
-        } catch (_: Exception) {}
-    }
-
-    private suspend fun fetchEdgeTTS(endpoint: String, voice: String, apiKey: String, text: String, log: StringBuilder? = null): ByteArray? {
-        return try {
-            val json = JSONObject().apply { put("text", text); put("voice", voice); put("rate", "+0%"); put("pitch", "+0Hz") }
-            val body = json.toString().toRequestBody("application/json".toMediaType())
-            val request = Request.Builder().url("${endpoint.removeSuffix("/")}/tts").post(body)
-                .apply { if (apiKey.isNotEmpty()) addHeader("X-API-Key", apiKey) }.build()
-            val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
-            log?.append("Edge TTS request: POST ${endpoint.removeSuffix("/")}/tts voice=$voice\n")
-            val response = client.newCall(request).execute()
-            log?.append("Edge TTS response: code=${response.code} body=${response.body?.contentLength()} bytes\n")
-            if (response.isSuccessful) response.body?.bytes() else null
-        } catch (e: Exception) {
-            log?.append("Edge TTS exception: ${e.javaClass.name}: ${e.message}\n")
-            null
-        }
-    }
-
-    private suspend fun fetchCustomTTS(endpoint: String, apiKey: String, model: String, voice: String, text: String, log: StringBuilder? = null): ByteArray? {
-        return try {
-            val json = JSONObject().apply { put("model", model); put("input", text); put("voice", voice) }
-            val body = json.toString().toRequestBody("application/json".toMediaType())
-            val url = "${endpoint.removeSuffix("/")}/audio/speech"
-            val request = Request.Builder().url(url).post(body)
-                .addHeader("Authorization", "Bearer $apiKey").addHeader("Content-Type", "application/json").build()
-            val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
-            log?.append("Custom TTS request: POST $url model=$model voice=$voice\n")
-            val response = client.newCall(request).execute()
-            log?.append("Custom TTS response: code=${response.code} body=${response.body?.contentLength()} bytes\n")
-            if (response.isSuccessful) response.body?.bytes() else null
-        } catch (e: Exception) {
-            log?.append("Custom TTS exception: ${e.javaClass.name}: ${e.message}\n")
-            null
-        }
-    }
-
-    private suspend fun fetchAITTS(endpoint: String, apiKey: String, model: String, voice: String, text: String, log: StringBuilder? = null): ByteArray? {
-        return try {
-            val json = JSONObject().apply { put("model", model); put("input", text); put("voice", voice) }
-            val body = json.toString().toRequestBody("application/json".toMediaType())
-            val url = "${endpoint.removeSuffix("/")}/audio/speech"
-            val request = Request.Builder().url(url).post(body)
-                .addHeader("Authorization", "Bearer $apiKey").addHeader("Content-Type", "application/json").build()
-            val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
-            log?.append("AI TTS request: POST $url model=$model voice=$voice\n")
-            val response = client.newCall(request).execute()
-            log?.append("AI TTS response: code=${response.code} body=${response.body?.contentLength()} bytes\n")
-            if (response.isSuccessful) response.body?.bytes() else null
-        } catch (e: Exception) {
-            log?.append("AI TTS exception: ${e.javaClass.name}: ${e.message}\n")
-            null
         }
     }
 

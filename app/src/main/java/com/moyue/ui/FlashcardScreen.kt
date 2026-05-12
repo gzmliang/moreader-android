@@ -170,7 +170,7 @@ fun FlashcardScreen(
                 actions = {
                     // TTS log button
                     IconButton(onClick = {
-                        ttsLogContent = viewModel.getTtsLog(context)
+                        ttsLogContent = viewModel.getTtsLog()
                         showTtsLogDialog = true
                     }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "查看TTS日志")
