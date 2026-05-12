@@ -208,4 +208,27 @@
 
     <!-- Translation -->
     <string name="original_text_label">Original</string>
+
+    <!-- Flashcard -->
+    <string name="flashcard_title">Flashcard Review</string>
+    <string name="flashcard_empty">No flashcards yet. Import words from vocabulary to start reviewing.</string>
+    <string name="flashcard_review_overview">Review Overview</string>
+    <string name="flashcard_total">Total</string>
+    <string name="flashcard_due">Due</string>
+    <string name="flashcard_due_now">Due Now</string>
+    <string name="flashcard_scheduled">Scheduled</string>
+    <string name="flashcard_start_review">Start Review</string>
+    <string name="flashcard_no_due_cards">No cards due for review</string>
+    <string name="flashcard_tap_to_flip">Tap to flip</string>
+    <string name="flashcard_remembered">Remembered</string>
+    <string name="flashcard_forgot">Forgot</string>
+    <string name="flashcard_review_complete">Review Complete!</string>
+    <string name="flashcard_session_summary">Reviewed %1$d cards, remembered %2$d</string>
+    <string name="flashcard_back_to_list">Back to List</string>
+    <string name="flashcard_remove_card">Remove</string>
+    <string name="flashcard_reset_card">Reset</string>
+    <string name="flashcard_import_success">Added to flashcards</string>
+    <string name="flashcard_import_exists">Already in flashcards</string>
+    <string name="flashcard_batch_import">Add to Flashcards</string>
+    <string name="flashcard_import_result">Imported %1$d, skipped %2$d</string>
 </resources>

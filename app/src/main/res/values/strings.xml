@@ -208,4 +208,27 @@
 
     <!-- Translation -->
     <string name="original_text_label">原文</string>
+
+    <!-- Flashcard -->
+    <string name="flashcard_title">闪卡复习</string>
+    <string name="flashcard_empty">暂无闪卡，从生词本导入单词开始复习吧</string>
+    <string name="flashcard_review_overview">复习概览</string>
+    <string name="flashcard_total">总词数</string>
+    <string name="flashcard_due">待复习</string>
+    <string name="flashcard_due_now">到期</string>
+    <string name="flashcard_scheduled">未到期</string>
+    <string name="flashcard_start_review">开始复习</string>
+    <string name="flashcard_no_due_cards">暂时没有到期的卡片</string>
+    <string name="flashcard_tap_to_flip">点击翻转</string>
+    <string name="flashcard_remembered">记住了</string>
+    <string name="flashcard_forgot">忘了</string>
+    <string name="flashcard_review_complete">复习完成！</string>
+    <string name="flashcard_session_summary">本次复习 %1$d 张，记住 %2$d 张</string>
+    <string name="flashcard_back_to_list">返回卡片列表</string>
+    <string name="flashcard_remove_card">移除闪卡</string>
+    <string name="flashcard_reset_card">重置复习</string>
+    <string name="flashcard_import_success">已添加到闪卡</string>
+    <string name="flashcard_import_exists">该单词已在闪卡中</string>
+    <string name="flashcard_batch_import">批量加入闪卡</string>
+    <string name="flashcard_import_result">成功导入 %1$d 个，跳过 %2$d 个</string>
 </resources>

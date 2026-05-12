@@ -3,27 +3,49 @@ package com.moyue.app
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CopyAll
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import com.moyue.app.data.BookRepository
 import com.moyue.app.ui.BookmarksScreen
+import com.moyue.app.ui.FlashcardScreen
 import com.moyue.app.ui.LibraryScreen
 import com.moyue.app.ui.ReaderScreen
 import com.moyue.app.ui.VocabularyScreen
 import com.moyue.app.ui.theme.MoreaderTheme
 import com.moyue.app.util.LocaleHelper
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.PrintWriter
+import java.io.StringWriter
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var repository: BookRepository
     private var sharedUris: List<Uri> = emptyList()
+
+    companion object {
+        private const val TAG = "CrashHandler"
+    }
 
     // Override attachBaseContext to wrap with our locale — this is the
     // standard Android approach that works reliably on all API levels.
@@ -36,14 +58,32 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Install crash handler — writes crash log to file so user can copy on next launch
+        val crashLogFile = File(getCacheDir(), "crash_log.txt")
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val sw = StringWriter()
+                throwable.printStackTrace(PrintWriter(sw))
+                crashLogFile.writeText("Thread: ${thread.name}\n\n${sw.toString()}")
+            } catch (_: Exception) {}
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+
         repository = BookRepository(applicationContext)
 
         // Handle shared files from other apps
         handleIntent(intent)
 
+        // Check for previous crash log and pass to Compose
+        val previousCrash = if (crashLogFile.exists()) {
+            runCatching { crashLogFile.readText() }.getOrNull()
+        } else null
+        previousCrash?.let { crashLogFile.delete() }
+
         setContent {
             MoreaderTheme {
-                MoreaderApp(repository, this@MainActivity, sharedUris) { sharedUris = emptyList() }
+                MoreaderApp(repository, this@MainActivity, sharedUris, previousCrash) { sharedUris = emptyList() }
             }
         }
     }
@@ -82,11 +122,20 @@ sealed class Screen {
     data class Reader(val bookId: String) : Screen()
     data object Bookmarks : Screen()
     data object Vocabulary : Screen()
+    data object Flashcards : Screen()
 }
 
 @Composable
-fun MoreaderApp(repository: BookRepository, activity: ComponentActivity, sharedUris: List<Uri> = emptyList(), onSharedUrisConsumed: () -> Unit = {}) {
+fun MoreaderApp(
+    repository: BookRepository,
+    activity: ComponentActivity,
+    sharedUris: List<Uri> = emptyList(),
+    previousCrash: String? = null,
+    onSharedUrisConsumed: () -> Unit = {},
+) {
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Library) }
+    var showCrashDialog by remember { mutableStateOf(previousCrash != null) }
+    var crashText by remember { mutableStateOf(previousCrash ?: "") }
 
     when (val screen = currentScreen) {
         is Screen.Library -> {
@@ -94,11 +143,11 @@ fun MoreaderApp(repository: BookRepository, activity: ComponentActivity, sharedU
                 onOpenBook = { bookId -> currentScreen = Screen.Reader(bookId) },
                 onOpenBookmarks = { currentScreen = Screen.Bookmarks },
                 onOpenVocabulary = { currentScreen = Screen.Vocabulary },
+                onOpenFlashcards = { currentScreen = Screen.Flashcards },
                 repository = repository,
                 sharedUris = sharedUris,
                 onSharedUrisConsumed = onSharedUrisConsumed,
                 onLanguageSwitch = {
-                    // Restart activity to apply new locale
                     activity.recreate()
                 },
             )
@@ -125,5 +174,69 @@ fun MoreaderApp(repository: BookRepository, activity: ComponentActivity, sharedU
                 onBack = { currentScreen = Screen.Library }
             )
         }
+        is Screen.Flashcards -> {
+            FlashcardScreen(
+                repository = repository,
+                onBack = { currentScreen = Screen.Library }
+            )
+        }
     }
+
+    // Show crash dialog from previous session
+    if (showCrashDialog && crashText.isNotEmpty()) {
+        CrashDialog(
+            errorText = crashText,
+            onDismiss = { showCrashDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun CrashDialog(errorText: String, onDismiss: () -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("💥", fontSize = 24.sp)
+                Spacer(Modifier.width(8.dp))
+                Text("闪退报告", color = Color(0xFFD32F2F))
+            }
+        },
+        text = {
+            Column {
+                Text("请长按复制下面的错误信息发给开发者：", style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 250.dp)
+                        .background(Color(0xFFF5F5F5), shape = MaterialTheme.shapes.small)
+                ) {
+                    LazyColumn(modifier = Modifier.padding(8.dp)) {
+                        item {
+                            Text(errorText, fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = Color(0xFF333333))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(errorText))
+                        copied = true
+                    }
+                ) {
+                    Icon(Icons.Default.CopyAll, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (copied) "已复制 ✓" else "复制全部")
+                }
+                Button(onClick = onDismiss) { Text("关闭") }
+            }
+        }
+    )
 }

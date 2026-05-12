@@ -44,6 +44,7 @@ fun LibraryScreen(
     onOpenBook: (String) -> Unit,
     onOpenBookmarks: () -> Unit = {},
     onOpenVocabulary: () -> Unit = {},
+    onOpenFlashcards: () -> Unit = {},
     repository: BookRepository,
     onLanguageSwitch: () -> Unit = {},
     sharedUris: List<Uri> = emptyList(),
@@ -86,6 +87,9 @@ fun LibraryScreen(
                     }
                     IconButton(onClick = onOpenVocabulary) {
                         Icon(Icons.Default.MenuBook, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_title))
+                    }
+                    IconButton(onClick = onOpenFlashcards) {
+                        Icon(Icons.Default.Bolt, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.flashcard_title))
                     }
                     IconButton(onClick = {
                         importLauncher.launch(arrayOf("application/epub+zip"))

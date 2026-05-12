@@ -95,7 +95,12 @@ fun ReaderScreen(
                 }
             },
             text = {
-                Column {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
                     // Show original text
                     val selectedTxt = state.selectedText
                     if (selectedTxt != null) {

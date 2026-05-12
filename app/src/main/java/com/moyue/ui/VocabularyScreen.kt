@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.VolumeUp
@@ -54,6 +55,38 @@ fun VocabularyScreen(
                     }
                 },
                 actions = {
+                    // Batch import to flashcards
+                    IconButton(onClick = {
+                        val dataStore = com.moyue.app.data.FlashcardDataStore(context)
+                        scope.launch {
+                            var imported = 0
+                            var skipped = 0
+                            vocabulary.forEach { vocab ->
+                                var exampleText: String? = null
+                                var exampleTranslation: String? = null
+                                try {
+                                    if (!vocab.exampleJson.isNullOrEmpty()) {
+                                        val ex = org.json.JSONObject(vocab.exampleJson)
+                                        exampleText = ex.optString("text", null)
+                                        exampleTranslation = ex.optString("translation", null)
+                                    }
+                                } catch (_: Exception) {}
+                                val card = com.moyue.app.data.FlashcardDataStore.Flashcard(
+                                    id = dataStore.generateId(), word = vocab.word,
+                                    pronunciation = vocab.pronunciation, partOfSpeech = vocab.partOfSpeech,
+                                    chineseDef = vocab.chineseDef, englishDef = vocab.englishDef,
+                                    exampleText = exampleText, exampleTranslation = exampleTranslation,
+                                    dueDate = System.currentTimeMillis(),
+                                )
+                                if (dataStore.addFlashcard(card)) imported++ else skipped++
+                            }
+                            snackbarHostState.showSnackbar(
+                                context.getString(R.string.flashcard_import_result, imported, skipped)
+                            )
+                        }
+                    }) {
+                        Icon(Icons.Default.Bolt, contentDescription = stringResource(R.string.flashcard_batch_import))
+                    }
                     Box {
                         IconButton(onClick = { showExportMenu = true }) {
                             Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.vocabulary_export_csv))
@@ -115,7 +148,33 @@ fun VocabularyScreen(
                             scope.launch {
                                 if (!success) snackbarHostState.showSnackbar(message)
                             }
-                        }}
+                        }},
+                        onAddToFlashcard = { vocab ->
+                            val dataStore = com.moyue.app.data.FlashcardDataStore(context)
+                            scope.launch {
+                                var exampleText: String? = null
+                                var exampleTranslation: String? = null
+                                if (!vocab.exampleJson.isNullOrEmpty()) {
+                                    try {
+                                        val ex = org.json.JSONObject(vocab.exampleJson)
+                                        exampleText = ex.optString("text", null)
+                                        exampleTranslation = ex.optString("translation", null)
+                                    } catch (_: Exception) {}
+                                }
+                                val card = com.moyue.app.data.FlashcardDataStore.Flashcard(
+                                    id = dataStore.generateId(), word = vocab.word,
+                                    pronunciation = vocab.pronunciation, partOfSpeech = vocab.partOfSpeech,
+                                    chineseDef = vocab.chineseDef, englishDef = vocab.englishDef,
+                                    exampleText = exampleText, exampleTranslation = exampleTranslation,
+                                    dueDate = System.currentTimeMillis(),
+                                )
+                                val success = dataStore.addFlashcard(card)
+                                snackbarHostState.showSnackbar(
+                                    if (success) context.getString(R.string.flashcard_import_success)
+                                    else context.getString(R.string.flashcard_import_exists)
+                                )
+                            }
+                        }
                     )
                 }
             }
@@ -129,7 +188,8 @@ private fun VocabularyItem(
     isSpeaking: Boolean,
     onSpeak: () -> Unit,
     onDelete: () -> Unit,
-    onFetchDefinition: () -> Unit
+    onFetchDefinition: () -> Unit,
+    onAddToFlashcard: (Vocabulary) -> Unit
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     var showDefinition by remember { mutableStateOf(false) }
@@ -158,6 +218,10 @@ private fun VocabularyItem(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
+                
+                IconButton(onClick = { onAddToFlashcard(vocab) }) {
+                    Icon(Icons.Default.Bolt, contentDescription = stringResource(R.string.flashcard_batch_import), tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(20.dp))
+                }
                 
                 IconButton(
                     onClick = { onSpeak() },
