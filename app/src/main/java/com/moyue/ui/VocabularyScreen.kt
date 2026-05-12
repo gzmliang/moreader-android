@@ -77,6 +77,7 @@ fun VocabularyScreen(
                                     chineseDef = vocab.chineseDef, englishDef = vocab.englishDef,
                                     exampleText = exampleText, exampleTranslation = exampleTranslation,
                                     dueDate = System.currentTimeMillis(),
+                                    plan = "默认",
                                 )
                                 if (dataStore.addFlashcard(card)) imported++ else skipped++
                             }
@@ -167,6 +168,7 @@ fun VocabularyScreen(
                                     chineseDef = vocab.chineseDef, englishDef = vocab.englishDef,
                                     exampleText = exampleText, exampleTranslation = exampleTranslation,
                                     dueDate = System.currentTimeMillis(),
+                                    plan = "默认",
                                 )
                                 val success = dataStore.addFlashcard(card)
                                 snackbarHostState.showSnackbar(

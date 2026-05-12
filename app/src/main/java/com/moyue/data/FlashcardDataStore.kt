@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicLong
 class FlashcardDataStore(context: Context) {
 
     private val flashcardFile = File(context.filesDir, "flashcards.json")
+    private val plansFile = File(context.filesDir, "flashcard_plans.json")
     private val mutex = Mutex()
 
     data class Flashcard(
@@ -34,6 +35,7 @@ class FlashcardDataStore(context: Context) {
         val repetition: Int = 0,
         val dueDate: Long = 0,
         val createdAt: Long = System.currentTimeMillis(),
+        val plan: String = "默认",
     )
 
     companion object {
@@ -63,6 +65,7 @@ class FlashcardDataStore(context: Context) {
                         repetition = obj.optInt("repetition", 0),
                         dueDate = obj.optLong("dueDate", 0),
                         createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                        plan = obj.optString("plan", "默认"),
                     )
                 }
                 // Deduplicate by word — keep first occurrence, reassign IDs to duplicates
@@ -120,6 +123,66 @@ class FlashcardDataStore(context: Context) {
         return getAllFlashcards().any { it.word.equals(word, ignoreCase = true) }
     }
 
+    suspend fun getPlanNames(): List<String> {
+        val filePlans = loadPlansFromFile()
+        // Merge with plans from existing cards (for backward compatibility)
+        val cardPlans = getAllFlashcards().map { it.plan }.toSet()
+        return (filePlans.toSet() + cardPlans).sorted()
+    }
+
+    private fun loadPlansFromFile(): List<String> {
+        return try {
+            if (plansFile.exists()) {
+                val raw = plansFile.readText()
+                if (raw.isNotBlank()) {
+                    JSONArray(raw).let { arr ->
+                        (0 until arr.length()).map { arr.getString(it) }
+                    }
+                } else emptyList()
+            } else emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun savePlansToFile(plans: List<String>) {
+        try {
+            val json = JSONArray()
+            plans.forEach { json.put(it) }
+            plansFile.writeText(json.toString(2))
+        } catch (e: Exception) {
+            Log.e("FlashcardDataStore", "savePlansToFile error", e)
+        }
+    }
+
+    suspend fun createPlan(name: String) = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            val existing = loadPlansFromFile()
+            if (existing.contains(name)) return@withContext
+            savePlansToFile(existing + name)
+        }
+    }
+
+    suspend fun deletePlan(planName: String) = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            // Remove cards for this plan
+            val remainingCards = readAllUnsafe().filter { it.plan != planName }
+            writeAllUnsafe(remainingCards)
+            // Remove plan name from plans file
+            val existing = loadPlansFromFile()
+            savePlansToFile(existing - planName)
+        }
+    }
+
+    suspend fun renamePlan(oldName: String, newName: String) = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            val all = readAllUnsafe().map { card ->
+                if (card.plan == oldName) card.copy(plan = newName) else card
+            }
+            writeAllUnsafe(all)
+        }
+    }
+
     // Thread-safe counter — avoids duplicate IDs during batch import
     private val idCounter = AtomicLong(System.currentTimeMillis() * 1000)
     fun generateId(): Long = idCounter.incrementAndGet()
@@ -131,23 +194,24 @@ class FlashcardDataStore(context: Context) {
             val raw = flashcardFile.readText()
             if (raw.isBlank()) return emptyList()
             val json = JSONArray(raw)
-            return (0 until json.length()).map { i ->
-                val obj = json.getJSONObject(i)
-                Flashcard(
-                    id = obj.getLong("id"),
-                    word = obj.getString("word"),
-                    pronunciation = obj.optString("pronunciation", null),
-                    partOfSpeech = obj.optString("partOfSpeech", null),
-                    chineseDef = obj.optString("chineseDef", null),
-                    englishDef = obj.optString("englishDef", null),
-                    exampleText = obj.optString("exampleText", null),
-                    exampleTranslation = obj.optString("exampleTranslation", null),
-                    intervalMinutes = obj.optLong("intervalMinutes", 0),
-                    repetition = obj.optInt("repetition", 0),
-                    dueDate = obj.optLong("dueDate", 0),
-                    createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
-                )
-            }
+                return (0 until json.length()).map { i ->
+                    val obj = json.getJSONObject(i)
+                    Flashcard(
+                        id = obj.getLong("id"),
+                        word = obj.getString("word"),
+                        pronunciation = obj.optString("pronunciation", null),
+                        partOfSpeech = obj.optString("partOfSpeech", null),
+                        chineseDef = obj.optString("chineseDef", null),
+                        englishDef = obj.optString("englishDef", null),
+                        exampleText = obj.optString("exampleText", null),
+                        exampleTranslation = obj.optString("exampleTranslation", null),
+                        intervalMinutes = obj.optLong("intervalMinutes", 0),
+                        repetition = obj.optInt("repetition", 0),
+                        dueDate = obj.optLong("dueDate", 0),
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                        plan = obj.optString("plan", "默认"),
+                    )
+                }
         } catch (e: Exception) {
             Log.e("FlashcardDataStore", "readAllUnsafe error", e)
             return emptyList()
@@ -171,6 +235,7 @@ class FlashcardDataStore(context: Context) {
                     put("repetition", card.repetition)
                     put("dueDate", card.dueDate)
                     put("createdAt", card.createdAt)
+                    put("plan", card.plan)
                 })
             }
             // Atomic write: write to temp file then rename

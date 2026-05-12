@@ -10,8 +10,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -68,6 +71,10 @@ fun FlashcardScreen(
 
     // Dialog outside of LazyColumn
     var showResetConfirm by remember { mutableStateOf(false) }
+    var showNewPlanDialog by remember { mutableStateOf(false) }
+    var showDeletePlanDialog by remember { mutableStateOf(false) }
+    var planNameInput by remember { mutableStateOf("") }
+
     if (showResetConfirm) {
         AlertDialog(
             onDismissRequest = { showResetConfirm = false },
@@ -78,6 +85,47 @@ fun FlashcardScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirm = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (showNewPlanDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewPlanDialog = false },
+            title = { Text("新建复习计划") },
+            text = {
+                OutlinedTextField(
+                    value = planNameInput,
+                    onValueChange = { planNameInput = it },
+                    placeholder = { Text("例如：A的计划") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (planNameInput.isNotBlank()) {
+                        viewModel.createPlan(planNameInput.trim())
+                        showNewPlanDialog = false
+                        planNameInput = ""
+                    }
+                }) { Text("创建") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewPlanDialog = false; planNameInput = "" }) { Text("取消") }
+            }
+        )
+    }
+
+    if (showDeletePlanDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeletePlanDialog = false },
+            title = { Text("删除计划") },
+            text = { Text("确定要删除「${uiState.currentPlan}」吗？该计划下所有闪卡都会被删除。") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deletePlan(uiState.currentPlan); showDeletePlanDialog = false }) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeletePlanDialog = false }) { Text("取消") }
             }
         )
     }
@@ -95,6 +143,15 @@ fun FlashcardScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            // Plan selector row
+            PlanSelector(
+                plans = uiState.plans,
+                currentPlan = uiState.currentPlan,
+                onSelectPlan = { viewModel.switchPlan(it) },
+                onCreatePlan = { planNameInput = ""; showNewPlanDialog = true },
+                onDeletePlan = { showDeletePlanDialog = true }
+            )
+
             // Overview FIXED at top — not inside scrollable area
             if (uiState.allFlashcards.isNotEmpty() || uiState.dueCount > 0) {
                 FlashcardOverview(
@@ -177,6 +234,54 @@ private fun StatItem(label: String, count: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(count, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = color)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Plan selector — horizontal scrollable tabs with + and ✕ buttons */
+@Composable
+private fun PlanSelector(
+    plans: List<String>,
+    currentPlan: String,
+    onSelectPlan: (String) -> Unit,
+    onCreatePlan: () -> Unit,
+    onDeletePlan: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        plans.forEach { plan ->
+            val isSelected = plan == currentPlan
+            FilterChip(
+                onClick = { onSelectPlan(plan) },
+                label = {
+                    Text(
+                        plan,
+                        style = if (isSelected) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodySmall,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                selected = isSelected,
+                trailingIcon = if (isSelected && plan != "默认") {
+                    @Composable {
+                        IconButton(onClick = onDeletePlan, modifier = Modifier.size(18.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "删除计划", modifier = Modifier.size(14.dp))
+                        }
+                    }
+                } else null,
+                modifier = Modifier.height(32.dp)
+            )
+        }
+        FilterChip(
+            onClick = onCreatePlan,
+            label = { Text("+ 新建", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            selected = false,
+            modifier = Modifier.height(32.dp)
+        )
     }
 }
 

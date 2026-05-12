@@ -29,6 +29,9 @@ import java.util.concurrent.TimeUnit
 data class FlashcardUiState(
     val allFlashcards: List<Flashcard> = emptyList(),
     val dueCount: Int = 0,
+    // Plan management
+    val plans: List<String> = listOf("默认"),
+    val currentPlan: String = "默认",
     // Review mode
     val isReviewMode: Boolean = false,
     val dueFlashcards: List<Flashcard> = emptyList(),
@@ -58,13 +61,47 @@ class FlashcardViewModel(
     fun refreshAll() {
         viewModelScope.launch {
             val all = dataStore.getAllFlashcards()
-            val dueCount = dataStore.getDueFlashcards().size
-            _uiState.update { it.copy(allFlashcards = all, dueCount = dueCount) }
+            val plans = dataStore.getPlanNames().ifEmpty { listOf("默认") }
+            val currentPlan = _uiState.value.currentPlan.takeIf { plans.contains(it) } ?: plans.first()
+            val planCards = all.filter { it.plan == currentPlan }
+            val dueCount = planCards.count { it.dueDate <= System.currentTimeMillis() }
+            _uiState.update { it.copy(
+                allFlashcards = planCards,
+                dueCount = dueCount,
+                plans = plans,
+                currentPlan = currentPlan,
+            ) }
+        }
+    }
+
+    fun switchPlan(planName: String) {
+        _uiState.update { it.copy(currentPlan = planName) }
+        refreshAll()
+    }
+
+    fun createPlan(name: String) {
+        viewModelScope.launch {
+            val current = _uiState.value.plans
+            if (current.contains(name)) return@launch
+            dataStore.createPlan(name)
+            refreshAll()
+        }
+    }
+
+    fun deletePlan(name: String) {
+        val current = _uiState.value.plans
+        if (current.size <= 1 || name == "默认") return
+        viewModelScope.launch {
+            dataStore.deletePlan(name)
+            val newPlans = current - name
+            val newPlan = newPlans.firstOrNull() ?: "默认"
+            _uiState.update { it.copy(plans = newPlans.sorted(), currentPlan = newPlan) }
+            refreshAll()
         }
     }
 
     /** Import a single vocabulary word to flashcard */
-    suspend fun importFromVocabulary(vocab: Vocabulary): Boolean = withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun importFromVocabulary(vocab: Vocabulary, plan: String = "默认"): Boolean = withContext(kotlinx.coroutines.Dispatchers.IO) {
         if (dataStore.isWordExists(vocab.word)) return@withContext false
 
         // Parse example JSON if available
@@ -87,7 +124,8 @@ class FlashcardViewModel(
             englishDef = vocab.englishDef,
             exampleText = exampleText,
             exampleTranslation = exampleTranslation,
-            dueDate = System.currentTimeMillis(), // due immediately
+            dueDate = System.currentTimeMillis(),
+            plan = plan,
         )
         dataStore.addFlashcard(card)
         refreshAll()
@@ -304,7 +342,7 @@ class FlashcardViewModel(
     )
 
     /** Batch import vocabulary words */
-    suspend fun batchImportFromVocabulary(vocabs: List<Vocabulary>): Pair<Int, Int> = withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun batchImportFromVocabulary(vocabs: List<Vocabulary>, plan: String = "默认"): Pair<Int, Int> = withContext(kotlinx.coroutines.Dispatchers.IO) {
         var imported = 0
         var skipped = 0
         vocabs.forEach { vocab ->
@@ -329,6 +367,7 @@ class FlashcardViewModel(
                     exampleText = exampleText,
                     exampleTranslation = exampleTranslation,
                     dueDate = System.currentTimeMillis(),
+                    plan = plan,
                 )
                 dataStore.addFlashcard(card)
                 imported++
@@ -379,7 +418,9 @@ class FlashcardViewModel(
 
     fun startReview() {
         viewModelScope.launch {
-            val dueCards = dataStore.getDueFlashcards()
+            val dueCards = dataStore.getAllFlashcards()
+                .filter { it.plan == _uiState.value.currentPlan && it.dueDate <= System.currentTimeMillis() }
+                .sortedBy { it.dueDate }
             _uiState.update {
                 it.copy(
                     isReviewMode = true,
