@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -73,6 +74,8 @@ fun FlashcardScreen(
     var showResetConfirm by remember { mutableStateOf(false) }
     var showNewPlanDialog by remember { mutableStateOf(false) }
     var showDeletePlanDialog by remember { mutableStateOf(false) }
+    var showTtsLogDialog by remember { mutableStateOf(false) }
+    var ttsLogContent by remember { mutableStateOf<String?>(null) }
     var planNameInput by remember { mutableStateOf("") }
 
     if (showResetConfirm) {
@@ -130,6 +133,31 @@ fun FlashcardScreen(
         )
     }
 
+    // TTS log dialog
+    if (showTtsLogDialog) {
+        AlertDialog(
+            onDismissRequest = { showTtsLogDialog = false },
+            title = { Text("🔊 TTS发音日志") },
+            text = {
+                val scrollState = androidx.compose.foundation.rememberScrollState()
+                Column(modifier = Modifier.verticalScroll(scrollState).fillMaxWidth()) {
+                    if (ttsLogContent != null) {
+                        Text(
+                            text = ttsLogContent!!,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            fontSize = 12.sp
+                        )
+                    } else {
+                        Text("暂无TTS日志\n\n请先在闪卡列表中点击🔊按钮测试发音", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTtsLogDialog = false }) { Text("关闭") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -137,6 +165,15 @@ fun FlashcardScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                    }
+                },
+                actions = {
+                    // TTS log button
+                    IconButton(onClick = {
+                        ttsLogContent = viewModel.getTtsLog(context)
+                        showTtsLogDialog = true
+                    }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "查看TTS日志")
                     }
                 },
             )
