@@ -26,10 +26,10 @@ import com.moyue.app.data.models.TTSProviderType
 // EDGE_VOICES defined in EdgeVoiceData.kt
 
 private val AI_VOICE_MODELS = listOf(
-    "fnlp/MOSS-TTSD-v0.5" to "MOSS-TTSD v0.5 (中英双语)",
-    "FunAudioLLM/CosyVoice2-0.5B" to "CosyVoice2 0.5B (中英双语)",
-    "tts-1" to "OpenAI tts-1",
-    "tts-1-hd" to "OpenAI tts-1-hd",
+    "fnlp/MOSS-TTSD-v0.5" to com.moyue.app.R.string.model_moss,
+    "FunAudioLLM/CosyVoice2-0.5B" to com.moyue.app.R.string.model_cosyvoice,
+    "tts-1" to com.moyue.app.R.string.model_tts1,
+    "tts-1-hd" to com.moyue.app.R.string.model_tts1_hd,
 )
 
 private fun aiVoicesForModel(model: String): List<Pair<String, String>> {
@@ -138,9 +138,10 @@ fun TtsSettingsSheet(
                         val grouped = groupedEdgeVoices()
                         grouped.forEach { (localeName, voices) ->
                             Text(localeName, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                            val ctx = androidx.compose.ui.platform.LocalContext.current
                             voices.forEach { voice ->
                                 DropdownMenuItem(
-                                    text = { Text(voice.displayName(), fontSize = 13.sp) },
+                                    text = { Text(voice.displayName(ctx), fontSize = 13.sp) },
                                     onClick = { localVoice = voice.id; onEdgeConfigChange(localEp, voice.id); expanded = false },
                                 )
                             }
@@ -214,14 +215,15 @@ fun TtsSettingsSheet(
                 Spacer(Modifier.height(4.dp))
                 var modelExpanded by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(expanded = modelExpanded, onExpandedChange = { modelExpanded = it }) {
-                    val modelLabel = AI_VOICE_MODELS.firstOrNull { it.first == localModel }?.second ?: localModel
+                    val modelLabelRes = AI_VOICE_MODELS.firstOrNull { it.first == localModel }?.second
+                    val modelLabel = if (modelLabelRes != null) androidx.compose.ui.res.stringResource(modelLabelRes) else localModel
                     OutlinedTextField(value = modelLabel, onValueChange = {}, readOnly = true,
                         label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_model)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(), singleLine = true)
                     ExposedDropdownMenu(expanded = modelExpanded, onDismissRequest = { modelExpanded = false }) {
-                        AI_VOICE_MODELS.forEach { (id, name) ->
-                            DropdownMenuItem(text = { Text(name, fontSize = 13.sp) },
+                        AI_VOICE_MODELS.forEach { (id, nameRes) ->
+                            DropdownMenuItem(text = { Text(androidx.compose.ui.res.stringResource(nameRes), fontSize = 13.sp) },
                                 onClick = {
                                     localModel = id
                                     // Auto-select first voice for this model
@@ -253,7 +255,8 @@ fun TtsSettingsSheet(
                         modifier = Modifier.menuAnchor().fillMaxWidth(), singleLine = true)
                     ExposedDropdownMenu(expanded = voiceExpanded, onDismissRequest = { voiceExpanded = false }) {
                         // Group by gender
-                        val (female, male) = voices.partition { it.second.contains("女") }
+                        // Group by gender — Edge voices use "女"/"男", AI voices use "♀"/"♂"
+                        val (female, male) = voices.partition { v -> v.second.contains("♀") || v.second.contains("女") }
                         Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.voice_female), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                         female.forEach { (id, name) ->
                             DropdownMenuItem(text = { Text(name, fontSize = 13.sp) },

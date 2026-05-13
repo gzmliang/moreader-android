@@ -34,6 +34,7 @@ fun BookmarksScreen(
     val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val bookmarkDeletedMsg = stringResource(com.moyue.app.R.string.bookmark_deleted_toast)
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -70,7 +71,7 @@ fun BookmarksScreen(
                         onDelete = { 
                             viewModel.deleteBookmark(bookmark.id)
                             scope.launch {
-                                snackbarHostState.showSnackbar("书签已删除")
+                                snackbarHostState.showSnackbar(bookmarkDeletedMsg)
                             }
                         }
                     )
@@ -102,11 +103,15 @@ private fun BookmarkItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = bookmark.chapterTitle ?: "第 ${bookmark.chapterIndex + 1} 章",
+                    text = bookmark.chapterTitle ?: androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_chapter_format, bookmark.chapterIndex + 1),
                     style = MaterialTheme.typography.titleMedium
                 )
                 Text(
-                    text = "${dateFormat.format(Date(bookmark.createdAt))} · 进度 ${(bookmark.progress * 100).toInt()}%",
+                    text = androidx.compose.ui.res.stringResource(
+                        com.moyue.app.R.string.bookmark_progress_format,
+                        dateFormat.format(Date(bookmark.createdAt)),
+                        (bookmark.progress * 100).toInt(),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)

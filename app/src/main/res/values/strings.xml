@@ -271,4 +271,56 @@
     <string name="font_weight_normal">常规</string>
     <string name="font_weight_semibold">半粗</string>
     <string name="font_weight_bold">粗体</string>
+
+    <!-- Reader (missing) -->
+    <string name="reader_font_family_label">字</string>
+    <string name="reader_font_weight_label">粗</string>
+    <string name="reader_tts_speak">朗读</string>
+    <string name="bookmark_chapter_format">第 %1$d 章</string>
+    <string name="bookmark_paragraph_format">%1$s · 段落 %2$d</string>
+    <string name="highlight_chapter_format">第 %1$d 章</string>
+
+    <!-- Crash Dialog -->
+    <string name="crash_dialog_title">闪退报告</string>
+    <string name="crash_dialog_message">请长按复制下面的错误信息发给开发者：</string>
+    <string name="crash_dialog_copy">复制全部</string>
+    <string name="crash_dialog_copied">已复制 ✓</string>
+
+    <!-- Vocabulary (missing) -->
+    <string name="vocabulary_speak_word">朗读单词</string>
+    <string name="vocabulary_refresh_definition">🔄 重新拉取释义</string>
+    <string name="vocabulary_section_chinese_def">【中文释义】</string>
+    <string name="vocabulary_section_word_formation">【组词】Word Formation</string>
+    <string name="vocabulary_section_example">【例句】Example</string>
+
+    <!-- Bookmark (missing) -->
+    <string name="bookmark_deleted_toast">书签已删除</string>
+    <string name="bookmark_progress_format">%1$s · 进度 %2$d%%</string>
+
+    <!-- Error messages -->
+    <string name="error_edge_tts_connection">Edge TTS 连接失败: %1$s</string>
+    <string name="error_translation_empty_response">Empty response — 请检查 API Key 和模型名称是否正确</string>
+    <string name="error_tts_chapter_complete">[TTS] 章节读完，自动跳转下一章</string>
+    <string name="error_tts_all_complete">[TTS] 全部章节朗读完毕</string>
+    <string name="error_vocab_config_api_key">请先在设置中配置 AI API Key</string>
+    <string name="error_vocab_config_endpoint">请先配置 AI 服务端点 (Endpoint)</string>
+    <string name="error_vocab_fetch_fail_http">获取释义失败 (HTTP %1$d): %2$s</string>
+    <string name="error_vocab_fetch_fail_empty">获取释义失败：服务器返回空响应</string>
+    <string name="error_vocab_fetch_success">获取释义成功</string>
+    <string name="error_vocab_fetch_parse_fail">获取释义失败：AI 返回格式无法解析</string>
+    <string name="error_vocab_fetch_fail_generic">获取释义失败: %1$s</string>
+    <string name="error_vocab_empty_list">单词本为空</string>
+    <string name="error_vocab_export_fail">导出失败: %1$s</string>
+    <string name="vocab_export_subject">墨阅单词本导出</string>
+    <string name="vocab_export_body">共导出 %1$d 个单词</string>
+    <string name="vocab_export_chooser_title">分享单词本</string>
+    <string name="vocab_export_success">成功导出 %1$d 个单词</string>
+    <string name="vocab_export_csv_header">单词,音标,词性,释义,例句,添加时间</string>
+    <string name="vocab_export_md_title"># 墨阅单词本</string>
+    <string name="vocab_export_md_time">导出时间: %1$s</string>
+    <string name="vocab_export_md_count">单词数量: %1$d</string>
+    <string name="vocab_export_md_pronunciation">**音标**: %1$s</string>
+    <string name="vocab_export_md_pos">**词性**: %1$s</string>
+    <string name="vocab_export_md_def">**释义**: %1$s</string>
+    <string name="vocab_export_md_example">**例句**: %1$s</string>
 </resources>

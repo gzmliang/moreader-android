@@ -204,12 +204,12 @@ private fun CrashDialog(errorText: String, onDismiss: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("💥", fontSize = 24.sp)
                 Spacer(Modifier.width(8.dp))
-                Text("闪退报告", color = Color(0xFFD32F2F))
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.crash_dialog_title), color = Color(0xFFD32F2F))
             }
         },
         text = {
             Column {
-                Text("请长按复制下面的错误信息发给开发者：", style = MaterialTheme.typography.bodySmall)
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.crash_dialog_message), style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
                 Box(
                     modifier = Modifier
@@ -235,9 +235,9 @@ private fun CrashDialog(errorText: String, onDismiss: () -> Unit) {
                 ) {
                     Icon(Icons.Default.CopyAll, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text(if (copied) "已复制 ✓" else "复制全部")
+                    Text(if (copied) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.crash_dialog_copied) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.crash_dialog_copy))
                 }
-                Button(onClick = onDismiss) { Text("关闭") }
+                Button(onClick = onDismiss) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close)) }
             }
         }
     )

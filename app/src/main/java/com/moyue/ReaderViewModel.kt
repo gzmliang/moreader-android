@@ -437,7 +437,7 @@ class ReaderViewModel(
         if (idx < 0 || idx >= paragraphs.size) {
             // End of chapter reached — auto-advance to next chapter if available
             if (s.currentChapterIndex < s.chapters.size - 1) {
-                log("[TTS] 📖 章节读完，自动跳转下一章")
+                log("[TTS] 📖 ${getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_tts_chapter_complete)}")
                 audioCache.clear()
                 _uiState.update { it.copy(
                     currentChapterIndex = it.currentChapterIndex + 1,

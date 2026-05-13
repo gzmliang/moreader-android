@@ -253,7 +253,7 @@ private fun VocabularyItem(
                 ) {
                     Icon(
                         Icons.Default.VolumeUp,
-                        contentDescription = "朗读单词",
+                        contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_speak_word),
                         tint = if (isSpeaking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
                     )
@@ -286,7 +286,7 @@ private fun VocabularyItem(
                             onClick = { onFetchDefinition() },
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("🔄 重新拉取释义")
+                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_refresh_definition))
                         }
                     }
                     TextButton(
@@ -355,7 +355,7 @@ private fun StructuredDefinition(vocab: Vocabulary) {
     
     // Chinese definition
     if (vocab.chineseDef != null) {
-        SectionLabel("【中文释义】")
+        SectionLabel(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_section_chinese_def))
         Text(
             text = vocab.chineseDef,
             style = MaterialTheme.typography.bodyMedium,
@@ -385,7 +385,7 @@ private fun StructuredDefinition(vocab: Vocabulary) {
     } catch (e: Exception) { emptyList() }
     
     if (wordForms.isNotEmpty()) {
-        SectionLabel("【组词】Word Formation")
+        SectionLabel(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_section_word_formation))
         wordForms.forEach { form ->
             BulletText(form)
         }
@@ -400,7 +400,7 @@ private fun StructuredDefinition(vocab: Vocabulary) {
     } catch (e: Exception) { null }
     
     if (example != null) {
-        SectionLabel("【例句】Example")
+        SectionLabel(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_section_example))
         Text(
             text = example.optString("text", ""),
             style = MaterialTheme.typography.bodyMedium,
