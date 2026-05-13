@@ -57,9 +57,11 @@ fun EpubWebView(
     val callbackRef = remember { mutableStateOf<(String) -> Unit>({}) }
     val linkCallbackRef = remember { mutableStateOf<(String) -> Unit>({}) }
     val paragraphCallbackRef = remember { mutableStateOf<(Int) -> Unit>({}) }
+    val scrollCallbackRef = remember { mutableStateOf<(Int) -> Unit>({}) }
     LaunchedEffect(onTextSelected) { callbackRef.value = onTextSelected }
     LaunchedEffect(onLinkClicked) { linkCallbackRef.value = onLinkClicked }
     LaunchedEffect(onParagraphClicked) { paragraphCallbackRef.value = { idx -> onParagraphClicked?.invoke(idx) ?: Unit } }
+    LaunchedEffect(scrollCallbackRef) { /* updated by caller */ }
 
     // TTS highlight: call JS when index changes
     LaunchedEffect(ttsHighlightIndex) {
@@ -403,6 +405,24 @@ fun EpubWebView(
                                 // For page-tap scrolling via scrollBy
                                 window.pageUp=function(){window.scrollBy(0,-window.innerHeight*0.85);};
                                 window.pageDown=function(){window.scrollBy(0,window.innerHeight*0.85);};
+                                // Get current visible paragraph index
+                                window.getVisiblePara=function(){
+                                    var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
+                                    var scrollY=window.scrollY;
+                                    for(var i=0;i<all.length;i++){
+                                        if(all[i].offsetTop>scrollY+window.innerHeight*0.3)return i;
+                                    }
+                                    return all.length-1;
+                                };
+                                // Track visible paragraph on scroll — reports to Kotlin via bridge
+                                var _lastReportedPara=-1;
+                                window.addEventListener('scroll',function(){
+                                    var idx=window.getVisiblePara();
+                                    if(idx!==_lastReportedPara){
+                                        _lastReportedPara=idx;
+                                        MoreaderBridge.onScrollToParagraph(idx);
+                                    }
+                                },{passive:true});
                             })()""", null)
                         }
                     }
@@ -415,6 +435,8 @@ fun EpubWebView(
                         fun onLinkClicked(url: String, visibleParaIdx: Int) { linkCallbackRef.value("$url|$visibleParaIdx") }
                         @JavascriptInterface
                         fun onParagraphClicked(index: Int) { paragraphCallbackRef.value(index) }
+                        @JavascriptInterface
+                        fun onScrollToParagraph(index: Int) { scrollCallbackRef.value(index) }
                     }, "MoreaderBridge")
                 }
             },
