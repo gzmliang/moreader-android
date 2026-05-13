@@ -171,7 +171,7 @@ Use Chinese for explanations.""",
             if (!gotContent) {
                 // Fallback: try non-streaming response
                 // (The response may have come as a single JSON instead of SSE)
-                return@withContext Result.failure(Exception("Empty response — 请检查 API Key 和模型名称是否正确"))
+                return@withContext Result.failure(Exception("Empty response — please check API Key and model configuration"))
             }
 
             Result.success(fullResult.toString())

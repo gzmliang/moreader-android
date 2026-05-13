@@ -306,13 +306,13 @@ class VocabularyViewModel(
                     val config = getStoredLLMConfig(context)
                     if (config.apiKey.isEmpty()) {
                         withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            onComplete(false, "请先在设置中配置 AI API Key")
+                            onComplete(false, context.getString(com.moyue.app.R.string.error_vocab_config_api_key))
                         }
                         return@withContext
                     }
                     if (config.endpoint.isEmpty()) {
                         withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            onComplete(false, "请先配置 AI 服务端点 (Endpoint)")
+                            onComplete(false, context.getString(com.moyue.app.R.string.error_vocab_config_endpoint))
                         }
                         return@withContext
                     }
@@ -450,14 +450,14 @@ Example (word "resilience"):
 
                     if (!response.isSuccessful) {
                         withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            onComplete(false, "获取释义失败 (HTTP ${response.code}): ${responseBody?.take(100) ?: "无响应"}")
+                            onComplete(false, context.getString(com.moyue.app.R.string.error_vocab_fetch_fail_http, response.code, responseBody?.take(100) ?: ""))
                         }
                         return@withContext
                     }
 
                     if (responseBody.isNullOrEmpty()) {
                         withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            onComplete(false, "获取释义失败：服务器返回空响应")
+                            onComplete(false, context.getString(com.moyue.app.R.string.error_vocab_fetch_fail_empty))
                         }
                         return@withContext
                     }
@@ -479,7 +479,7 @@ Example (word "resilience"):
                                     result.exampleJson
                                 )
                                 withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                    onComplete(true, "获取释义成功")
+                                    onComplete(true, context.getString(com.moyue.app.R.string.error_vocab_fetch_success))
                                 }
                                 return@withContext
                             }
@@ -487,12 +487,12 @@ Example (word "resilience"):
                     }
 
                     withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        onComplete(false, "获取释义失败：AI 返回格式无法解析")
+                        onComplete(false, context.getString(com.moyue.app.R.string.error_vocab_fetch_parse_fail))
                     }
                 }
             } catch (e: Exception) {
                 val errorMsg = e.message ?: e.javaClass.simpleName
-                onComplete(false, "获取释义失败: $errorMsg")
+                onComplete(false, context.getString(com.moyue.app.R.string.error_vocab_fetch_fail_generic, errorMsg))
             }
         }
     }
@@ -521,7 +521,7 @@ Example (word "resilience"):
             try {
                 val vocabList = vocabulary.value
                 if (vocabList.isEmpty()) {
-                    onComplete(false, "单词本为空")
+                    onComplete(false, context.getString(com.moyue.app.R.string.error_vocab_empty_list))
                     return@launch
                 }
 
@@ -532,12 +532,12 @@ Example (word "resilience"):
                 when (format.lowercase()) {
                     "md", "markdown" -> {
                         fileName = "moreader_vocabulary_${System.currentTimeMillis()}.md"
-                        content = generateMarkdown(vocabList)
+                        content = generateMarkdown(vocabList, context)
                         mimeType = "text/markdown"
                     }
                     else -> {
                         fileName = "moreader_vocabulary_${System.currentTimeMillis()}.csv"
-                        content = generateCsv(vocabList)
+                        content = generateCsv(vocabList, context)
                         mimeType = "text/csv"
                     }
                 }
@@ -554,26 +554,26 @@ Example (word "resilience"):
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                     type = mimeType
                     putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT, "墨阅单词本导出")
-                    putExtra(Intent.EXTRA_TEXT, "共导出 ${vocabList.size} 个单词")
+                    putExtra(Intent.EXTRA_SUBJECT, context.getString(com.moyue.app.R.string.vocab_export_subject))
+                    putExtra(Intent.EXTRA_TEXT, context.getString(com.moyue.app.R.string.vocab_export_body, vocabList.size))
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
 
-                val chooser = Intent.createChooser(shareIntent, "分享单词本")
+                val chooser = Intent.createChooser(shareIntent, context.getString(com.moyue.app.R.string.vocab_export_chooser_title))
                 chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(chooser)
 
-                onComplete(true, "成功导出 ${vocabList.size} 个单词")
+                onComplete(true, context.getString(com.moyue.app.R.string.vocab_export_success, vocabList.size))
 
             } catch (e: Exception) {
-                onComplete(false, "导出失败: ${e.message}")
+                onComplete(false, context.getString(com.moyue.app.R.string.error_vocab_export_fail, e.message ?: ""))
             }
         }
     }
 
-    private fun generateCsv(vocabList: List<Vocabulary>): String {
+    private fun generateCsv(vocabList: List<Vocabulary>, context: Context): String {
         return buildString {
-            appendLine("单词,音标,词性,释义,例句,添加时间")
+            appendLine(context.getString(com.moyue.app.R.string.vocab_export_csv_header))
             val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
             vocabList.forEach { vocab ->
                 val word = escapeCsv(vocab.word)
@@ -587,12 +587,13 @@ Example (word "resilience"):
         }
     }
 
-    private fun generateMarkdown(vocabList: List<Vocabulary>): String {
+    private fun generateMarkdown(vocabList: List<Vocabulary>, context: Context): String {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
         return buildString {
-            appendLine("# 墨阅单词本")
+            appendLine(context.getString(com.moyue.app.R.string.vocab_export_md_title))
             appendLine()
-            appendLine("导出时间: ${SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())}")
-            appendLine("单词数量: ${vocabList.size}")
+            appendLine(context.getString(com.moyue.app.R.string.vocab_export_md_time, dateFormat.format(Date())))
+            appendLine(context.getString(com.moyue.app.R.string.vocab_export_md_count, vocabList.size))
             appendLine()
             appendLine("---")
             appendLine()
@@ -602,20 +603,20 @@ Example (word "resilience"):
                 appendLine()
 
                 if (vocab.pronunciation != null) {
-                    appendLine("**音标**: ${vocab.pronunciation}")
+                    appendLine(context.getString(com.moyue.app.R.string.vocab_export_md_pronunciation, vocab.pronunciation))
                 }
 
                 if (vocab.partOfSpeech != null) {
-                    appendLine("**词性**: ${vocab.partOfSpeech}")
+                    appendLine(context.getString(com.moyue.app.R.string.vocab_export_md_pos, vocab.partOfSpeech))
                 }
 
                 if (vocab.definition != null) {
-                    appendLine("**释义**: ${vocab.definition}")
+                    appendLine(context.getString(com.moyue.app.R.string.vocab_export_md_def, vocab.definition))
                 }
 
                 if (vocab.example != null) {
                     appendLine()
-                    appendLine("**例句**: ${vocab.example}")
+                    appendLine(context.getString(com.moyue.app.R.string.vocab_export_md_example, vocab.example))
                 }
 
                 appendLine()

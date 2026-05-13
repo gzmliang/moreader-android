@@ -620,32 +620,41 @@ private fun ReaderBottomBar(
                 Text("${currentIndex + 1}/$totalChapters", fontSize = 9.sp, color = barTextColor, modifier = Modifier.width(36.dp), textAlign = TextAlign.End)
             }
 
-            // Control buttons — disable minimum touch target enforcement to fit on narrow screens
+            // Control buttons — adaptive layout: each button gets equal share of screen width
             CompositionLocalProvider(
                 androidx.compose.material3.LocalMinimumInteractiveComponentEnforcement provides false
             ) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                        .padding(horizontal = 2.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
-                    // Navigation back button (shown when history exists)
+                    // Helper: uniform weight button
+                    @androidx.compose.runtime.Composable
+                    fun EqualButton(onClick: () -> Unit, enabled: Boolean = true, content: @androidx.compose.runtime.Composable () -> Unit) {
+                        androidx.compose.material3.IconButton(
+                            onClick = onClick,
+                            modifier = Modifier.weight(1f).size(32.dp),
+                            enabled = enabled,
+                        ) { content() }
+                    }
+
+                    // Navigation back (conditional)
                     if (canGoBack) {
-                        androidx.compose.material3.IconButton(onClick = onGoBack, modifier = Modifier.size(32.dp)) {
+                        EqualButton(onGoBack) {
                             Icon(Icons.Default.Undo, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.nav_back_label), tint = barTextColor, modifier = Modifier.size(18.dp))
                         }
-                        Spacer(Modifier.width(2.dp))
                     }
 
-                    androidx.compose.material3.IconButton(onClick = onPrev, modifier = Modifier.size(32.dp), enabled = currentIndex > 0) {
+                    // Prev chapter
+                    EqualButton(onPrev, enabled = currentIndex > 0) {
                         Icon(Icons.Default.ChevronLeft, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.previous_chapter), tint = barTextColor, modifier = Modifier.size(18.dp))
                     }
-                    Spacer(Modifier.width(2.dp))
 
-                    // Font Family Dropdown (icon only)
+                    // Font Family Dropdown
+                    var expandedFont by remember { mutableStateOf(false) }
                     val fontFamilyResIds = listOf(
                         com.moyue.app.R.string.font_label_sans_serif,
                         com.moyue.app.R.string.font_label_serif,
@@ -656,10 +665,9 @@ private fun ReaderBottomBar(
                     val fontFamilyValues = listOf(
                         "sans-serif", "serif", "monospace", "casual", "cursive"
                     )
-                    var expandedFont by remember { mutableStateOf(false) }
 
-                    androidx.compose.foundation.layout.Box {
-                        androidx.compose.material3.IconButton(onClick = { expandedFont = true }, modifier = Modifier.size(32.dp)) {
+                    androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
+                        androidx.compose.material3.IconButton(onClick = { expandedFont = true }, modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(32.dp)) {
                             androidx.compose.material3.Text(
                                 androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_font_family_label),
                                 fontSize = 12.sp,
@@ -672,14 +680,13 @@ private fun ReaderBottomBar(
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(androidx.compose.ui.res.stringResource(fontFamilyResIds[idx]), fontSize = 13.sp) },
                                     onClick = { onFontFamilyChange(f); expandedFont = false },
-                                    leadingIcon = if (f == fontFamily) { @Composable { Icon(Icons.Default.Check, null) } } else null
+                                    leadingIcon = if (f == fontFamily) { @androidx.compose.runtime.Composable { Icon(Icons.Default.Check, null) } } else null
                                 )
                             }
                         }
                     }
-                    Spacer(Modifier.width(2.dp))
 
-                    // Font Weight Dropdown (icon only)
+                    // Font Weight Dropdown
                     val fontWeights = listOf("400", "600", "700")
                     val weightLabelResIds = listOf(
                         com.moyue.app.R.string.font_weight_normal,
@@ -688,8 +695,8 @@ private fun ReaderBottomBar(
                     )
                     var expandedWeight by remember { mutableStateOf(false) }
 
-                    androidx.compose.foundation.layout.Box {
-                        androidx.compose.material3.IconButton(onClick = { expandedWeight = true }, modifier = Modifier.size(32.dp)) {
+                    androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
+                        androidx.compose.material3.IconButton(onClick = { expandedWeight = true }, modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(32.dp)) {
                             androidx.compose.material3.Text(
                                 androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_font_weight_label),
                                 fontSize = 12.sp,
@@ -702,49 +709,49 @@ private fun ReaderBottomBar(
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(androidx.compose.ui.res.stringResource(weightLabelResIds[idx]), fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight(fontWeights[idx].toInt())) },
                                     onClick = { onFontWeightChange(w); expandedWeight = false },
-                                    leadingIcon = if (w == fontWeight) { @Composable { Icon(Icons.Default.Check, null) } } else null
+                                    leadingIcon = if (w == fontWeight) { @androidx.compose.runtime.Composable { Icon(Icons.Default.Check, null) } } else null
                                 )
                             }
                         }
                     }
-                    Spacer(Modifier.width(2.dp))
 
-                    // Font Size
-                    androidx.compose.material3.IconButton(onClick = { onFontSizeChange(fontSize - 2) }, modifier = Modifier.size(32.dp)) {
+                    // Font Size: A- | size | A+
+                    EqualButton({ onFontSizeChange(fontSize - 2) }) {
                         Text("A-", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = barTextColor)
                     }
-                    Text("$fontSize", fontSize = 10.sp, color = barTextColor, modifier = Modifier.width(18.dp), textAlign = TextAlign.Center)
-                    androidx.compose.material3.IconButton(onClick = { onFontSizeChange(fontSize + 2) }, modifier = Modifier.size(32.dp)) {
+                    Text("$fontSize", fontSize = 10.sp, color = barTextColor, modifier = Modifier.weight(1f).width(18.dp), textAlign = TextAlign.Center)
+                    EqualButton({ onFontSizeChange(fontSize + 2) }) {
                         Text("A+", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = barTextColor)
                     }
 
-                    Spacer(Modifier.weight(1f))
+                    // Next chapter
+                    EqualButton(onNext, enabled = currentIndex < totalChapters - 1) {
+                        Icon(Icons.Default.ChevronRight, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.next_chapter), tint = barTextColor, modifier = Modifier.size(18.dp))
+                    }
 
+                    // TTS: Play/Pause
                     if (isTtsPlaying || isTtsPaused) {
-                        androidx.compose.material3.IconButton(onClick = onPlayPause, modifier = Modifier.size(32.dp)) {
+                        EqualButton(onPlayPause) {
                             Icon(if (isTtsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = if (isTtsPlaying) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pause) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.resume),
                                 tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                         }
                     } else {
-                        androidx.compose.material3.IconButton(onClick = onPlayPause, modifier = Modifier.size(32.dp)) {
+                        EqualButton(onPlayPause) {
                             Icon(Icons.Default.VolumeUp, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.play_chapter), tint = barTextColor, modifier = Modifier.size(18.dp))
                         }
                     }
 
+                    // TTS: Stop (conditional)
                     if (isTtsPlaying || isTtsPaused) {
-                        androidx.compose.material3.IconButton(onClick = onStop, modifier = Modifier.size(32.dp)) {
+                        EqualButton(onStop) {
                             Icon(Icons.Default.Stop, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.stop), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                         }
                     }
 
-                    androidx.compose.material3.IconButton(onClick = onToggleDebug, modifier = Modifier.size(32.dp)) {
+                    // Debug
+                    EqualButton(onToggleDebug) {
                         Icon(Icons.Default.BugReport, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.debug_log), modifier = Modifier.size(18.dp), tint = barTextColor)
-                    }
-                    Spacer(Modifier.width(2.dp))
-
-                    androidx.compose.material3.IconButton(onClick = onNext, modifier = Modifier.size(32.dp), enabled = currentIndex < totalChapters - 1) {
-                        Icon(Icons.Default.ChevronRight, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.next_chapter), tint = barTextColor, modifier = Modifier.size(18.dp))
                     }
                 }
             }

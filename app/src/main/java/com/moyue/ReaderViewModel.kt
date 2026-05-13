@@ -452,7 +452,7 @@ class ReaderViewModel(
                     }
                 }
             } else {
-                log("[TTS] 🎉 全部章节朗读完毕")
+                log("[TTS] ${getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_tts_all_complete)}")
                 _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }
             }
             return

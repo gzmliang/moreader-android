@@ -84,7 +84,7 @@ class EdgeTTSProvider(
         currentCall = client.newCall(request)
         currentCall?.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                if (!call.isCanceled()) listener.onError("Edge TTS 连接失败: ${e.message}")
+                if (!call.isCanceled()) listener.onError("Edge TTS connection failed: ${e.message}")
             }
             override fun onResponse(call: Call, response: Response) {
                 if (!response.isSuccessful) { listener.onError("Edge TTS HTTP ${response.code}"); return }
