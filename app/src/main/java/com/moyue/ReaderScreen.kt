@@ -184,9 +184,9 @@ fun ReaderScreen(
                     },
                     navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.back)) } },
                     actions = {
-                        IconButton(onClick = { viewModel.toggleFullscreen() }) { Icon(Icons.Default.Fullscreen, contentDescription = "全屏模式") }
+                        IconButton(onClick = { viewModel.toggleFullscreen() }) { Icon(Icons.Default.Fullscreen, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_fullscreen)) }
                         IconButton(onClick = { viewModel.toggleBookmarkPanel() }) { Icon(Icons.Outlined.BookmarkBorder, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title)) }
-                        IconButton(onClick = { viewModel.toggleHighlightPanel() }) { Icon(Icons.Default.Star, contentDescription = "高亮列表") }
+                        IconButton(onClick = { viewModel.toggleHighlightPanel() }) { Icon(Icons.Default.Star, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_list_title)) }
                         IconButton(onClick = { viewModel.toggleTocPanel() }) { Icon(Icons.Default.List, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.table_of_contents)) }
                         IconButton(onClick = { viewModel.toggleTtsSettingsPanel() }) { Icon(Icons.Default.Settings, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_settings)) }
                     },
@@ -384,7 +384,7 @@ fun ReaderScreen(
                                 onClick = { showNavHint = false },
                                 modifier = Modifier.size(28.dp),
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = "关闭", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Close, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close), tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -434,7 +434,7 @@ fun ReaderScreen(
                     ) {
                         Icon(
                             Icons.Default.Close,
-                            contentDescription = "退出全屏",
+                            contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_exit_fullscreen),
                             tint = Color.White.copy(alpha = 0.8f),
                             modifier = Modifier.size(24.dp),
                         )
@@ -631,27 +631,24 @@ private fun ReaderBottomBar(
 
                 IconButton(onClick = onPrev, enabled = currentIndex > 0) { Icon(Icons.Default.ChevronLeft, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.previous_chapter), tint = barTextColor) }
 
-                // Font Family Dropdown
+                // Font Family Dropdown (compact)
                 val fontFamilyResIds = listOf(
-                    com.moyue.app.R.string.font_label_sans_serif, com.moyue.app.R.string.font_label_serif, com.moyue.app.R.string.font_label_mono,
-                    com.moyue.app.R.string.font_label_condensed, com.moyue.app.R.string.font_label_medium, com.moyue.app.R.string.font_label_light,
-                    com.moyue.app.R.string.font_label_thin, com.moyue.app.R.string.font_label_cond_med, com.moyue.app.R.string.font_label_cond_l,
-                    com.moyue.app.R.string.font_label_cond_b, com.moyue.app.R.string.font_label_med_it, com.moyue.app.R.string.font_label_serif_mo,
-                    com.moyue.app.R.string.font_label_serif_me, com.moyue.app.R.string.font_label_casual, com.moyue.app.R.string.font_label_cursive
+                    com.moyue.app.R.string.font_label_sans_serif,
+                    com.moyue.app.R.string.font_label_serif,
+                    com.moyue.app.R.string.font_label_mono,
+                    com.moyue.app.R.string.font_label_casual,
+                    com.moyue.app.R.string.font_label_cursive
                 )
                 val fontFamilyValues = listOf(
-                    "sans-serif", "serif", "monospace", "sans-serif-condensed", "sans-serif-medium", "sans-serif-light",
-                    "sans-serif-thin", "sans-serif-condensed-medium", "sans-serif-condensed-light",
-                    "sans-serif-condensed-bold", "sans-serif-medium-italic", "serif-monospace", "serif-medium",
-                    "casual", "cursive"
+                    "sans-serif", "serif", "monospace", "casual", "cursive"
                 )
                 var expandedFont by remember { mutableStateOf(false) }
                 val fontLabel = fontFamilyResIds.getOrNull(fontFamilyValues.indexOf(fontFamily)) 
                     ?: com.moyue.app.R.string.font_label_sans_serif
                 
                 Box {
-                    TextButton(onClick = { expandedFont = true }, contentPadding = PaddingValues(horizontal = 4.dp)) {
-                        Text(text = androidx.compose.ui.res.stringResource(fontLabel), fontSize = 11.sp, color = barTextColor)
+                    TextButton(onClick = { expandedFont = true }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                        Text(text = androidx.compose.ui.res.stringResource(fontLabel), fontSize = 10.sp, color = barTextColor)
                     }
                     androidx.compose.material3.DropdownMenu(expanded = expandedFont, onDismissRequest = { expandedFont = false }) {
                         fontFamilyValues.forEachIndexed { idx, f ->
@@ -664,25 +661,25 @@ private fun ReaderBottomBar(
                     }
                 }
 
-                // Font Weight Dropdown
-                val fontWeights = listOf("400", "500", "600", "700", "900")
-                val weightLabels = listOf(
-                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_btn_font_weight) + " 400",
-                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_btn_font_weight) + " 500",
-                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_btn_font_weight) + " 600",
-                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_btn_font_weight) + " 700",
-                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_btn_font_weight) + " 900"
+                // Font Weight Dropdown (compact)
+                val fontWeights = listOf("400", "600", "700")
+                val weightLabelResIds = listOf(
+                    com.moyue.app.R.string.font_weight_normal,
+                    com.moyue.app.R.string.font_weight_semibold,
+                    com.moyue.app.R.string.font_weight_bold
                 )
                 var expandedWeight by remember { mutableStateOf(false) }
                 
                 Box {
-                    TextButton(onClick = { expandedWeight = true }, contentPadding = PaddingValues(horizontal = 4.dp)) {
-                        Text(text = weightLabels.getOrNull(fontWeights.indexOf(fontWeight)) ?: weightLabels[0], fontSize = 11.sp, color = barTextColor)
+                    val currentWeightLabel = weightLabelResIds.getOrNull(fontWeights.indexOf(fontWeight)) 
+                        ?: weightLabelResIds[0]
+                    TextButton(onClick = { expandedWeight = true }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                        Text(text = androidx.compose.ui.res.stringResource(currentWeightLabel), fontSize = 10.sp, color = barTextColor)
                     }
                     androidx.compose.material3.DropdownMenu(expanded = expandedWeight, onDismissRequest = { expandedWeight = false }) {
                         fontWeights.forEachIndexed { idx, w ->
                             androidx.compose.material3.DropdownMenuItem(
-                                text = { Text(weightLabels[idx], fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight(fontWeights[idx].toInt())) },
+                                text = { Text(androidx.compose.ui.res.stringResource(weightLabelResIds[idx]), fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight(fontWeights[idx].toInt())) },
                                 onClick = { onFontWeightChange(w); expandedWeight = false },
                                 leadingIcon = if (w == fontWeight) { @Composable { Icon(Icons.Default.Check, null) } } else null
                             )
@@ -756,8 +753,8 @@ private fun BookmarkPanel(
     if (deleteTarget != null) {
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("删除书签") },
-            text = { Text("确定要删除这个书签吗？") },
+            title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_delete_title)) },
+            text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_delete_confirm)) },
             confirmButton = {
                 TextButton(onClick = {
                     deleteTarget?.let { onDelete(it) }
@@ -838,13 +835,13 @@ private fun HighlightPanel(
     Surface(Modifier.fillMaxHeight(), shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("高亮", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_list_title), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close)) }
             }
             HorizontalDivider()
             if (highlights.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("暂无高亮", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {

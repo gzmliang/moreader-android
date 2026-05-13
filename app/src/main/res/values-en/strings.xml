@@ -171,6 +171,8 @@
     <string name="bookmark_added">Bookmark added</string>
     <string name="bookmark_deleted">Bookmark deleted</string>
     <string name="bookmark_added_at">Added at %1$s</string>
+    <string name="bookmark_delete_title">Delete Bookmark</string>
+    <string name="bookmark_delete_confirm">Delete this bookmark?</string>
 
     <!-- Vocabulary -->
     <string name="vocabulary_title">Vocabulary</string>
@@ -186,6 +188,10 @@
     <!-- Highlight -->
     <string name="highlight_add">Highlight</string>
     <string name="highlight_remove">Remove Highlight</string>
+    <string name="highlight_list_title">Highlights</string>
+    <string name="highlight_empty">No highlights yet</string>
+    <string name="reader_fullscreen">Fullscreen</string>
+    <string name="reader_exit_fullscreen">Exit Fullscreen</string>
 
     <!-- TTS Settings Labels -->
     <string name="tts_label_base_url">Base URL</string>
@@ -260,19 +266,9 @@
     <string name="font_label_sans_serif">Sans-serif</string>
     <string name="font_label_serif">Serif</string>
     <string name="font_label_mono">Monospace</string>
-    <string name="font_label_condensed">Condensed</string>
-    <string name="font_label_medium">Medium</string>
-    <string name="font_label_light">Light</string>
-    <string name="font_label_thin">Thin</string>
-    <string name="font_label_cond_med">Condensed Medium</string>
-    <string name="font_label_cond_l">Condensed Light</string>
-    <string name="font_label_cond_b">Condensed Bold</string>
-    <string name="font_label_med_it">Medium Italic</string>
-    <string name="font_label_serif_mo">Serif Mono</string>
-    <string name="font_label_serif_me">Serif Medium</string>
     <string name="font_label_casual">Casual</string>
     <string name="font_label_cursive">Cursive</string>
-    
-    <string name="reader_btn_font_family">Font</string>
-    <string name="reader_btn_font_weight">Weight</string>
+    <string name="font_weight_normal">Normal</string>
+    <string name="font_weight_semibold">Semibold</string>
+    <string name="font_weight_bold">Bold</string>
 </resources>

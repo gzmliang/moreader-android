@@ -171,6 +171,8 @@
     <string name="bookmark_added">已添加书签</string>
     <string name="bookmark_deleted">书签已删除</string>
     <string name="bookmark_added_at">添加于 %1$s</string>
+    <string name="bookmark_delete_title">删除书签</string>
+    <string name="bookmark_delete_confirm">确定要删除这个书签吗？</string>
 
     <!-- Vocabulary -->
     <string name="vocabulary_title">生词本</string>
@@ -186,6 +188,10 @@
     <!-- Highlight -->
     <string name="highlight_add">高亮</string>
     <string name="highlight_remove">取消高亮</string>
+    <string name="highlight_list_title">高亮</string>
+    <string name="highlight_empty">暂无高亮</string>
+    <string name="reader_fullscreen">全屏模式</string>
+    <string name="reader_exit_fullscreen">退出全屏</string>
 
     <!-- TTS Settings Labels -->
     <string name="tts_label_base_url">Base URL</string>
@@ -260,19 +266,9 @@
     <string name="font_label_sans_serif">无衬线</string>
     <string name="font_label_serif">衬线</string>
     <string name="font_label_mono">等宽</string>
-    <string name="font_label_condensed">窄体</string>
-    <string name="font_label_medium">中等</string>
-    <string name="font_label_light">细体</string>
-    <string name="font_label_thin">极细</string>
-    <string name="font_label_cond_med">窄中</string>
-    <string name="font_label_cond_l">窄细</string>
-    <string name="font_label_cond_b">窄粗</string>
-    <string name="font_label_med_it">中等斜</string>
-    <string name="font_label_serif_mo">衬等</string>
-    <string name="font_label_serif_me">衬中</string>
     <string name="font_label_casual">手写</string>
     <string name="font_label_cursive">草书</string>
-    
-    <string name="reader_btn_font_family">字</string>
-    <string name="reader_btn_font_weight">粗</string>
+    <string name="font_weight_normal">常规</string>
+    <string name="font_weight_semibold">半粗</string>
+    <string name="font_weight_bold">粗体</string>
 </resources>
