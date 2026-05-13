@@ -305,35 +305,98 @@ class BookRepository(private val context: Context) {
 
         try {
             val zip = ZipFile(file)
-
-            // Try toc.ncx (EPUB 2) — might be in root or under OEBPS/
-            val tocNcx = zip.getEntry("OEBPS/toc.ncx")
-                ?: zip.getEntry("toc.ncx")
-                ?: zip.getEntry("EPUB/toc.ncx")
             val tocEntries = mutableListOf<TocEntry>()
 
-            if (tocNcx != null) {
-                val ncxBytes = zip.getInputStream(tocNcx).readBytes()
+            // Step 1: Try OPF-based NCX resolution (EPUB spec — most reliable)
+            val containerBytes = zip.getEntry("META-INF/container.xml")?.let { zip.getInputStream(it).readBytes() }
+            if (containerBytes != null) {
                 val dbf = DocumentBuilderFactory.newInstance().also { it.isNamespaceAware = true }
                 val db = dbf.newDocumentBuilder()
-                val ncxDoc = db.parse(ncxBytes.inputStream())
+                val containerDoc = db.parse(containerBytes.inputStream())
+                val rootfiles = containerDoc.getElementsByTagNameNS("*", "rootfile")
+                if (rootfiles.length > 0) {
+                    val opfPath = rootfiles.item(0).attributes.getNamedItem("full-path")?.textContent
+                    if (opfPath != null) {
+                        val baseDir = File(opfPath).parent?.replace('\\', '/') ?: ""
+                        val opfEntry = zip.getEntry(opfPath)
+                        if (opfEntry != null) {
+                            val opfDoc = db.parse(zip.getInputStream(opfEntry))
+                            // Find NCX id from spine's toc attribute
+                            val spine = opfDoc.getElementsByTagNameNS("*", "spine").item(0)
+                            val ncxId = spine?.attributes?.getNamedItem("toc")?.textContent
 
-                val navPoints = ncxDoc.getElementsByTagNameNS("*", "navPoint")
-                for (i in 0 until navPoints.length) {
-                    val np = navPoints.item(i) as? org.w3c.dom.Element ?: continue
-                    val textNode = np.getElementsByTagNameNS("*", "text")?.item(0) ?: continue
-                    val text = textNode.textContent ?: continue
-                    val contentNode = np.getElementsByTagNameNS("*", "content")?.item(0) ?: continue
-                    val src = contentNode.attributes.getNamedItem("src")?.textContent ?: continue
-                    val depth = countDepth(np)
-                    tocEntries.add(TocEntry(text, src, depth))
+                            // Build manifest map to resolve NCX href
+                            var ncxHref: String? = null
+                            if (ncxId != null) {
+                                val manifest = opfDoc.getElementsByTagNameNS("*", "manifest").item(0)
+                                if (manifest != null) {
+                                    val items = manifest.childNodes
+                                    for (i in 0 until items.length) {
+                                        val item = items.item(i)
+                                        if (item.nodeType == org.w3c.dom.Node.ELEMENT_NODE) {
+                                            val attrs = item.attributes
+                                            val id = attrs.getNamedItem("id")?.textContent
+                                            if (id == ncxId) {
+                                                ncxHref = attrs.getNamedItem("href")?.textContent
+                                                break
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Parse NCX if found
+                            if (ncxHref != null) {
+                                val ncxFullPath = if (baseDir.isNotEmpty()) "$baseDir/$ncxHref" else ncxHref
+                                val ncxEntry = zip.getEntry(ncxFullPath)
+                                if (ncxEntry != null) {
+                                    val ncxDoc = db.parse(zip.getInputStream(ncxEntry))
+                                    val navPoints = ncxDoc.getElementsByTagNameNS("*", "navPoint")
+                                    for (i in 0 until navPoints.length) {
+                                        val np = navPoints.item(i) as? org.w3c.dom.Element ?: continue
+                                        val textNode = np.getElementsByTagNameNS("*", "text")?.item(0) ?: continue
+                                        val text = textNode.textContent
+                                        val contentNode = np.getElementsByTagNameNS("*", "content")?.item(0) ?: continue
+                                        val src = contentNode.attributes.getNamedItem("src")?.textContent ?: continue
+                                        val depth = countDepth(np)
+                                        tocEntries.add(TocEntry(text, src, depth))
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
+            // Step 2: Fallback — hardcoded paths for malformed EPUBs
             if (tocEntries.isEmpty()) {
-                // Try nav.xhtml (EPUB 3)
+                val fallbackPaths = listOf(
+                    "OEBPS/toc.ncx", "toc.ncx", "EPUB/toc.ncx",
+                    "OPS/toc.ncx", "OPS/ncx.ncx",
+                )
+                val tocNcx = fallbackPaths.firstNotNullOfOrNull { zip.getEntry(it) }
+                if (tocNcx != null) {
+                    val dbf = DocumentBuilderFactory.newInstance().also { it.isNamespaceAware = true }
+                    val db = dbf.newDocumentBuilder()
+                    val ncxDoc = db.parse(zip.getInputStream(tocNcx))
+                    val navPoints = ncxDoc.getElementsByTagNameNS("*", "navPoint")
+                    for (i in 0 until navPoints.length) {
+                        val np = navPoints.item(i) as? org.w3c.dom.Element ?: continue
+                        val textNode = np.getElementsByTagNameNS("*", "text")?.item(0) ?: continue
+                        val text = textNode.textContent
+                        val contentNode = np.getElementsByTagNameNS("*", "content")?.item(0) ?: continue
+                        val src = contentNode.attributes.getNamedItem("src")?.textContent ?: continue
+                        val depth = countDepth(np)
+                        tocEntries.add(TocEntry(text, src, depth))
+                    }
+                }
+            }
+
+            // Step 3: EPUB 3 nav.xhtml fallback
+            if (tocEntries.isEmpty()) {
                 val navXhtml = zip.getEntry("OEBPS/nav.xhtml")
                     ?: zip.getEntry("EPUB/nav.xhtml")
+                    ?: zip.getEntry("OPS/nav.xhtml")
                     ?: zip.getEntry("nav.xhtml")
                 if (navXhtml != null) {
                     val navHtml = zip.getInputStream(navXhtml).bufferedReader().readText()
@@ -455,10 +518,13 @@ class BookRepository(private val context: Context) {
                 // Try alternative paths
                 val altPaths = listOf(
                     "OEBPS/$chapterHref",
+                    "OPS/$chapterHref",
                     chapterHref.removePrefix("OEBPS/"),
+                    chapterHref.removePrefix("OPS/"),
                     chapterHref.substringAfterLast('/'),
                     chapterHref.removePrefix("/"),
                     "OEBPS/${chapterHref.substringAfterLast('/')}",
+                    "OPS/${chapterHref.substringAfterLast('/')}",
                 )
                 for (altPath in altPaths) {
                     val altEntry = zip.getEntry(altPath)
