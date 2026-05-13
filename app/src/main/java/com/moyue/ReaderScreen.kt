@@ -30,6 +30,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
@@ -65,13 +69,31 @@ fun ReaderScreen(
         }
     }
 
-    // Fullscreen tap hint - shows briefly when entering fullscreen
+    // Fullscreen: hide system status bar and navigation bar
     var showFullscreenHint by remember { mutableStateOf(false) }
+    val view = LocalView.current
     LaunchedEffect(state.isFullscreen) {
-        if (state.isFullscreen) {
-            showFullscreenHint = true
-            kotlinx.coroutines.delay(2000)
-            showFullscreenHint = false
+        val window = (view.context as? android.app.Activity)?.window
+        if (window != null) {
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            if (state.isFullscreen) {
+                // Hide status bar and navigation bar
+                insetsController.hide(
+                    WindowInsetsCompat.Type.statusBars() or
+                    WindowInsetsCompat.Type.navigationBars()
+                )
+                insetsController.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                showFullscreenHint = true
+                kotlinx.coroutines.delay(2000)
+                showFullscreenHint = false
+            } else {
+                // Show status bar and navigation bar
+                insetsController.show(
+                    WindowInsetsCompat.Type.statusBars() or
+                    WindowInsetsCompat.Type.navigationBars()
+                )
+            }
         }
     }
 
@@ -293,7 +315,18 @@ fun ReaderScreen(
             }
         }
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        // In fullscreen, strip status bar and navigation bar padding to avoid the "brow" at top
+        val effectivePadding = if (state.isFullscreen) {
+            PaddingValues(
+                start = padding.calculateStartPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
+                top = 0.dp,
+                end = padding.calculateEndPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
+                bottom = 0.dp,
+            )
+        } else {
+            padding
+        }
+        Box(Modifier.fillMaxSize().padding(effectivePadding)) {
             if (state.isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
