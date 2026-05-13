@@ -255,4 +255,24 @@
     <string name="flashcard_no_definition">暂无释义</string>
     <string name="flashcard_no_definition_hint">请检查 AI 词典 API 配置</string>
     <string name="flashcard_tap_back_front">点击返回正面</string>
+
+    <!-- Fonts -->
+    <string name="font_label_sans_serif">无衬线</string>
+    <string name="font_label_serif">衬线</string>
+    <string name="font_label_mono">等宽</string>
+    <string name="font_label_condensed">窄体</string>
+    <string name="font_label_medium">中等</string>
+    <string name="font_label_light">细体</string>
+    <string name="font_label_thin">极细</string>
+    <string name="font_label_cond_med">窄中</string>
+    <string name="font_label_cond_l">窄细</string>
+    <string name="font_label_cond_b">窄粗</string>
+    <string name="font_label_med_it">中等斜</string>
+    <string name="font_label_serif_mo">衬等</string>
+    <string name="font_label_serif_me">衬中</string>
+    <string name="font_label_casual">手写</string>
+    <string name="font_label_cursive">草书</string>
+    
+    <string name="reader_btn_font_family">字</string>
+    <string name="reader_btn_font_weight">粗</string>
 </resources>

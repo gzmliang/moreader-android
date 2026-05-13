@@ -255,4 +255,24 @@
     <string name="flashcard_no_definition">No definition yet</string>
     <string name="flashcard_no_definition_hint">Check AI dictionary API config</string>
     <string name="flashcard_tap_back_front">Tap to return to front</string>
+
+    <!-- Fonts -->
+    <string name="font_label_sans_serif">Sans-serif</string>
+    <string name="font_label_serif">Serif</string>
+    <string name="font_label_mono">Monospace</string>
+    <string name="font_label_condensed">Condensed</string>
+    <string name="font_label_medium">Medium</string>
+    <string name="font_label_light">Light</string>
+    <string name="font_label_thin">Thin</string>
+    <string name="font_label_cond_med">Condensed Medium</string>
+    <string name="font_label_cond_l">Condensed Light</string>
+    <string name="font_label_cond_b">Condensed Bold</string>
+    <string name="font_label_med_it">Medium Italic</string>
+    <string name="font_label_serif_mo">Serif Mono</string>
+    <string name="font_label_serif_me">Serif Medium</string>
+    <string name="font_label_casual">Casual</string>
+    <string name="font_label_cursive">Cursive</string>
+    
+    <string name="reader_btn_font_family">Font</string>
+    <string name="reader_btn_font_weight">Weight</string>
 </resources>

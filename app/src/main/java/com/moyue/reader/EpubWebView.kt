@@ -41,6 +41,8 @@ fun EpubWebView(
     bgColor: String,
     textColor: String,
     fontScale: Float,
+    fontFamily: String = "sans-serif",
+    fontWeight: String = "normal",
     onTextSelected: (String) -> Unit,
     onLinkClicked: (String) -> Unit = {},
     onParagraphClicked: ((Int) -> Unit)? = null,
@@ -117,16 +119,55 @@ fun EpubWebView(
         )
     }
 
-    // Dynamic theme update when font/bg/text changes
-    LaunchedEffect(fontScale, bgColor, textColor) {
+    // We only want to reload HTML when content or base URL changes.
+    // Theme changes (bgColor, textColor, fontScale) should be applied via JS (LaunchedEffect below)
+    // to avoid jumping to the top of the page.
+    var lastLoadedContent by remember { mutableStateOf<String?>(null) }
+    
+    // Load HTML only when content or base URL actually changes
+    LaunchedEffect(htmlContent, baseUrl) {
+        if (htmlContent != null) {
+            webView?.let { wv ->
+                // Construct HTML with initial CSS. 
+                // Note: This uses the *current* values of initCss variables at the moment of loading.
+                val currentInitCss = """<style id="mt">
+                    *{background-color:${bgColor}!important;color:${textColor}!important}
+                    body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:1.8!important;margin:16px!important;font-size:${(fontScale*100).toInt()}%!important;font-weight:${fontWeight}!important}
+                    p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${(fontScale*100).toInt()}%!important;line-height:1.8!important;font-family:${fontFamily}!important;font-weight:${fontWeight}!important}
+                    p{margin-bottom:0.8em!important}
+                    h1,h2,h3,h4{font-weight:bold!important}
+                    img{max-width:100%!important;height:auto!important}
+                    a{color:#06C!important}
+                    .tts-hl{background-color:rgba(59,130,246,0.2)!important;border-left:3px solid #3b82f6!important}
+                    .user-highlight{background-color:rgba(255,255,0,0.35)!important;border-radius:2px!important}
+                    ::-webkit-scrollbar{width:0!important;height:0!important}
+                    </style>"""
+                
+                val html = buildString {
+                    append("<html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0,maximum-scale=1.0\">")
+                    append(currentInitCss)
+                    append("</head><body>")
+                    append(htmlContent)
+                    append("</body></html>")
+                }
+                wv.loadDataWithBaseURL(baseUrl, html, "text/html", "UTF-8", null)
+                lastLoadedContent = htmlContent
+            }
+        }
+    }
+
+    // Dynamic theme/font update via JS (does not reload page, preserves scroll)
+    LaunchedEffect(fontScale, bgColor, textColor, fontFamily, fontWeight) {
         webView?.let { wv ->
+            if (lastLoadedContent == null) return@let // Not loaded yet
+            
             val sz = (fontScale * 100).toInt()
             val js = """(function(){
                 var e=document.getElementById('mt');
                 if(!e)return;
                 e.textContent='*{background-color:${bgColor}!important;color:${textColor}!important}'+
-                'body{background-color:${bgColor}!important;color:${textColor}!important;font-family:sans-serif!important;line-height:1.8!important;margin:16px!important;font-size:${sz}%!important}'+
-                'p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${sz}%!important;line-height:1.8!important}'+
+                'body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:1.8!important;margin:16px!important;font-size:${sz}%!important;font-weight:${fontWeight}!important}'+
+                'p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${sz}%!important;line-height:1.8!important;font-family:${fontFamily}!important;font-weight:${fontWeight}!important}'+
                 'p{margin-bottom:0.8em!important}'+
                 'h1,h2,h3,h4{font-weight:bold!important}'+
                 'img{max-width:100%!important;height:auto!important}'+
@@ -138,19 +179,6 @@ fun EpubWebView(
             wv.evaluateJavascript(js, null)
         }
     }
-
-    val initCss = """<style id="mt">
-        *{background-color:${bgColor}!important;color:${textColor}!important}
-        body{background-color:${bgColor}!important;color:${textColor}!important;font-family:sans-serif!important;line-height:1.8!important;margin:16px!important;font-size:${(fontScale*100).toInt()}%!important}
-        p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${(fontScale*100).toInt()}%!important;line-height:1.8!important}
-        p{margin-bottom:0.8em!important}
-        h1,h2,h3,h4{font-weight:bold!important}
-        img{max-width:100%!important;height:auto!important}
-        a{color:#06C!important}
-        .tts-hl{background-color:rgba(59,130,246,0.2)!important;border-left:3px solid #3b82f6!important}
-        .user-highlight{background-color:rgba(255,255,0,0.35)!important;border-radius:2px!important}
-        ::-webkit-scrollbar{width:0!important;height:0!important}
-        </style>"""
 
     Box(modifier = modifier) {
         AndroidView(
@@ -392,16 +420,6 @@ fun EpubWebView(
             },
             update = { wv ->
                 webView = wv
-                if (htmlContent != null) {
-                    val html = buildString {
-                        append("""<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">""")
-                        append(initCss)
-                        append("</head><body>")
-                        append(htmlContent)
-                        append("</body></html>")
-                    }
-                    wv.loadDataWithBaseURL(baseUrl, html, "text/html", "UTF-8", null)
-                }
             },
             modifier = Modifier.fillMaxSize(),
         )

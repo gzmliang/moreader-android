@@ -272,11 +272,13 @@ fun ReaderScreen(
                 AnimatedVisibility(visible = !state.isFullscreen) {
                     ReaderBottomBar(
                         currentIndex = state.currentChapterIndex, totalChapters = state.chapters.size,
-                        fontSize = state.fontSize,
+                        fontSize = state.fontSize, fontFamily = state.fontFamily, fontWeight = state.fontWeight,
                         isTtsPlaying = state.isTtsPlaying, isTtsPaused = state.isTtsPaused,
                         canGoBack = state.canGoBack,
                         onPrev = { viewModel.prevChapter() }, onNext = { viewModel.nextChapter() },
                         onFontSizeChange = { viewModel.setFontSize(it) },
+                        onFontFamilyChange = { viewModel.setFontFamily(it) },
+                        onFontWeightChange = { viewModel.setFontWeight(it) },
                         onPlayPause = { viewModel.togglePlayPause() },
                         onStop = { viewModel.ttsStop() },
                         onToggleDebug = { viewModel.toggleTtsDebugLog() },
@@ -324,6 +326,8 @@ fun ReaderScreen(
                     bgColor = state.theme.bgColor,
                     textColor = state.theme.textColor,
                     fontScale = state.fontSize / 18f,
+                    fontFamily = state.fontFamily,
+                    fontWeight = state.fontWeight,
                     onTextSelected = { viewModel.onTextSelected(it) },
                     onLinkClicked = { 
                         val idx = it.lastIndexOf('|')
@@ -515,12 +519,14 @@ fun ReaderScreen(
 
 @Composable
 private fun ReaderBottomBar(
-    currentIndex: Int, totalChapters: Int, fontSize: Int,
+    currentIndex: Int, totalChapters: Int, fontSize: Int, fontFamily: String, fontWeight: String,
     isTtsPlaying: Boolean, isTtsPaused: Boolean,
     canGoBack: Boolean,
     onPrev: () -> Unit, onNext: () -> Unit,
     onGoBack: () -> Unit,
     onFontSizeChange: (Int) -> Unit,
+    onFontFamilyChange: (String) -> Unit,
+    onFontWeightChange: (String) -> Unit,
     onPlayPause: () -> Unit, onStop: () -> Unit,
     onToggleDebug: () -> Unit,
     onNavigateToChapter: (Int) -> Unit,
@@ -624,6 +630,65 @@ private fun ReaderBottomBar(
                 }
 
                 IconButton(onClick = onPrev, enabled = currentIndex > 0) { Icon(Icons.Default.ChevronLeft, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.previous_chapter), tint = barTextColor) }
+
+                // Font Family Dropdown
+                val fontFamilyResIds = listOf(
+                    com.moyue.app.R.string.font_label_sans_serif, com.moyue.app.R.string.font_label_serif, com.moyue.app.R.string.font_label_mono,
+                    com.moyue.app.R.string.font_label_condensed, com.moyue.app.R.string.font_label_medium, com.moyue.app.R.string.font_label_light,
+                    com.moyue.app.R.string.font_label_thin, com.moyue.app.R.string.font_label_cond_med, com.moyue.app.R.string.font_label_cond_l,
+                    com.moyue.app.R.string.font_label_cond_b, com.moyue.app.R.string.font_label_med_it, com.moyue.app.R.string.font_label_serif_mo,
+                    com.moyue.app.R.string.font_label_serif_me, com.moyue.app.R.string.font_label_casual, com.moyue.app.R.string.font_label_cursive
+                )
+                val fontFamilyValues = listOf(
+                    "sans-serif", "serif", "monospace", "sans-serif-condensed", "sans-serif-medium", "sans-serif-light",
+                    "sans-serif-thin", "sans-serif-condensed-medium", "sans-serif-condensed-light",
+                    "sans-serif-condensed-bold", "sans-serif-medium-italic", "serif-monospace", "serif-medium",
+                    "casual", "cursive"
+                )
+                var expandedFont by remember { mutableStateOf(false) }
+                val fontLabel = fontFamilyResIds.getOrNull(fontFamilyValues.indexOf(fontFamily)) 
+                    ?: com.moyue.app.R.string.font_label_sans_serif
+                
+                Box {
+                    TextButton(onClick = { expandedFont = true }, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                        Text(text = androidx.compose.ui.res.stringResource(fontLabel), fontSize = 11.sp, color = barTextColor)
+                    }
+                    androidx.compose.material3.DropdownMenu(expanded = expandedFont, onDismissRequest = { expandedFont = false }) {
+                        fontFamilyValues.forEachIndexed { idx, f ->
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(androidx.compose.ui.res.stringResource(fontFamilyResIds[idx]), fontSize = 13.sp) },
+                                onClick = { onFontFamilyChange(f); expandedFont = false },
+                                leadingIcon = if (f == fontFamily) { @Composable { Icon(Icons.Default.Check, null) } } else null
+                            )
+                        }
+                    }
+                }
+
+                // Font Weight Dropdown
+                val fontWeights = listOf("400", "500", "600", "700", "900")
+                val weightLabels = listOf(
+                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_btn_font_weight) + " 400",
+                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_btn_font_weight) + " 500",
+                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_btn_font_weight) + " 600",
+                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_btn_font_weight) + " 700",
+                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_btn_font_weight) + " 900"
+                )
+                var expandedWeight by remember { mutableStateOf(false) }
+                
+                Box {
+                    TextButton(onClick = { expandedWeight = true }, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                        Text(text = weightLabels.getOrNull(fontWeights.indexOf(fontWeight)) ?: weightLabels[0], fontSize = 11.sp, color = barTextColor)
+                    }
+                    androidx.compose.material3.DropdownMenu(expanded = expandedWeight, onDismissRequest = { expandedWeight = false }) {
+                        fontWeights.forEachIndexed { idx, w ->
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(weightLabels[idx], fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight(fontWeights[idx].toInt())) },
+                                onClick = { onFontWeightChange(w); expandedWeight = false },
+                                leadingIcon = if (w == fontWeight) { @Composable { Icon(Icons.Default.Check, null) } } else null
+                            )
+                        }
+                    }
+                }
 
                 IconButton(onClick = { onFontSizeChange(fontSize - 2) }) { Text("A-", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = barTextColor) }
                 Text("$fontSize", fontSize = 11.sp, color = barTextColor)

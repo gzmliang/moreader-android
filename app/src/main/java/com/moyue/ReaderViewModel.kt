@@ -42,6 +42,8 @@ data class ReaderUiState(
     val error: String? = null,
     val theme: ReaderTheme = ReaderTheme.LIGHT,
     val fontSize: Int = 18,
+    val fontFamily: String = "sans-serif",
+    val fontWeight: String = "400",
     val selectedText: String? = null,
     val selectionInfo: SelectionInfo? = null,  // Selection with paragraph/offset info
     val translationResult: String? = null,
@@ -293,6 +295,8 @@ class ReaderViewModel(
             repository.updateBookFontSize(book.id, size)
         }
     }
+    fun setFontFamily(f: String) { _uiState.update { it.copy(fontFamily = f) } }
+    fun setFontWeight(w: String) { _uiState.update { it.copy(fontWeight = w) } }
     fun onTextSelected(infoJson: String) {
         try {
             val obj = JSONObject(infoJson)
