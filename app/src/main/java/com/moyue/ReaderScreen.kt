@@ -274,7 +274,6 @@ fun ReaderScreen(
                         currentIndex = state.currentChapterIndex, totalChapters = state.chapters.size,
                         fontSize = state.fontSize, fontFamily = state.fontFamily, fontWeight = state.fontWeight,
                         isTtsPlaying = state.isTtsPlaying, isTtsPaused = state.isTtsPaused,
-                        canGoBack = state.canGoBack,
                         onPrev = { viewModel.prevChapter() }, onNext = { viewModel.nextChapter() },
                         onFontSizeChange = { viewModel.setFontSize(it) },
                         onFontFamilyChange = { viewModel.setFontFamily(it) },
@@ -282,7 +281,6 @@ fun ReaderScreen(
                         onPlayPause = { viewModel.togglePlayPause() },
                         onStop = { viewModel.ttsStop() },
                         onToggleDebug = { viewModel.toggleTtsDebugLog() },
-                        onGoBack = { viewModel.goBack() },
                         onNavigateToChapter = { idx ->
                             val ch = state.chapters.getOrNull(idx)
                             if (ch != null) viewModel.navigateToChapter(ch.href)
@@ -522,9 +520,7 @@ fun ReaderScreen(
 private fun ReaderBottomBar(
     currentIndex: Int, totalChapters: Int, fontSize: Int, fontFamily: String, fontWeight: String,
     isTtsPlaying: Boolean, isTtsPaused: Boolean,
-    canGoBack: Boolean,
     onPrev: () -> Unit, onNext: () -> Unit,
-    onGoBack: () -> Unit,
     onFontSizeChange: (Int) -> Unit,
     onFontFamilyChange: (String) -> Unit,
     onFontWeightChange: (String) -> Unit,
@@ -641,13 +637,6 @@ private fun ReaderBottomBar(
                         ) { content() }
                     }
 
-                    // Navigation back (conditional)
-                    if (canGoBack) {
-                        EqualButton(onGoBack) {
-                            Icon(Icons.Default.Undo, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.nav_back_label), tint = barTextColor, modifier = Modifier.size(18.dp))
-                        }
-                    }
-
                     // Prev chapter
                     EqualButton(onPrev, enabled = currentIndex > 0) {
                         Icon(Icons.Default.ChevronLeft, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.previous_chapter), tint = barTextColor, modifier = Modifier.size(18.dp))
@@ -670,7 +659,7 @@ private fun ReaderBottomBar(
                         androidx.compose.material3.IconButton(onClick = { expandedFont = true }, modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(32.dp)) {
                             androidx.compose.material3.Text(
                                 androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_font_family_label),
-                                fontSize = 12.sp,
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = barTextColor,
                             )
@@ -699,7 +688,7 @@ private fun ReaderBottomBar(
                         androidx.compose.material3.IconButton(onClick = { expandedWeight = true }, modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(32.dp)) {
                             androidx.compose.material3.Text(
                                 androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_font_weight_label),
-                                fontSize = 12.sp,
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = barTextColor,
                             )

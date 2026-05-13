@@ -188,10 +188,9 @@ class ReaderViewModel(
         }
         viewModelScope.launch {
             loadChapterContent()
-            // Scroll to the paragraph we were at — must be AFTER loadChapterContent
-            if (targetPara > 0) {
-                _uiState.update { it.copy(scrollToParagraph = targetPara) }
-            }
+            // Scroll to the saved paragraph — ALWAYS use the history entry's position,
+            // not the DB-restored one (which may be for a different chapter)
+            _uiState.update { it.copy(scrollToParagraph = targetPara) }
             saveProgress()
         }
     }
