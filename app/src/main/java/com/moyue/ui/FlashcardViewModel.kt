@@ -638,7 +638,16 @@ class FlashcardViewModel(
                     val audioBytes = when (ttsType) {
                         TTSProviderType.EDGE_TTS -> {
                             val endpoint = prefs.getString("edge_endpoint", "http://powerplus.blogsyte.com:5001") ?: "http://powerplus.blogsyte.com:5001"
-                            val voice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural"
+                            var voice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural"
+                            // Auto-detect language: if Chinese text but English voice (or vice versa), fix it
+                            val isChinese = word.any { it in '\u4e00'..'\u9fff' }
+                            if (isChinese && !voice.startsWith("zh-")) {
+                                log.append("Voice mismatch detected ($voice for Chinese text), auto-switching to zh-CN-XiaoxiaoNeural\n")
+                                voice = "zh-CN-XiaoxiaoNeural"
+                            } else if (!isChinese && voice.startsWith("zh-")) {
+                                log.append("Voice mismatch detected ($voice for English text), auto-switching to en-US-GuyNeural\n")
+                                voice = "en-US-GuyNeural"
+                            }
                             val apiKey = prefs.getString("edge_apikey", "") ?: ""
                             log.append("Edge TTS: endpoint=$endpoint voice=$voice apiKey_len=${apiKey.length}\n")
                             fetchEdgeTTSWorking(endpoint, voice, apiKey, word, log)
@@ -661,7 +670,11 @@ class FlashcardViewModel(
                         }
                         TTSProviderType.SYSTEM -> {
                             log.append("SYSTEM TTS not supported for flashcard, falling back to Edge TTS\n")
-                            fetchEdgeTTSWorking("http://powerplus.blogsyte.com:5001", "zh-CN-XiaoxiaoNeural", "", word, log)
+                            // Also apply language auto-detection for the fallback
+                            var fallbackVoice = "zh-CN-XiaoxiaoNeural"
+                            val isChinese = word.any { it in '\u4e00'..'\u9fff' }
+                            if (!isChinese) fallbackVoice = "en-US-GuyNeural"
+                            fetchEdgeTTSWorking("http://powerplus.blogsyte.com:5001", fallbackVoice, "", word, log)
                         }
                     }
 

@@ -68,7 +68,11 @@ class VocabularyViewModel(
                     val audioBytes = when (ttsType) {
                         TTSProviderType.EDGE_TTS -> {
                             val endpoint = prefs.getString("edge_endpoint", "http://powerplus.blogsyte.com:5001") ?: "http://powerplus.blogsyte.com:5001"
-                            val voice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural"
+                            var voice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural"
+                            // Auto-detect language for voice matching
+                            val isChinese = word.any { it in '\u4e00'..'\u9fff' }
+                            if (isChinese && !voice.startsWith("zh-")) voice = "zh-CN-XiaoxiaoNeural"
+                            else if (!isChinese && voice.startsWith("zh-")) voice = "en-US-GuyNeural"
                             val apiKey = prefs.getString("edge_apikey", "") ?: ""
                             fetchEdgeTTS(endpoint, voice, apiKey, word)
                         }
