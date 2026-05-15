@@ -17,15 +17,6 @@ android {
         versionName = "1.8.1"
     }
 
-    signingConfigs {
-        getByName("debug") {
-            storeFile = rootProject.file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-        }
-    }
-
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -34,7 +25,6 @@ android {
         }
         debug {
             isDebuggable = true
-            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
