@@ -206,6 +206,18 @@ class ReaderViewModel(
         // Restore theme and font size from saved preference
         val restoredTheme = ReaderTheme.entries.find { it.id == book.themeId } ?: ReaderTheme.LIGHT
         
+        // Restore per-book TTS config (empty = fall back to global prefs)
+        val restoredTtsProvider = if (book.ttsProvider.isNotEmpty()) {
+            runCatching { TTSProviderType.valueOf(book.ttsProvider) }.getOrDefault(TTSProviderType.EDGE_TTS)
+        } else {
+            TTSProviderType.entries.find { it.name == prefs.getString("tts_provider", null) }
+                ?: TTSProviderType.EDGE_TTS
+        }
+        val restoredTtsVoice = if (book.ttsVoice.isNotEmpty()) book.ttsVoice
+            else (prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural")
+        val restoredTtsSpeed = if (book.ttsProvider.isNotEmpty() && book.ttsSpeed != 0f) book.ttsSpeed
+            else prefs.getFloat("tts_speed", 1.0f)
+        
         _uiState.update { it.copy(
             book = book, 
             chapters = chapters, 
@@ -213,6 +225,11 @@ class ReaderViewModel(
             currentChapterIndex = book.currentChapterIndex.coerceIn(0, maxOf(0, chapters.size - 1)), 
             theme = restoredTheme,
             fontSize = book.fontSize,
+            ttsProvider = restoredTtsProvider,
+            edgeTtsVoice = restoredTtsVoice,
+            aiVoiceId = if (book.ttsVoice.isNotEmpty()) book.ttsVoice else it.aiVoiceId,
+            customTtsVoice = if (book.ttsVoice.isNotEmpty()) book.ttsVoice else it.customTtsVoice,
+            ttsSpeed = restoredTtsSpeed,
             isLoading = false, 
             loadingMessage = ""
         ) }
@@ -570,18 +587,38 @@ class ReaderViewModel(
     fun ttsStop() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_stop)); killPlayChain(); _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) } }
     fun togglePlayPause() { val s = _uiState.value; when { s.isTtsPlaying -> ttsPause(); s.isTtsPaused -> ttsResume(); else -> readChapter() } }
 
-    fun setTTSProvider(type: TTSProviderType) { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_switch_engine, type.name)); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(ttsProvider = type) } }
+    fun setTTSProvider(type: TTSProviderType) { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_switch_engine, type.name)); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(ttsProvider = type) }; savePerBookTtsConfig() }
     fun setTTSSpeed(s: Float) {
         _uiState.update { it.copy(ttsSpeed = s.coerceIn(0.5f, 2.0f)) }
         prefs.edit().putFloat("tts_speed", s.coerceIn(0.5f, 2.0f)).apply()
+        // Save per-book TTS config
+        val book = _uiState.value.book
+        if (book != null) {
+            viewModelScope.launch { repository.updateBookTtsConfig(book.id, _uiState.value.ttsProvider.name, _uiState.value.edgeTtsVoice, s.coerceIn(0.5f, 2.0f)) }
+        }
     }
     fun increaseHighlightOffset() { _uiState.update { it.copy(ttsHighlightOffset = it.ttsHighlightOffset + 1) }; log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_offset_inc, _uiState.value.ttsHighlightOffset)); prefs.edit().putInt("tts_highlight_offset", _uiState.value.ttsHighlightOffset).apply() }
     fun decreaseHighlightOffset() { _uiState.update { it.copy(ttsHighlightOffset = it.ttsHighlightOffset - 1) }; log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_offset_dec, _uiState.value.ttsHighlightOffset)); prefs.edit().putInt("tts_highlight_offset", _uiState.value.ttsHighlightOffset).apply() }
-    fun updateEdgeTTSConfig(endpoint: String, voice: String) { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_edge_config, voice)); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(edgeTtsEndpoint = endpoint, edgeTtsVoice = voice) }; prefs.edit().putString("edge_endpoint", endpoint).putString("edge_voice", voice).apply() }
-    fun updateAIVoiceConfig(endpoint: String, apiKey: String, model: String, voice: String) { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_ai_config, voice)); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(aiVoiceEndpoint = endpoint, aiVoiceApiKey = apiKey, aiVoiceModel = model, aiVoiceId = voice) }; prefs.edit().putString("ai_endpoint", endpoint).putString("ai_apikey", apiKey).putString("ai_model", model).putString("ai_voice_id", voice).apply() }
-    fun updateCustomTTSConfig(endpoint: String, apiKey: String, model: String, voice: String) { log("Custom TTS: $endpoint, model=$model, voice=$voice"); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(customTtsEndpoint = endpoint, customTtsApiKey = apiKey, customTtsModel = model, customTtsVoice = voice) }; prefs.edit().putString("custom_endpoint", endpoint).putString("custom_apikey", apiKey).putString("custom_model", model).putString("custom_voice", voice).apply() }
+    fun updateEdgeTTSConfig(endpoint: String, voice: String) { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_edge_config, voice)); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(edgeTtsEndpoint = endpoint, edgeTtsVoice = voice) }; prefs.edit().putString("edge_endpoint", endpoint).putString("edge_voice", voice).apply(); savePerBookTtsConfig() }
+    fun updateAIVoiceConfig(endpoint: String, apiKey: String, model: String, voice: String) { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_ai_config, voice)); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(aiVoiceEndpoint = endpoint, aiVoiceApiKey = apiKey, aiVoiceModel = model, aiVoiceId = voice) }; prefs.edit().putString("ai_endpoint", endpoint).putString("ai_apikey", apiKey).putString("ai_model", model).putString("ai_voice_id", voice).apply(); savePerBookTtsConfig() }
+    fun updateCustomTTSConfig(endpoint: String, apiKey: String, model: String, voice: String) { log("Custom TTS: $endpoint, model=$model, voice=$voice"); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(customTtsEndpoint = endpoint, customTtsApiKey = apiKey, customTtsModel = model, customTtsVoice = voice) }; prefs.edit().putString("custom_endpoint", endpoint).putString("custom_apikey", apiKey).putString("custom_model", model).putString("custom_voice", voice).apply(); savePerBookTtsConfig() }
     fun toggleFullscreen() { _uiState.update { it.copy(isFullscreen = !it.isFullscreen) } }
     fun setFullscreen(enabled: Boolean) { _uiState.update { it.copy(isFullscreen = enabled) } }
+
+    /** Save current TTS config to the current book's record */
+    private fun savePerBookTtsConfig() {
+        val book = _uiState.value.book ?: return
+        val s = _uiState.value
+        val voice = when (s.ttsProvider) {
+            TTSProviderType.EDGE_TTS -> s.edgeTtsVoice
+            TTSProviderType.AI_VOICE -> s.aiVoiceId
+            TTSProviderType.CUSTOM_TTS -> s.customTtsVoice
+            TTSProviderType.SYSTEM -> ""
+        }
+        viewModelScope.launch {
+            repository.updateBookTtsConfig(book.id, s.ttsProvider.name, voice, s.ttsSpeed)
+        }
+    }
     fun updateLLMConfig(c: LLMConfig) { _uiState.update { it.copy(llmConfig = c) }; prefs.edit().putString("llm_provider", c.provider).putString("llm_apikey", c.apiKey).putString("llm_endpoint", c.endpoint).putString("llm_model", c.model).apply() }
     fun toggleTocPanel() { _uiState.update { it.copy(showTocPanel = !it.showTocPanel) } }
     fun toggleTtsSettingsPanel() { _uiState.update { it.copy(showTtsSettingsPanel = !it.showTtsSettingsPanel) } }

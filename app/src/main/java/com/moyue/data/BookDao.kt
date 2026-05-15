@@ -20,4 +20,7 @@ interface BookDao {
 
     @Query("UPDATE books SET lastReadAt = :timestamp, currentChapterHref = :href, currentChapterIndex = :index, currentProgress = :progress, currentCfi = :cfi, currentParagraphIndex = :paraIdx, themeId = :theme, fontSize = :fSize WHERE id = :id")
     suspend fun updateProgress(id: String, timestamp: Long, href: String?, index: Int, progress: Float, cfi: String?, paraIdx: Int, theme: String, fSize: Int)
+
+    @Query("UPDATE books SET ttsProvider = :provider, ttsVoice = :voice, ttsSpeed = :speed WHERE id = :id")
+    suspend fun updateTtsConfig(id: String, provider: String, voice: String, speed: Float)
 }

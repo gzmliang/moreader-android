@@ -85,3 +85,12 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         database.execSQL("ALTER TABLE books ADD COLUMN fontSize INTEGER NOT NULL DEFAULT 18")
     }
 }
+
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        // Add per-book TTS config to books table
+        database.execSQL("ALTER TABLE books ADD COLUMN ttsProvider TEXT NOT NULL DEFAULT ''")
+        database.execSQL("ALTER TABLE books ADD COLUMN ttsVoice TEXT NOT NULL DEFAULT ''")
+        database.execSQL("ALTER TABLE books ADD COLUMN ttsSpeed REAL NOT NULL DEFAULT 1.0")
+    }
+}

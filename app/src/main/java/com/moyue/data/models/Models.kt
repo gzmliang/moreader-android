@@ -19,6 +19,10 @@ data class Book(
     val currentParagraphIndex: Int = 0,      // paragraph index within chapter
     val themeId: String = "default",         // last used reading theme
     val fontSize: Int = 18,                  // last used font size
+    // Per-book TTS config (empty = use global default)
+    val ttsProvider: String = "",            // "EDGE_TTS", "AI_VOICE", "SYSTEM", "CUSTOM_TTS"
+    val ttsVoice: String = "",               // last used voice name
+    val ttsSpeed: Float = 1.0f,              // per-book TTS speed
 )
 
 // TOC entry

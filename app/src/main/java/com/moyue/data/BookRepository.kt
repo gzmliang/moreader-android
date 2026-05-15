@@ -625,6 +625,10 @@ class BookRepository(private val context: Context) {
         dao.upsert(book.copy(coverPath = coverPath))
     }
 
+    suspend fun updateBookTtsConfig(id: String, provider: String, voice: String, speed: Float) = withContext(Dispatchers.IO) {
+        dao.updateTtsConfig(id, provider, voice, speed)
+    }
+
     // === Bookmark operations ===
     fun getAllBookmarks(): Flow<List<Bookmark>> = db.bookmarkDao().getAllBookmarks()
     
