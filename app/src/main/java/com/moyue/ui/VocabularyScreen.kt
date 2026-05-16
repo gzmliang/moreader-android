@@ -1,11 +1,15 @@
 package com.moyue.app.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.VolumeUp
@@ -43,6 +47,11 @@ fun VocabularyScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var showExportMenu by remember { mutableStateOf(false) }
+    
+    // Multi-select mode for import
+    var isSelectMode by remember { mutableStateOf(false) }
+    var selectedCount by remember { mutableIntStateOf(0) }
+    val selectedIdSet = remember { mutableSetOf<Long>() }
     
     // Plan selector for imports
     var showPlanPicker by remember { mutableStateOf(false) }
@@ -130,9 +139,37 @@ fun VocabularyScreen(
                     }
                 },
                 actions = {
-                    // Batch import to flashcards — opens plan picker
-                    IconButton(onClick = { openPlanPicker(vocabulary) }) {
-                        Icon(Icons.Default.Bolt, contentDescription = stringResource(R.string.flashcard_batch_import))
+                    // Select mode toggle
+                    if (!isSelectMode) {
+                        // Batch import ALL to flashcards
+                        IconButton(onClick = { openPlanPicker(vocabulary) }) {
+                            Icon(Icons.Default.Bolt, contentDescription = stringResource(R.string.flashcard_batch_import))
+                        }
+                        // Enter select mode
+                        IconButton(onClick = { isSelectMode = true }) {
+                            Icon(Icons.Default.Checklist, contentDescription = stringResource(R.string.vocab_select_mode))
+                        }
+                    } else {
+                        // In select mode: show count, import selected, cancel
+                        Text(
+                            "${selectedCount}/${vocabulary.size}",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        if (selectedCount > 0) {
+                            TextButton(
+                                onClick = {
+                                    val selected = vocabulary.filter { selectedIdSet.contains(it.id) }
+                                    openPlanPicker(selected)
+                                }
+                            ) {
+                                Text(stringResource(R.string.vocab_import_selected), fontSize = 13.sp)
+                            }
+                        }
+                        IconButton(onClick = { isSelectMode = false; selectedIdSet.clear(); selectedCount = 0 }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(android.R.string.cancel))
+                        }
                     }
                     Box {
                         IconButton(onClick = { showExportMenu = true }) {
@@ -186,9 +223,16 @@ fun VocabularyScreen(
                     .padding(padding)
             ) {
                 items(vocabulary, key = { it.id }) { item ->
+                    val isSelected: Boolean = selectedIdSet.contains(item.id)
                     VocabularyItem(
                         vocab = item,
                         isSpeaking = speakingWordId == item.id,
+                        isSelectMode = isSelectMode,
+                        isSelected = isSelected,
+                        onToggleSelect = {
+                            if (isSelected) { selectedIdSet.remove(item.id); selectedCount-- }
+                            else { selectedIdSet.add(item.id); selectedCount++ }
+                        },
                         onSpeak = { viewModel.speakWord(item.id, item.word, context) },
                         onDelete = { viewModel.deleteVocabulary(item.id) },
                         onFetchDefinition = { viewModel.fetchDefinition(item.id, item.word, context) { success, message ->
@@ -210,6 +254,9 @@ fun VocabularyScreen(
 private fun VocabularyItem(
     vocab: Vocabulary,
     isSpeaking: Boolean,
+    isSelectMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: () -> Unit = {},
     onSpeak: () -> Unit,
     onDelete: () -> Unit,
     onFetchDefinition: () -> Unit,
@@ -226,16 +273,29 @@ private fun VocabularyItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clickable(enabled = isSelectMode) { onToggleSelect() }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp)
         ) {
-            // Header row: word + speaker + delete
+            // Header row
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Checkbox (visible only in select mode)
+                if (isSelectMode) {
+                    IconButton(onClick = { onToggleSelect() }) {
+                        Icon(
+                            if (isSelected) Icons.Filled.CheckBox else Icons.Outlined.CheckBoxOutlineBlank,
+                            contentDescription = null,
+                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+                
                 Text(
                     text = vocab.word,
                     style = MaterialTheme.typography.titleLarge,
@@ -243,8 +303,11 @@ private fun VocabularyItem(
                     modifier = Modifier.weight(1f)
                 )
                 
-                IconButton(onClick = { onAddToFlashcard(vocab) }) {
-                    Icon(Icons.Default.Bolt, contentDescription = stringResource(R.string.flashcard_batch_import), tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(20.dp))
+                if (!isSelectMode) {
+                    // Single-word flashcard import
+                    IconButton(onClick = { onAddToFlashcard(vocab) }) {
+                        Icon(Icons.Default.Bolt, contentDescription = stringResource(R.string.flashcard_batch_import), tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(20.dp))
+                    }
                 }
                 
                 IconButton(
@@ -259,12 +322,14 @@ private fun VocabularyItem(
                     )
                 }
                 
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = stringResource(R.string.delete),
-                        tint = MaterialTheme.colorScheme.error
-                    )
+                if (!isSelectMode) {
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = stringResource(R.string.delete),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
             
