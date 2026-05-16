@@ -237,7 +237,9 @@
     <string name="flashcard_import_exists">该单词已在闪卡中</string>
     <string name="flashcard_batch_import">批量加入闪卡</string>
     <string name="vocab_select_mode">多选模式</string>
-    <string name="vocab_import_selected">导入选中</string>
+    <string name="vocab_import_selected">导入闪卡</string>
+    <string name="vocab_selected_count">已选 %1$d 个</string>
+    <string name="vocab_select_all">全选</string>
     <string name="flashcard_import_result">成功导入 %1$d 个，跳过 %2$d 个</string>
     <string name="flashcard_plan_default">默认</string>
     <string name="flashcard_plan_new">+ 新建</string>

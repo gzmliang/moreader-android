@@ -50,8 +50,7 @@ fun VocabularyScreen(
     
     // Multi-select mode for import
     var isSelectMode by remember { mutableStateOf(false) }
-    var selectedCount by remember { mutableIntStateOf(0) }
-    val selectedIdSet = remember { mutableSetOf<Long>() }
+    var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     
     // Plan selector for imports
     var showPlanPicker by remember { mutableStateOf(false) }
@@ -130,6 +129,46 @@ fun VocabularyScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            // Bottom action bar in select mode
+            if (isSelectMode && selectedIds.isNotEmpty()) {
+                Surface(
+                    tonalElevation = 4.dp,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            stringResource(R.string.vocab_selected_count, selectedIds.size),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                selectedIds = vocabulary.map { it.id }.toSet()
+                            }) {
+                                Text(stringResource(R.string.vocab_select_all), fontSize = 13.sp)
+                            }
+                            FilledTonalButton(onClick = {
+                                val selected = vocabulary.filter { selectedIds.contains(it.id) }
+                                openPlanPicker(selected)
+                            }) {
+                                Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.vocab_import_selected), fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.vocabulary_title)) },
@@ -152,22 +191,22 @@ fun VocabularyScreen(
                     } else {
                         // In select mode: show count, import selected, cancel
                         Text(
-                            "${selectedCount}/${vocabulary.size}",
+                            "${selectedIds.size}/${vocabulary.size}",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(end = 8.dp)
                         )
-                        if (selectedCount > 0) {
+                        if (selectedIds.isNotEmpty()) {
                             TextButton(
                                 onClick = {
-                                    val selected = vocabulary.filter { selectedIdSet.contains(it.id) }
+                                    val selected = vocabulary.filter { selectedIds.contains(it.id) }
                                     openPlanPicker(selected)
                                 }
                             ) {
                                 Text(stringResource(R.string.vocab_import_selected), fontSize = 13.sp)
                             }
                         }
-                        IconButton(onClick = { isSelectMode = false; selectedIdSet.clear(); selectedCount = 0 }) {
+                        IconButton(onClick = { isSelectMode = false; selectedIds = emptySet() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(android.R.string.cancel))
                         }
                     }
@@ -223,15 +262,14 @@ fun VocabularyScreen(
                     .padding(padding)
             ) {
                 items(vocabulary, key = { it.id }) { item ->
-                    val isSelected: Boolean = selectedIdSet.contains(item.id)
+                    val isSelected: Boolean = selectedIds.contains(item.id)
                     VocabularyItem(
                         vocab = item,
                         isSpeaking = speakingWordId == item.id,
                         isSelectMode = isSelectMode,
                         isSelected = isSelected,
                         onToggleSelect = {
-                            if (isSelected) { selectedIdSet.remove(item.id); selectedCount-- }
-                            else { selectedIdSet.add(item.id); selectedCount++ }
+                            selectedIds = if (isSelected) selectedIds - item.id else selectedIds + item.id
                         },
                         onSpeak = { viewModel.speakWord(item.id, item.word, context) },
                         onDelete = { viewModel.deleteVocabulary(item.id) },
