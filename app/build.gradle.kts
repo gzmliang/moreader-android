@@ -15,6 +15,16 @@ android {
         targetSdk = 36
         versionCode = 23
         versionName = "1.9.3"
+
+        // Local AI NDK config
+        externalNativeBuild {
+            cmake {
+                arguments += "-DGGML_VULKAN=OFF"
+                arguments += "-DGGML_OPENMP=OFF"
+                arguments += "-DGGML_NATIVE=OFF"
+                cFlags += "-O2"
+            }
+        }
     }
 
     buildTypes {
@@ -39,6 +49,19 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 

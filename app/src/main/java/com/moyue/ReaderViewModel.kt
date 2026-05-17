@@ -9,6 +9,7 @@ import com.moyue.app.data.BookRepository
 import com.moyue.app.data.models.*
 import com.moyue.app.tts.*
 import com.moyue.app.translate.TranslationService
+import com.moyue.app.localai.LocalAiEngine
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.text.SimpleDateFormat
@@ -88,6 +89,9 @@ data class ReaderUiState(
     val highlightToRemove: Highlight? = null,    // Signal to remove a highlight in WebView
     // Navigation history
     val navHistory: List<NavHistoryEntry> = emptyList(),  // Stack of previous positions
+    // Translation engine: cloud vs local
+    val translateEngine: TranslateEngine = TranslateEngine.CLOUD,
+    val localAiModelName: String = "",  // Name of loaded local model
 ) {
     val canGoBack: Boolean get() = navHistory.isNotEmpty()
 }
@@ -101,6 +105,14 @@ class ReaderViewModel(
     companion object { private const val TAG = "ReaderVM" }
 
     private val prefs = application.getSharedPreferences("moreader_config", Context.MODE_PRIVATE)
+
+    // Local AI engine — completely independent of TranslationService
+    private val localAiEngine = LocalAiEngine
+
+    init {
+        // Try to restore local AI model from previous session
+        localAiEngine.init(application)
+    }
 
     private val _uiState = MutableStateFlow(
         ReaderUiState(
@@ -118,6 +130,8 @@ class ReaderViewModel(
             ),
             ttsSpeed = prefs.getFloat("tts_speed", 1.0f),
             ttsHighlightOffset = prefs.getInt("tts_highlight_offset", 0),
+            translateEngine = TranslateEngine.valueOf(prefs.getString("translate_engine", "CLOUD") ?: "CLOUD"),
+            localAiModelName = localAiEngine.getModelName(application),
         )
     )
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
@@ -372,7 +386,44 @@ class ReaderViewModel(
     }
     fun dismissSelectionMenu() { _uiState.update { it.copy(showSelectionMenu = false) } }
     fun toggleTtsDebugLog() { _uiState.update { it.copy(showTtsDebugLog = !it.showTtsDebugLog) } }
-    fun translate(mode: String = "translate") { val t = _uiState.value.selectedText ?: return; val c = _uiState.value.llmConfig; if (c.apiKey.isEmpty()) { _uiState.update { it.copy(translationResult = getApplication<android.app.Application>().getString(com.moyue.app.R.string.configure_api_key_first), showTranslationPanel = true) }; return }; _uiState.update { it.copy(isTranslating = true, translationMode = mode, showTranslationPanel = true, translationResult = null) }; viewModelScope.launch { val r = translationService.translate(c, t, mode) { ch -> _uiState.update { it.copy(translationResult = (it.translationResult ?: "") + ch) } }; r.onFailure { e -> _uiState.update { it.copy(isTranslating = false, translationResult = getApplication<android.app.Application>().getString(com.moyue.app.R.string.translation_failed, e.message ?: "")) } }.onSuccess { _uiState.update { it.copy(isTranslating = false) } } } }
+    fun translate(mode: String = "translate") {
+        val t = _uiState.value.selectedText ?: return
+        _uiState.update { it.copy(isTranslating = true, translationMode = mode, showTranslationPanel = true, translationResult = null) }
+
+        if (_uiState.value.translateEngine == TranslateEngine.LOCAL) {
+            // === Local AI route ===
+            if (!localAiEngine.isReady()) {
+                _uiState.update { it.copy(isTranslating = false, translationResult = "本地模型未加载，请在设置中加载模型") }
+                return
+            }
+            viewModelScope.launch {
+                val isChinese = t.any { it in '\u4e00'..'\u9fff' }
+                val result = if (isChinese) localAiEngine.translate(t) else localAiEngine.translate(t)
+                result.onFailure { e ->
+                    _uiState.update { it.copy(isTranslating = false, translationResult = "翻译失败: ${e.message ?: ""}") }
+                }.onSuccess { text ->
+                    _uiState.update { it.copy(isTranslating = false, translationResult = text) }
+                }
+            }
+        } else {
+            // === Cloud API route (existing code unchanged) ===
+            val c = _uiState.value.llmConfig
+            if (c.apiKey.isEmpty()) {
+                _uiState.update { it.copy(translationResult = "请先配置 API Key", showTranslationPanel = true) }
+                return
+            }
+            viewModelScope.launch {
+                val r = translationService.translate(c, t, mode) { ch ->
+                    _uiState.update { it.copy(translationResult = (it.translationResult ?: "") + ch) }
+                }
+                r.onFailure { e ->
+                    _uiState.update { it.copy(isTranslating = false, translationResult = "翻译失败: ${e.message ?: ""}") }
+                }.onSuccess {
+                    _uiState.update { it.copy(isTranslating = false) }
+                }
+            }
+        }
+    }
     fun dismissTranslationPanel() { _uiState.update { it.copy(showTranslationPanel = false, translationResult = null) } }
 
     /** Speak arbitrary text (used by translation panel speaker button) */
@@ -620,6 +671,28 @@ class ReaderViewModel(
         }
     }
     fun updateLLMConfig(c: LLMConfig) { _uiState.update { it.copy(llmConfig = c) }; prefs.edit().putString("llm_provider", c.provider).putString("llm_apikey", c.apiKey).putString("llm_endpoint", c.endpoint).putString("llm_model", c.model).apply() }
+
+    // === Local AI engine management ===
+    fun setTranslateEngine(engine: TranslateEngine) {
+        _uiState.update { it.copy(translateEngine = engine, localAiModelName = localAiEngine.getModelName(getApplication())) }
+        prefs.edit().putString("translate_engine", engine.name).apply()
+    }
+
+    suspend fun loadLocalAiModel(uri: android.net.Uri) {
+        _uiState.update { it.copy(loadingMessage = "Loading local AI model...") }
+        val result = localAiEngine.loadModelFromUri(getApplication(), uri)
+        result.onSuccess { msg ->
+            _uiState.update { it.copy(localAiModelName = localAiEngine.getModelName(getApplication()), loadingMessage = "") }
+        }.onFailure { e ->
+            _uiState.update { it.copy(localAiModelName = "Failed: ${e.message}", loadingMessage = "") }
+        }
+    }
+
+    fun unloadLocalAiModel() {
+        localAiEngine.releaseModel(getApplication())
+        _uiState.update { it.copy(localAiModelName = "", translateEngine = TranslateEngine.CLOUD) }
+        prefs.edit().putString("translate_engine", TranslateEngine.CLOUD.name).apply()
+    }
     fun toggleTocPanel() { _uiState.update { it.copy(showTocPanel = !it.showTocPanel) } }
     fun toggleTtsSettingsPanel() { _uiState.update { it.copy(showTtsSettingsPanel = !it.showTtsSettingsPanel) } }
 

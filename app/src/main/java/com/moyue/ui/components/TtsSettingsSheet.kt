@@ -11,16 +11,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.Color
 import com.moyue.app.data.models.LLMConfig
 import com.moyue.app.data.models.ReaderTheme
 import com.moyue.app.data.models.TTSProviderType
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
 // Common voice presets — now uses full EdgeVoice data with locale grouping
 // EDGE_VOICES defined in EdgeVoiceData.kt
@@ -60,6 +62,9 @@ fun TtsSettingsSheet(
     customModel: String = "moss-tts-nano",
     customVoice: String = "Lingyu",
     llmConfig: LLMConfig,
+    // Local AI
+    translateEngine: com.moyue.app.data.models.TranslateEngine = com.moyue.app.data.models.TranslateEngine.CLOUD,
+    localAiModelName: String = "",
     currentTheme: ReaderTheme = ReaderTheme.LIGHT,
     onProviderChange: (TTSProviderType) -> Unit,
     onSpeedChange: (Float) -> Unit,
@@ -67,6 +72,9 @@ fun TtsSettingsSheet(
     onAIVoiceConfigChange: (endpoint: String, apiKey: String, model: String, voice: String) -> Unit,
     onCustomTTSConfigChange: (endpoint: String, apiKey: String, model: String, voice: String) -> Unit,
     onLLMConfigChange: (LLMConfig) -> Unit,
+    onTranslateEngineChange: (com.moyue.app.data.models.TranslateEngine) -> Unit = {},
+    onLocalAiModelSelect: (android.net.Uri) -> Unit = {},
+    onLocalAiModelUnload: () -> Unit = {},
     onThemeChange: (ReaderTheme) -> Unit = {},
     onClose: () -> Unit,
 ) {
@@ -320,6 +328,52 @@ fun TtsSettingsSheet(
                 }
             }
             Spacer(Modifier.height(12.dp))
+
+            // === Local AI Section ===
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            Text("🤖 本地AI翻译", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Spacer(Modifier.height(6.dp))
+
+            // Engine toggle
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = translateEngine == com.moyue.app.data.models.TranslateEngine.CLOUD,
+                    onClick = { onTranslateEngineChange(com.moyue.app.data.models.TranslateEngine.CLOUD) },
+                    label = { Text("☁️ 云端API", fontSize = 12.sp) },
+                    modifier = Modifier.weight(1f),
+                )
+                FilterChip(
+                    selected = translateEngine == com.moyue.app.data.models.TranslateEngine.LOCAL,
+                    onClick = { onTranslateEngineChange(com.moyue.app.data.models.TranslateEngine.LOCAL) },
+                    label = { Text("📱 本地模型", fontSize = 12.sp) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+
+            // Model status
+            if (localAiModelName.isNotEmpty() && localAiModelName != "No model loaded") {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Text("✅ $localAiModelName", fontSize = 12.sp, color = Color(0xFF4CAF50), modifier = Modifier.weight(1f))
+                    Button(onClick = { onLocalAiModelUnload() }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
+                        Text("卸载", fontSize = 11.sp)
+                    }
+                }
+            } else {
+                Text("未加载模型", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            }
+            Spacer(Modifier.height(4.dp))
+
+            // File picker for GGUF
+            val modelPicker = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.OpenDocument()
+            ) { uri -> uri?.let { onLocalAiModelSelect(it) } }
+            OutlinedButton(onClick = { modelPicker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (localAiModelName.isNotEmpty() && localAiModelName != "No model loaded") "更换模型" else "选择 .gguf 模型文件")
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("💡 推荐: Qwen2.5-0.5B-Instruct-Q4_K_M.gguf (~354MB)", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+            Spacer(Modifier.height(8.dp))
 
             // Theme selection - 紧凑布局
             HorizontalDivider(Modifier.padding(vertical = 6.dp))

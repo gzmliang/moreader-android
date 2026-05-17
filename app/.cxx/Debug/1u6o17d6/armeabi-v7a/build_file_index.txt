@@ -1,0 +1,7 @@
+/root/.hermes/projects/moreader-android/app/src/main/cpp/CMakeLists.txt
+/root/.hermes/projects/moreader-android/llama.cpp/CMakeLists.txt
+/root/.hermes/projects/moreader-android/llama.cpp/common/CMakeLists.txt
+/root/.hermes/projects/moreader-android/llama.cpp/ggml/CMakeLists.txt
+/root/.hermes/projects/moreader-android/llama.cpp/ggml/src/CMakeLists.txt
+/root/.hermes/projects/moreader-android/llama.cpp/ggml/src/ggml-cpu/CMakeLists.txt
+/root/.hermes/projects/moreader-android/llama.cpp/src/CMakeLists.txt

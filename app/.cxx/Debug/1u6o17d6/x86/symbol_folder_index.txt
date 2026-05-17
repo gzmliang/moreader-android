@@ -1,0 +1,1 @@
+/root/.hermes/projects/moreader-android/app/build/intermediates/cxx/Debug/1u6o17d6/obj/x86

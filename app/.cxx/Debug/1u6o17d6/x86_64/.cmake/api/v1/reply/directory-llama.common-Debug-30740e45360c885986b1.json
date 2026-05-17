@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "llama/common",
+		"source" : "/root/.hermes/projects/moreader-android/llama.cpp/common"
+	}
+}

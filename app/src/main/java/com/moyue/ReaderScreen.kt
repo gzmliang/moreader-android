@@ -533,6 +533,9 @@ fun ReaderScreen(
                     customEndpoint = state.customTtsEndpoint, customApiKey = state.customTtsApiKey,
                     customModel = state.customTtsModel, customVoice = state.customTtsVoice,
                     llmConfig = state.llmConfig,
+                    // Local AI
+                    translateEngine = state.translateEngine,
+                    localAiModelName = state.localAiModelName,
                     currentTheme = state.theme,
                     onProviderChange = { viewModel.setTTSProvider(it) },
                     onSpeedChange = { viewModel.setTTSSpeed(it) },
@@ -540,6 +543,11 @@ fun ReaderScreen(
                     onAIVoiceConfigChange = { ep, key, m, v -> viewModel.updateAIVoiceConfig(ep, key, m, v) },
                     onCustomTTSConfigChange = { ep, key, m, v -> viewModel.updateCustomTTSConfig(ep, key, m, v) },
                     onLLMConfigChange = { viewModel.updateLLMConfig(it) },
+                    onTranslateEngineChange = { viewModel.setTranslateEngine(it) },
+                    onLocalAiModelSelect = { uri ->
+                        kotlinx.coroutines.GlobalScope.launch { viewModel.loadLocalAiModel(uri) }
+                    },
+                    onLocalAiModelUnload = { viewModel.unloadLocalAiModel() },
                     onThemeChange = { viewModel.setTheme(it) },
                     onClose = { viewModel.toggleTtsSettingsPanel() },
                 )

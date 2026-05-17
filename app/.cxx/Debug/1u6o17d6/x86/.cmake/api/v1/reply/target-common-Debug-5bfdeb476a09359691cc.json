@@ -1,0 +1,374 @@
+{
+	"archive" : {},
+	"artifacts" : 
+	[
+		{
+			"path" : "llama/common/libcommon.a"
+		}
+	],
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"target_link_libraries",
+			"add_compile_options",
+			"llama_add_compile_flags",
+			"target_include_directories"
+		],
+		"files" : 
+		[
+			"/root/.hermes/projects/moreader-android/llama.cpp/common/CMakeLists.txt",
+			"/root/.hermes/projects/moreader-android/llama.cpp/cmake/common.cmake"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 55,
+				"parent" : 0
+			},
+			{
+				"command" : 1,
+				"file" : 0,
+				"line" : 141,
+				"parent" : 0
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 5,
+				"parent" : 0
+			},
+			{
+				"command" : 2,
+				"file" : 1,
+				"line" : 27,
+				"parent" : 3
+			},
+			{
+				"command" : 4,
+				"file" : 0,
+				"line" : 139,
+				"parent" : 0
+			}
+		]
+	},
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : "-g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -fno-limit-debug-info  -fPIC"
+				},
+				{
+					"backtrace" : 4,
+					"fragment" : "-Wmissing-declarations"
+				},
+				{
+					"backtrace" : 4,
+					"fragment" : "-Wmissing-noreturn"
+				},
+				{
+					"backtrace" : 4,
+					"fragment" : "-Wall"
+				},
+				{
+					"backtrace" : 4,
+					"fragment" : "-Wextra"
+				},
+				{
+					"backtrace" : 4,
+					"fragment" : "-Wpedantic"
+				},
+				{
+					"backtrace" : 4,
+					"fragment" : "-Wcast-qual"
+				},
+				{
+					"backtrace" : 4,
+					"fragment" : "-Wno-unused-function"
+				},
+				{
+					"backtrace" : 4,
+					"fragment" : "-Wunreachable-code-break"
+				},
+				{
+					"backtrace" : 4,
+					"fragment" : "-Wunreachable-code-return"
+				},
+				{
+					"backtrace" : 4,
+					"fragment" : "-Wmissing-prototypes"
+				},
+				{
+					"backtrace" : 4,
+					"fragment" : "-Wextra-semi"
+				},
+				{
+					"backtrace" : 2,
+					"fragment" : "-pthread"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"backtrace" : 2,
+					"define" : "GGML_USE_CPU"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 5,
+					"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/."
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/root/.hermes/projects/moreader-android/llama.cpp/src/."
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/root/.hermes/projects/moreader-android/llama.cpp/src/../include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/root/.hermes/projects/moreader-android/llama.cpp/src/../common"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/root/.hermes/projects/moreader-android/llama.cpp/ggml/src/../include"
+				}
+			],
+			"language" : "CXX",
+			"sourceIndexes" : 
+			[
+				0,
+				3,
+				5,
+				7,
+				9,
+				11,
+				12,
+				16,
+				18,
+				20
+			],
+			"sysroot" : 
+			{
+				"path" : "/opt/android-sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+			}
+		}
+	],
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 2,
+			"id" : "ggml-base::@96d03cab6fb05857ea28"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "ggml::@96d03cab6fb05857ea28"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "ggml-cpu::@96d03cab6fb05857ea28"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "llama::@e48e26b3b0ed6be1ceb6"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "build_info::@aad2977ebe3030e60789"
+		}
+	],
+	"id" : "common::@aad2977ebe3030e60789",
+	"name" : "common",
+	"nameOnDisk" : "libcommon.a",
+	"paths" : 
+	{
+		"build" : "llama/common",
+		"source" : "/root/.hermes/projects/moreader-android/llama.cpp/common"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				0,
+				3,
+				5,
+				7,
+				9,
+				11,
+				12,
+				16,
+				18,
+				20
+			]
+		},
+		{
+			"name" : "Header Files",
+			"sourceIndexes" : 
+			[
+				1,
+				2,
+				4,
+				6,
+				8,
+				10,
+				13,
+				14,
+				15,
+				17,
+				19,
+				21
+			]
+		},
+		{
+			"name" : "Object Libraries",
+			"sourceIndexes" : 
+			[
+				22
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/arg.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/arg.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 1,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/base64.hpp",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/chat.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/chat.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/common.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/common.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/console.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/console.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/json-schema-to-grammar.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/json.hpp",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/llguidance.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/log.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/log.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 1,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/minja/chat-template.hpp",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 1,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/minja/minja.hpp",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/ngram-cache.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/ngram-cache.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/sampling.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/sampling.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/speculative.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"path" : "/root/.hermes/projects/moreader-android/llama.cpp/common/speculative.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 2,
+			"isGenerated" : true,
+			"path" : "/root/.hermes/projects/moreader-android/app/.cxx/Debug/1u6o17d6/x86/llama/common/CMakeFiles/build_info.dir/build-info.cpp.o",
+			"sourceGroupIndex" : 2
+		}
+	],
+	"type" : "STATIC_LIBRARY"
+}

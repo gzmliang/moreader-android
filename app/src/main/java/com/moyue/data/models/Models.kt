@@ -62,6 +62,12 @@ enum class TTSProviderType {
     CUSTOM_TTS,  // OpenAI-compatible custom endpoint (e.g. MOSS-TTS-Nano)
 }
 
+// Translation engine: cloud API vs local AI
+enum class TranslateEngine {
+    CLOUD,  // Cloud LLM API (TranslationService)
+    LOCAL,  // On-device llama.cpp (LocalAiEngine)
+}
+
 // AI translation config
 data class LLMConfig(
     val provider: String = "siliconflow",
