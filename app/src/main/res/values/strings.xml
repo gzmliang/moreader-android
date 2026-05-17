@@ -95,6 +95,91 @@
     <string name="endpoint_url">接口地址</string>
     <string name="model_name">模型</string>
 
+    <!-- Help Dialogs -->
+    <string name="help_btn_local_ai">本地 AI 翻译说明</string>
+    <string name="help_btn_cloud_ai">云端翻译说明</string>
+    <string name="help_btn_tts">TTS 朗读引擎说明</string>
+    <string name="help_close">知道了</string>
+    <string name="local_ai_recommend">💡 推荐: Qwen2.5-1.5B-Instruct-Q4_K_M.gguf (~1GB) — 翻译质量更稳定</string>
+    <string name="local_ai_view_logs">📋 查看翻译日志</string>
+    <string name="local_ai_copy_logs">📋 复制日志</string>
+    <string name="local_ai_logs_copied">✅ 已复制</string>
+    <string name="local_ai_close">关闭</string>
+    <string name="local_ai_select_model">选择 .gguf 模型文件</string>
+    <string name="local_ai_change_model">更换模型</string>
+    <string name="local_ai_no_model">未加载模型</string>
+    <string name="local_ai_unload">卸载</string>
+    <string name="local_ai_engine_cloud">☁️ 云端API</string>
+    <string name="local_ai_engine_local">📱 本地模型</string>
+    <string name="local_ai_section">🤖 本地AI翻译</string>
+    <string name="help_title">帮助</string>
+
+    <!-- Help Dialog Content (multi-line) -->
+    <string name="help_local_ai_content">墨阅支持本地 AI 翻译，无需联网即可查词翻译。
+
+使用步骤：
+1. 切换为「本地模型」
+2. 点击下方按钮选择模型文件
+3. 阅读时长按选中文字，点「AI翻译」即可
+
+下载模型（.gguf 格式）：
+推荐: Qwen2.5-1.5B-Instruct-Q4_K_M.gguf（约 1GB，翻译质量稳定）
+  下载地址:
+  https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF
+  或国内镜像:
+  https://www.modelscope.cn/models/Qwen/Qwen2.5-1.5B-Instruct-GGUF
+
+轻量选择: Qwen2.5-0.5B-Instruct-Q4_K_M.gguf（约 354MB）
+  https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+
+速度参考（一加12 骁龙8 Gen3）：
+• 0.5B: 首字 0.7-1.3s，翻译 4-8s
+• 1.5B: 首字 1.3-2.1s，翻译 6-15s
+• 模型越大翻译越准确，建议用 1.5B 兜底</string>
+
+    <string name="help_cloud_ai_content">云端翻译使用在线 API，速度快质量高。
+
+默认配置：
+• API: DeepSeek (api.deepseek.com)
+• 模型: deepseek-chat
+• 只需填写 API Key 即可使用
+
+获取 DeepSeek API Key：
+1. 访问 https://platform.deepseek.com
+2. 用手机号或邮箱注册账号
+3. 登录后点击右上角头像 → 「API Keys」
+4. 点击「创建 API Key」，复制保存
+5. 粘贴到下方「API Key」输入框
+
+注意：DeepSeek 注册即送 5 元额度，翻译约可调用 10 万次。
+
+也可以使用其他兼容 OpenAI 的 API：
+• 通义千问: dashscope.aliyuncs.com（百炼平台）
+• Moonshot: api.moonshot.cn
+• SiliconFlow: api.siliconflow.cn
+只需修改 Base URL 和 API Key 即可</string>
+
+    <string name="help_tts_content">墨阅提供多种 TTS 朗读引擎。
+
+Edge TTS（免费推荐）：
+• 微软免费语音合成，音质好
+• 需联网，无需 API Key
+• 支持多种语言和音色
+
+AI Voice（云端 TTS）：
+• 使用云端 TTS 服务，如硅基流动 SiliconFlow
+• 支持 MOSS-TTSD、CosyVoice2 等模型
+• 需配置服务端地址和 API Key
+• 例如 SiliconFlow: https://api.siliconflow.cn
+
+自定义 TTS：
+• 兼容 OpenAI TTS 接口格式
+• 可对接任何 OpenAI 兼容的 TTS 服务
+
+语速调节：
+拖动滑块调整朗读速度
+0.5x = 慢速，1.0x = 正常，2.0x = 快速</string>
+
     <!-- TTS Provider Names -->
     <string name="tts_provider_system">系统语音</string>
     <string name="tts_provider_edge">Edge TTS</string>

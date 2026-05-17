@@ -548,6 +548,7 @@ fun ReaderScreen(
                         kotlinx.coroutines.GlobalScope.launch { viewModel.loadLocalAiModel(uri) }
                     },
                     onLocalAiModelUnload = { viewModel.unloadLocalAiModel() },
+                    getLocalAiLogs = { viewModel.getLocalAiLogs() },
                     onThemeChange = { viewModel.setTheme(it) },
                     onClose = { viewModel.toggleTtsSettingsPanel() },
                 )

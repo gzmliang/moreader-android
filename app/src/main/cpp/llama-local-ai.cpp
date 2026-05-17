@@ -92,6 +92,8 @@ JNIEXPORT jlong JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_loadModel(JNI
         jstring path, jint n_ctx, jint n_threads) {
     const char* p = env->GetStringUTFChars(path, nullptr);
     add_log("INFO", (std::string("Loading: ") + p).c_str());
+    add_log("INFO", (std::string("Config: n_ctx=") + std::to_string(n_ctx) +
+                     " n_threads=" + std::to_string(n_threads) + " GPU=0").c_str());
     FILE* f = fopen(p, "rb");
     if (!f) { add_log("ERR", "Cannot open file"); env->ReleaseStringUTFChars(path, p); return 0; }
     fseek(f, 0, SEEK_END); long sz = ftell(f); fclose(f);
@@ -133,9 +135,37 @@ JNIEXPORT void JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_freeModel(JNIE
     }
 }
 
+/** Check if text looks like a single word (no spaces/punctuation, short) */
+static bool is_single_word(const std::string& t) {
+    size_t start = t.find_first_not_of(" \t\n\r");
+    size_t end = t.find_last_not_of(" \t\n\r");
+    if (start == std::string::npos) return false;
+    std::string trimmed = t.substr(start, end - start + 1);
+    bool hasSpace = trimmed.find(' ') != std::string::npos;
+    // sentence punctuation (including Chinese chars as string search)
+    bool hasSentence = trimmed.find('.') != std::string::npos ||
+                       trimmed.find(',') != std::string::npos ||
+                       trimmed.find('!') != std::string::npos ||
+                       trimmed.find('?') != std::string::npos ||
+                       trimmed.find("\xe3\x80\x82") != std::string::npos ||  // 。
+                       trimmed.find("\xef\xbc\x8c") != std::string::npos ||  // ，
+                       trimmed.find("\xef\xbc\x81") != std::string::npos ||  // ！
+                       trimmed.find("\xef\xbc\x9f") != std::string::npos;    // ？
+    return !hasSpace && !hasSentence && trimmed.size() <= 30;
+}
+
+/**
+ * Build Qwen2.5 chat-format prompt: <|im_start|>system\n{sys}\n<|im_end|>\n<|im_start|>user\n{user}\n<|im_end|>\n<|im_start|>assistant\n
+ */
+static std::string qwen_prompt(const std::string& sys, const std::string& user) {
+    return "<|im_start|>system\n" + sys + "\n<|im_end|>\n"
+           "<|im_start|>user\n" + user + "\n<|im_end|>\n"
+           "<|im_start|>assistant\n";
+}
+
 /**
  * Unified generate: mode 0=EN→CN, 1=CN→EN, 2=Chat
- * Returns: "result text\n\n---\nstats"
+ * Returns: pure result text (stats logged only)
  */
 JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_generate(
         JNIEnv* env, jobject, jlong h, jstring jtext, jint mode, jint max_tokens) {
@@ -146,18 +176,46 @@ JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_generate(
     std::string text(ct);
     env->ReleaseStringUTFChars(jtext, ct);
 
-    // System prompt per mode
     std::string prompt;
     float temp, penalty;
+    int effective_max = max_tokens;
     switch (mode) {
-        case 0: // EN→CN
-            prompt = "Translate to Chinese. Only output the translation, nothing else:\n\n" + text + "\n\nChinese:";
-            temp = 0.3f; penalty = 1.2f; break;
-        case 1: // CN→EN
-            prompt = "Translate to English. Only output the translation, nothing else:\n\n" + text + "\n\nEnglish:";
-            temp = 0.3f; penalty = 1.2f; break;
+        case 0: { // EN→CN
+            bool word = is_single_word(text);
+            if (word) {
+                prompt = qwen_prompt(
+                    "你是英汉词典。给出：音标、简短中文释义、一个例句及翻译。每项一行，不要多话。",
+                    text);
+                effective_max = 64;
+            } else {
+                prompt = qwen_prompt(
+                    "把以下英文翻译成中文，只输出译文。",
+                    text);
+                effective_max = 64;
+            }
+            temp = 0.3f; penalty = 1.2f;
+            break;
+        }
+        case 1: { // CN→EN
+            bool word = is_single_word(text);
+            if (word) {
+                prompt = qwen_prompt(
+                    "你是汉英词典。给出：拼音、简短英文释义、一个例句及翻译。每项一行，不要多话。",
+                    text);
+                effective_max = 64;
+            } else {
+                prompt = qwen_prompt(
+                    "把以下中文翻译成英文，只输出译文。",
+                    text);
+                effective_max = 64;
+            }
+            temp = 0.3f; penalty = 1.2f;
+            break;
+        }
         case 2: // Chat
-            prompt = "你是一个简洁的AI助手。用简短准确的语言回答以下问题。不要重复。直接回答。\n\n" + text;
+            prompt = qwen_prompt(
+                "你是简洁的AI助手。简短回答，不重复。",
+                text);
             temp = 0.6f; penalty = 1.3f; break;
         default:
             prompt = text; temp = 0.5f; penalty = 1.1f; break;
@@ -166,7 +224,7 @@ JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_generate(
     add_log("INFO", (std::string("Mode=") + std::to_string(mode) +
                       " prompt=" + std::to_string(prompt.size()) + "B").c_str());
 
-    llama_kv_cache_clear(s->ctx);
+    llama_kv_self_clear(s->ctx);
 
     // Tokenize
     const llama_vocab* v = llama_model_get_vocab(s->model);
@@ -192,7 +250,7 @@ JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_generate(
     std::vector<llama_token> recent_toks;
     std::vector<std::string> recent_phrases;
 
-    for (int i = 0; i < max_tokens; i++) {
+    for (int i = 0; i < effective_max; i++) {
         auto s0 = std::chrono::steady_clock::now();
         int ret = llama_decode(s->ctx, batch);
         long dms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -238,18 +296,20 @@ JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_generate(
 
     long total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - t0).count();
-    llama_kv_cache_clear(s->ctx);
+    llama_kv_self_clear(s->ctx);
     llama_sampler_free(sm);
 
     float spd = total_ms > 0 ? gen * 1000.0f / total_ms : 0;
-    std::string tag = repeat_stop ? "[防循环截断] " : "";
-    std::string info = tag + std::to_string(gen) + " tok, " + std::to_string(total_ms) +
-        "ms, first=" + std::to_string(first_ms) + "ms, " +
-        std::to_string((int)(spd*10)/10.0f) + " tok/s";
-    add_log("INFO", info.c_str());
+    std::string tag = repeat_stop ? "[TRUNC] " : "";
 
-    std::string output = safe_utf8(result) + "\n\n---\n" + info;
-    return safe_jstring(env, output);
+    // Clean perf summary for UI
+    std::string perf = tag + std::to_string(gen) + "tok | " +
+        std::to_string(total_ms) + "ms total | " +
+        std::to_string(first_ms) + "ms 首字 | " +
+        std::to_string((int)(spd*10)/10.0f) + "tok/s";
+    add_log("INFO", perf.c_str());
+
+    return safe_jstring(env, safe_utf8(result));
 }
 
 } // extern "C"

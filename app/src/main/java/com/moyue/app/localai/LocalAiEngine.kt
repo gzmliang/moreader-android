@@ -151,7 +151,7 @@ object LocalAiEngine {
 
     private fun loadModelSync(context: Context, path: String): Boolean {
         try {
-            modelHandle = LlamaJniWrapper.loadModel(path, 512, 4)
+            modelHandle = LlamaJniWrapper.loadModel(path, 512, 8)
             if (modelHandle != 0L) {
                 context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .edit()

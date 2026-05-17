@@ -693,6 +693,9 @@ class ReaderViewModel(
         _uiState.update { it.copy(localAiModelName = "", translateEngine = TranslateEngine.CLOUD) }
         prefs.edit().putString("translate_engine", TranslateEngine.CLOUD.name).apply()
     }
+
+    fun getLocalAiLogs(): String = localAiEngine.getLogs()
+
     fun toggleTocPanel() { _uiState.update { it.copy(showTocPanel = !it.showTocPanel) } }
     fun toggleTtsSettingsPanel() { _uiState.update { it.copy(showTtsSettingsPanel = !it.showTtsSettingsPanel) } }
 

@@ -14,6 +14,9 @@ app/build/
 *.apk
 *.aab
 
+# CMake build
+app/.cxx/
+
 # OS
 .DS_Store
 Thumbs.db

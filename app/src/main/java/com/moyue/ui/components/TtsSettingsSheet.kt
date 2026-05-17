@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -75,6 +76,7 @@ fun TtsSettingsSheet(
     onTranslateEngineChange: (com.moyue.app.data.models.TranslateEngine) -> Unit = {},
     onLocalAiModelSelect: (android.net.Uri) -> Unit = {},
     onLocalAiModelUnload: () -> Unit = {},
+    getLocalAiLogs: () -> String = { "" },
     onThemeChange: (ReaderTheme) -> Unit = {},
     onClose: () -> Unit,
 ) {
@@ -91,7 +93,36 @@ fun TtsSettingsSheet(
             }
             Spacer(Modifier.height(12.dp))
 
-            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_engine), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_engine), fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                var showTtsHelp by remember { mutableStateOf(false) }
+                TextButton(onClick = { showTtsHelp = true }, contentPadding = PaddingValues(8.dp)) {
+                    Text("❓", fontSize = 13.sp)
+                }
+                if (showTtsHelp) {
+                    HelpDialog(
+                        title = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_btn_tts),
+                        onDismiss = { showTtsHelp = false }
+                    ) {
+                        HelpText("墨阅提供多种 TTS 朗读引擎，按场景自由选择。")
+                        HelpSection("☁️ Edge TTS（免费推荐）")
+                        HelpBullet("微软免费语音合成，音质清晰自然")
+                        HelpBullet("需联网，无需 API Key，即开即用")
+                        HelpBullet("支持多国语言，男女声可选")
+                        HelpSection("🤖 AI Voice（云端 TTS）")
+                        HelpBullet("使用云端 TTS 服务，如硅基流动 SiliconFlow")
+                        HelpBullet("支持 MOSS-TTSD、CosyVoice2 等高质模型")
+                        HelpBullet("需配置服务端地址和 API Key")
+                        HelpText("例：SiliconFlow → https://api.siliconflow.cn")
+                        HelpSection("🔧 自定义 TTS")
+                        HelpBullet("兼容 OpenAI TTS 接口格式")
+                        HelpBullet("可对接任意 OpenAI 兼容的 TTS 服务")
+                        HelpSection("⚙️ 语速调节")
+                        HelpBullet("拖动滑块调整朗读速度")
+                        HelpBullet("0.5x = 慢速  ·  1.0x = 正常  ·  2.0x = 快速")
+                    }
+                }
+            }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // 排除SYSTEM，因为Android 16上有兼容问题
@@ -281,7 +312,37 @@ fun TtsSettingsSheet(
 
             // LLM Config - AI翻译设置
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_settings), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_settings), fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                var showCloudAiHelp by remember { mutableStateOf(false) }
+                TextButton(onClick = { showCloudAiHelp = true }, contentPadding = PaddingValues(8.dp)) {
+                    Text("❓", fontSize = 12.sp)
+                }
+                if (showCloudAiHelp) {
+                    HelpDialog(
+                        title = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_btn_cloud_ai),
+                        onDismiss = { showCloudAiHelp = false }
+                    ) {
+                        HelpText("云端翻译使用在线 API，速度快、翻译质量高。")
+                        HelpSection("☁️ 默认配置（DeepSeek）")
+                        HelpBullet("API 地址：api.deepseek.com")
+                        HelpBullet("模型：deepseek-chat")
+                        HelpBullet("只需填写 API Key 即可使用")
+                        HelpSection("📌 如何获取 DeepSeek API Key")
+                        HelpText("1. 访问 platform.deepseek.com")
+                        HelpText("2. 用手机号或邮箱注册账号")
+                        HelpText("3. 登录后点击右上角头像 → 「API Keys」")
+                        HelpText("4. 点击「创建 API Key」，复制保存")
+                        HelpText("5. 粘贴到下方「API Key」输入框")
+                        HelpHighlight("🎁 注册即送 5 元额度，约可调用 10 万次翻译")
+                        HelpSection("💡 其他兼容 API")
+                        HelpBullet("通义千问：dashscope.aliyuncs.com（百炼平台）")
+                        HelpBullet("Moonshot：api.moonshot.cn")
+                        HelpBullet("SiliconFlow：api.siliconflow.cn")
+                        HelpText("只需修改 Base URL 和 API Key 即可切换")
+                    }
+                }
+            }
             Spacer(Modifier.height(6.dp))
 
             // 默认使用 DeepSeek API
@@ -331,7 +392,34 @@ fun TtsSettingsSheet(
 
             // === Local AI Section ===
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Text("🤖 本地AI翻译", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_section), fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                var showLocalAiHelp by remember { mutableStateOf(false) }
+                TextButton(onClick = { showLocalAiHelp = true }, contentPadding = PaddingValues(8.dp)) {
+                    Text("❓", fontSize = 12.sp)
+                }
+                if (showLocalAiHelp) {
+                    HelpDialog(
+                        title = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_btn_local_ai),
+                        onDismiss = { showLocalAiHelp = false }
+                    ) {
+                        HelpText("本地 AI 翻译无需联网即可查词翻译，数据完全在本地。")
+                        HelpSection("📌 使用步骤")
+                        HelpText("1. 切换为「📱 本地模型」")
+                        HelpText("2. 点击下方按钮选择模型文件")
+                        HelpText("3. 阅读时长按选中文本，点「AI翻译」即可")
+                        HelpSection("📥 推荐模型（.gguf 格式）")
+                        HelpHighlight("⭐ Qwen2.5-1.5B-Instruct-Q4_K_M.gguf\n约 1GB，翻译质量稳定，查词典准确")
+                        HelpLink("huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF")
+                        HelpLink("modelscope.cn/models/Qwen/Qwen2.5-1.5B-Instruct-GGUF")
+                        HelpText("国内镜像可选 ModelScope（魔搭）")
+                        HelpSection("⚡ 速度参考（一加12 骁龙8 Gen3）")
+                        HelpBullet("0.5B：首字 0.7-1.3s，翻译 4-8s")
+                        HelpBullet("1.5B：首字 1.3-2.1s，翻译 6-15s")
+                        HelpText("模型越大翻译越准确，建议用 1.5B 兜底")
+                    }
+                }
+            }
             Spacer(Modifier.height(6.dp))
 
             // Engine toggle
@@ -339,13 +427,13 @@ fun TtsSettingsSheet(
                 FilterChip(
                     selected = translateEngine == com.moyue.app.data.models.TranslateEngine.CLOUD,
                     onClick = { onTranslateEngineChange(com.moyue.app.data.models.TranslateEngine.CLOUD) },
-                    label = { Text("☁️ 云端API", fontSize = 12.sp) },
+                    label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_engine_cloud), fontSize = 12.sp) },
                     modifier = Modifier.weight(1f),
                 )
                 FilterChip(
                     selected = translateEngine == com.moyue.app.data.models.TranslateEngine.LOCAL,
                     onClick = { onTranslateEngineChange(com.moyue.app.data.models.TranslateEngine.LOCAL) },
-                    label = { Text("📱 本地模型", fontSize = 12.sp) },
+                    label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_engine_local), fontSize = 12.sp) },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -356,11 +444,11 @@ fun TtsSettingsSheet(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Text("✅ $localAiModelName", fontSize = 12.sp, color = Color(0xFF4CAF50), modifier = Modifier.weight(1f))
                     Button(onClick = { onLocalAiModelUnload() }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)) {
-                        Text("卸载", fontSize = 11.sp)
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_unload), fontSize = 11.sp)
                     }
                 }
             } else {
-                Text("未加载模型", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_no_model), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             }
             Spacer(Modifier.height(4.dp))
 
@@ -369,10 +457,60 @@ fun TtsSettingsSheet(
                 contract = ActivityResultContracts.OpenDocument()
             ) { uri -> uri?.let { onLocalAiModelSelect(it) } }
             OutlinedButton(onClick = { modelPicker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
-                Text(if (localAiModelName.isNotEmpty() && localAiModelName != "No model loaded") "更换模型" else "选择 .gguf 模型文件")
+                Text(androidx.compose.ui.res.stringResource(
+                    if (localAiModelName.isNotEmpty() && localAiModelName != "No model loaded")
+                        com.moyue.app.R.string.local_ai_change_model
+                    else
+                        com.moyue.app.R.string.local_ai_select_model
+                ))
             }
             Spacer(Modifier.height(4.dp))
-            Text("💡 推荐: Qwen2.5-0.5B-Instruct-Q4_K_M.gguf (~354MB)", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_recommend), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+
+            // Log viewer
+            var showLogs by remember { mutableStateOf(false) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { showLogs = true }, modifier = Modifier.weight(1f)) {
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_view_logs), fontSize = 11.sp)
+                }
+            }
+
+            if (showLogs) {
+                val logs = getLocalAiLogs()
+                var logCopied by remember { mutableStateOf(false) }
+                AlertDialog(
+                    onDismissRequest = { showLogs = false },
+                    title = { Text("📋 本地AI日志", fontSize = 14.sp) },
+                    text = {
+                        val scrollState = rememberScrollState()
+                        Text(
+                            text = logs.ifEmpty { "暂无日志" },
+                            fontSize = 10.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 300.dp)
+                                .verticalScroll(scrollState)
+                        )
+                    },
+                    confirmButton = {
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        TextButton(onClick = {
+                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("AI日志", logs))
+                            logCopied = true
+                        }) {
+                            Text(if (logCopied)
+                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_logs_copied)
+                            else
+                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_copy_logs))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showLogs = false }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_close)) }
+                    },
+                )
+            }
             Spacer(Modifier.height(8.dp))
 
             // Theme selection - 紧凑布局
@@ -424,6 +562,81 @@ fun TtsSettingsSheet(
                 }
             }
             Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+/** Reusable help dialog with composable content */
+@Composable
+private fun HelpDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(end = 4.dp)
+            ) {
+                content()
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_close))
+            }
+        },
+    )
+}
+
+/** Styled section header */
+@Composable
+private fun HelpSection(text: String) {
+    Spacer(Modifier.height(12.dp))
+    Text(text, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+    Spacer(Modifier.height(4.dp))
+}
+
+/** Styled body paragraph */
+@Composable
+private fun HelpText(text: String) {
+    Text(text, fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurface)
+}
+
+/** Indented bullet point */
+@Composable
+private fun HelpBullet(text: String, indent: Boolean = true) {
+    Row(modifier = Modifier.fillMaxWidth().padding(start = if (indent) 12.dp else 0.dp)) {
+        Text("•  ", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+        Text(text, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
+    }
+}
+
+/** Highlighted recommendation box */
+@Composable
+private fun HelpHighlight(text: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+    ) {
+        Text(text, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(10.dp))
+    }
+}
+
+/** Clickable link style */
+@Composable
+private fun HelpLink(text: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 2.dp, bottom = 2.dp)) {
+        Text("🔗  ", fontSize = 11.sp)
+        SelectionContainer {
+            Text(text, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
         }
     }
 }
