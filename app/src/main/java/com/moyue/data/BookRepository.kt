@@ -28,7 +28,7 @@ class BookRepository(private val context: Context) {
 
     private val db = BookDatabase.getInstance(context)
     private val dao = db.bookDao()
-    private val cacheDir = File(context.cacheDir, "epubs").also { it.mkdirs() }
+    private val bookDir = File(context.filesDir, "epubs").also { it.mkdirs() }
 
     fun getAllBooks(): Flow<List<Book>> = dao.getAllBooks()
 
@@ -37,9 +37,9 @@ class BookRepository(private val context: Context) {
     suspend fun importBook(uri: Uri): Book = withContext(Dispatchers.IO) {
         val id = UUID.randomUUID().toString()
         val fileName = "book_$id.epub"
-        val file = File(cacheDir, fileName)
+        val file = File(bookDir, fileName)
 
-        // Copy EPUB to cache
+        // Copy EPUB to persistent storage
         val inputStream = context.contentResolver.openInputStream(uri)
             ?: throw Exception("Cannot open file")
         inputStream.use { input ->
@@ -283,7 +283,7 @@ class BookRepository(private val context: Context) {
             val coverEntry = zip.getEntry(fullPath) ?: zip.getEntry(coverHref)
                 ?: run { zip.close(); return@withContext null }
 
-            val coverFile = File(cacheDir, "cover_$bookId.jpg")
+            val coverFile = File(bookDir, "cover_$bookId.jpg")
             zip.getInputStream(coverEntry).use { input ->
                 FileOutputStream(coverFile).use { output -> input.copyTo(output) }
             }
