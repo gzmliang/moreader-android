@@ -327,12 +327,12 @@ fun TtsSettingsSheet(
                         onDismiss = { showCloudAiHelp = false }
                     ) {
                         HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_intro))
-                        HelpSection("☁️ 默认配置（DeepSeek）")
+                        HelpSection("☁️ " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_default_title))
                         HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_default))
-                        HelpSection("📌 如何获取 DeepSeek API Key")
+                        HelpSection("📌 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_get_key_title))
                         HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_steps))
                         HelpHighlight(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_bonus))
-                        HelpSection("💡 其他兼容 API")
+                        HelpSection("💡 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_alternative_title))
                         HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_alternative))
                     }
                 }
@@ -398,13 +398,12 @@ fun TtsSettingsSheet(
                         onDismiss = { showLocalAiHelp = false }
                     ) {
                         HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_intro))
-                        HelpSection("📌 使用步骤")
+                        HelpSection("📌 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_steps_title))
                         HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_steps))
-                        HelpSection("📥 推荐模型（.gguf 格式）")
-                        HelpHighlight("⭐ Qwen2.5-1.5B-Instruct-Q4_K_M.gguf\n约 1GB，翻译质量稳定，查词典准确")
-                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_recommended))
+                        HelpSection("📥 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_model_title))
+                        HelpHighlight("⭐ " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_recommended))
                         HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_light))
-                        HelpSection("⚡ 速度参考（一加12 骁龙8 Gen3）")
+                        HelpSection("⚡ " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_speed_title))
                         HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_speed))
                     }
                 }

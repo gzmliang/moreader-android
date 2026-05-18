@@ -436,6 +436,14 @@ AI Voice（云端 TTS）：
     <string name="help_tts_speed_bullet2">0.5x = 慢速  ·  1.0x = 正常  ·  2.0x = 快速</string>
 
     <!-- Cloud AI Help -->
+    <string name="help_cloud_ai_default_title">默认配置（DeepSeek）</string>
+    <string name="help_cloud_ai_get_key_title">如何获取 DeepSeek API Key</string>
+    <string name="help_cloud_ai_alternative_title">其他兼容 API</string>
+
+    <!-- Local AI Help -->
+    <string name="help_local_ai_steps_title">使用步骤</string>
+    <string name="help_local_ai_model_title">推荐模型（.gguf 格式）</string>
+    <string name="help_local_ai_speed_title">速度参考</string>
     <string name="help_cloud_ai_intro">云端翻译使用在线 API，速度快质量高。</string>
     <string name="help_cloud_ai_default">默认配置：\n• API: DeepSeek (api.deepseek.com)\n• 模型: deepseek-chat\n• 只需填写 API Key 即可使用</string>
     <string name="help_cloud_ai_steps">获取 DeepSeek API Key：\n1. 访问 https://platform.deepseek.com\n2. 用手机号或邮箱注册账号\n3. 登录后点击右上角头像 → 「API Keys」\n4. 点击「创建 API Key」，复制保存\n5. 粘贴到下方「API Key」输入框</string>
