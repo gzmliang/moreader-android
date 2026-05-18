@@ -11,7 +11,7 @@
 
 static std::vector<std::string> g_logs;
 
-static void add_log(const char* level, const char* msg) {
+static void add_app_log(const char* level, const char* msg) {
     g_logs.push_back(std::string("[") + level + "] " + msg);
     while (g_logs.size() > 500) g_logs.erase(g_logs.begin());
 }
@@ -21,7 +21,7 @@ static void llama_log_callback(ggml_log_level level, const char* text, void*) {
     while (!msg.empty() && (msg.back()=='\n'||msg.back()=='\r')) msg.pop_back();
     if (msg.empty()) return;
     const char* lvl = (level==GGML_LOG_LEVEL_ERROR)?"ERR":(level==GGML_LOG_LEVEL_WARN)?"WARN":"INFO";
-    if (level != GGML_LOG_LEVEL_DEBUG) add_log(lvl, msg.c_str());
+    if (level != GGML_LOG_LEVEL_DEBUG) add_app_log(lvl, msg.c_str());
 }
 
 struct ModelHandles {
@@ -79,7 +79,7 @@ extern "C" {
 JNIEXPORT void JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_initLogs(JNIEnv*, jobject) {
     g_logs.clear();
     llama_log_set(llama_log_callback, nullptr);
-    add_log("INFO", "LocalAI engine initialized");
+    add_app_log("INFO", "LocalAI engine initialized");
 }
 
 JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_getLogs(JNIEnv* env, jobject) {
@@ -89,27 +89,33 @@ JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_getLogs(JNI
 }
 
 JNIEXPORT jlong JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_loadModel(JNIEnv* env, jobject,
-        jstring path, jint n_ctx, jint n_threads) {
+        jstring path, jint n_ctx, jint n_threads, jint n_gpu_layers) {
     const char* p = env->GetStringUTFChars(path, nullptr);
-    add_log("INFO", (std::string("Loading: ") + p).c_str());
-    add_log("INFO", (std::string("Config: n_ctx=") + std::to_string(n_ctx) +
-                     " n_threads=" + std::to_string(n_threads) + " GPU=0").c_str());
+    add_app_log("INFO", (std::string("Loading: ") + p).c_str());
+    add_app_log("INFO", (std::string("Config: n_ctx=") + std::to_string(n_ctx) +
+                     " n_threads=" + std::to_string(n_threads) +
+                     " n_gpu_layers=" + std::to_string(n_gpu_layers)).c_str());
     FILE* f = fopen(p, "rb");
-    if (!f) { add_log("ERR", "Cannot open file"); env->ReleaseStringUTFChars(path, p); return 0; }
+    if (!f) { add_app_log("ERR", "Cannot open file"); env->ReleaseStringUTFChars(path, p); return 0; }
     fseek(f, 0, SEEK_END); long sz = ftell(f); fclose(f);
-    add_log("INFO", (std::string("Size: ") + std::to_string(sz/(1024*1024)) + " MB").c_str());
+    add_app_log("INFO", (std::string("Size: ") + std::to_string(sz/(1024*1024)) + " MB").c_str());
     env->ReleaseStringUTFChars(path, p);
 
     llama_model_params mp = llama_model_default_params();
-    mp.n_gpu_layers = 0; // CPU only
+    mp.n_gpu_layers = n_gpu_layers;
 
     auto t0 = std::chrono::steady_clock::now();
     llama_model* model = llama_model_load_from_file(p, mp);
     long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - t0).count();
 
-    if (!model) { add_log("ERR", "Model load FAILED"); return 0; }
-    add_log("INFO", (std::string("Loaded in ") + std::to_string(ms) + " ms").c_str());
+    if (!model) { add_app_log("ERR", "Model load FAILED"); return 0; }
+    add_app_log("INFO", (std::string("Loaded in ") + std::to_string(ms) + " ms").c_str());
+    if (n_gpu_layers > 0) {
+        add_app_log("INFO", (std::string("GPU layers: ") + std::to_string(n_gpu_layers) + " (Vulkan active)").c_str());
+    } else {
+        add_app_log("INFO", "GPU layers: 0 (CPU only)");
+    }
 
     const llama_vocab* v = llama_model_get_vocab(model);
     llama_context_params cp = llama_context_default_params();
@@ -118,9 +124,9 @@ JNIEXPORT jlong JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_loadModel(JNI
     cp.no_perf = true;
 
     llama_context* ctx = llama_init_from_model(model, cp);
-    if (!ctx) { llama_model_free(model); add_log("ERR", "Context init FAILED"); return 0; }
+    if (!ctx) { llama_model_free(model); add_app_log("ERR", "Context init FAILED"); return 0; }
 
-    add_log("INFO", "Model ready");
+    add_app_log("INFO", "Model ready");
     return reinterpret_cast<jlong>(new ModelHandles{model, ctx, (int32_t)llama_vocab_eos(v)});
 }
 
@@ -131,7 +137,7 @@ JNIEXPORT void JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_freeModel(JNIE
         if (s->model) llama_model_free(s->model);
         delete s;
         llama_backend_free();
-        add_log("INFO", "Model freed");
+        add_app_log("INFO", "Model freed");
     }
 }
 
@@ -221,7 +227,7 @@ JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_generate(
             prompt = text; temp = 0.5f; penalty = 1.1f; break;
     }
 
-    add_log("INFO", (std::string("Mode=") + std::to_string(mode) +
+    add_app_log("INFO", (std::string("Mode=") + std::to_string(mode) +
                       " prompt=" + std::to_string(prompt.size()) + "B").c_str());
 
     llama_kv_self_clear(s->ctx);
@@ -255,12 +261,12 @@ JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_generate(
         int ret = llama_decode(s->ctx, batch);
         long dms = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - s0).count();
-        if (i == 0) { first_ms = dms; add_log("INFO", (std::string("First: ") + std::to_string(dms) + "ms").c_str()); }
-        if (ret != 0) { add_log("ERR", (std::string("decode: ") + std::to_string(ret)).c_str()); break; }
+        if (i == 0) { first_ms = dms; add_app_log("INFO", (std::string("First: ") + std::to_string(dms) + "ms").c_str()); }
+        if (ret != 0) { add_app_log("ERR", (std::string("decode: ") + std::to_string(ret)).c_str()); break; }
         gen++;
 
         llama_token id = llama_sampler_sample(sm, s->ctx, -1);
-        if ((int32_t)id == s->eos_token) { add_log("INFO", "EOS"); break; }
+        if ((int32_t)id == s->eos_token) { add_app_log("INFO", "EOS"); break; }
 
         // Token-level repetition detection
         recent_toks.push_back(id);
@@ -272,7 +278,7 @@ JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_generate(
             }
         }
         while (recent_toks.size() > 64) recent_toks.erase(recent_toks.begin());
-        if (tok_repeat) { add_log("WARN", "Token repeat, stopping"); repeat_stop = true; break; }
+        if (tok_repeat) { add_app_log("WARN", "Token repeat, stopping"); repeat_stop = true; break; }
 
         std::string piece = token_piece(s->ctx, id);
         if (!piece.empty()) {
@@ -285,7 +291,7 @@ JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_generate(
                 if (recent_phrases.size() >= 3) {
                     if (recent_phrases[recent_phrases.size()-1] == recent_phrases[recent_phrases.size()-2] &&
                         recent_phrases[recent_phrases.size()-2] == recent_phrases[recent_phrases.size()-3]) {
-                        add_log("WARN", "Phrase repeat, stopping"); repeat_stop = true; break;
+                        add_app_log("WARN", "Phrase repeat, stopping"); repeat_stop = true; break;
                     }
                     while (recent_phrases.size() > 6) recent_phrases.erase(recent_phrases.begin());
                 }
@@ -307,7 +313,7 @@ JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_generate(
         std::to_string(total_ms) + "ms total | " +
         std::to_string(first_ms) + "ms 首字 | " +
         std::to_string((int)(spd*10)/10.0f) + "tok/s";
-    add_log("INFO", perf.c_str());
+    add_app_log("INFO", perf.c_str());
 
     return safe_jstring(env, safe_utf8(result));
 }

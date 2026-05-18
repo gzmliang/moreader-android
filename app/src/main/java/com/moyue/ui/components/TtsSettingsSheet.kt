@@ -66,6 +66,7 @@ fun TtsSettingsSheet(
     // Local AI
     translateEngine: com.moyue.app.data.models.TranslateEngine = com.moyue.app.data.models.TranslateEngine.CLOUD,
     localAiModelName: String = "",
+    localAiGpuLayers: Int = 0,
     currentTheme: ReaderTheme = ReaderTheme.LIGHT,
     onProviderChange: (TTSProviderType) -> Unit,
     onSpeedChange: (Float) -> Unit,
@@ -77,6 +78,7 @@ fun TtsSettingsSheet(
     onLocalAiModelSelect: (android.net.Uri) -> Unit = {},
     onLocalAiModelUnload: () -> Unit = {},
     getLocalAiLogs: () -> String = { "" },
+    onGpuLayersChange: (Int) -> Unit = {},
     onThemeChange: (ReaderTheme) -> Unit = {},
     onClose: () -> Unit,
 ) {
@@ -438,6 +440,21 @@ fun TtsSettingsSheet(
                 )
             }
             Spacer(Modifier.height(8.dp))
+
+            // GPU acceleration toggle
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_gpu_accel), fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = localAiGpuLayers > 0,
+                    onCheckedChange = { onGpuLayersChange(if (it) 999 else 0) }
+                )
+            }
+            Text(androidx.compose.ui.res.stringResource(
+                if (localAiGpuLayers > 0) com.moyue.app.R.string.local_ai_gpu_on
+                else com.moyue.app.R.string.local_ai_gpu_off
+            ), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_gpu_hint), fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+            Spacer(Modifier.height(4.dp))
 
             // Model status
             if (localAiModelName.isNotEmpty() && localAiModelName != "No model loaded") {

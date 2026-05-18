@@ -10,7 +10,7 @@ import java.io.FileOutputStream
 
 /**
  * Local AI inference engine — drop-in replacement for TranslationService.
- * Uses llama.cpp (CPU-only, Qwen2.5 0.5B/1.5B GGUF).
+ * Uses llama.cpp (CPU-only or Vulkan GPU, Qwen2.5 GGUF).
  * Thread-safe, model persists in app cache.
  *
  * Usage:
@@ -25,10 +25,23 @@ object LocalAiEngine {
     private const val PREFS = "localai_config"
     private const val KEY_MODEL_PATH = "model_path"
     private const val KEY_LOADED = "loaded"
+    private const val KEY_GPU_LAYERS = "gpu_layers"
 
     private val modelDir = "localai_models"
     private var modelHandle: Long = 0
     private var isInitialized = false
+
+    /** Get current GPU layer count (persisted) */
+    fun getGpuLayers(context: Context): Int {
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_GPU_LAYERS, 0)
+    }
+
+    /** Set GPU layer count and persist */
+    fun setGpuLayers(context: Context, layers: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_GPU_LAYERS, layers).apply()
+    }
 
     /** Call once at app start. Restores previously loaded model if available. */
     fun init(context: Context): Boolean {
@@ -151,14 +164,15 @@ object LocalAiEngine {
 
     private fun loadModelSync(context: Context, path: String): Boolean {
         try {
-            modelHandle = LlamaJniWrapper.loadModel(path, 512, 8)
+            val gpuLayers = getGpuLayers(context)
+            modelHandle = LlamaJniWrapper.loadModel(path, 512, 8, gpuLayers)
             if (modelHandle != 0L) {
                 context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .edit()
                     .putString(KEY_MODEL_PATH, path)
                     .putBoolean(KEY_LOADED, true)
                     .apply()
-                Log.d(TAG, "Model loaded: $path")
+                Log.d(TAG, "Model loaded: $path (GPU=$gpuLayers)")
                 return true
             }
         } catch (e: Exception) {

@@ -112,6 +112,10 @@
     <string name="local_ai_engine_cloud">☁️ 云端API</string>
     <string name="local_ai_engine_local">📱 本地模型</string>
     <string name="local_ai_section">🤖 本地AI翻译</string>
+    <string name="local_ai_gpu_accel">⚡ GPU 加速</string>
+    <string name="local_ai_gpu_on">GPU 加速已开启 (Vulkan)</string>
+    <string name="local_ai_gpu_off">CPU 运行中</string>
+    <string name="local_ai_gpu_hint">开启后速度可提升 2-4 倍，部分手机可能不稳定</string>
     <string name="help_title">帮助</string>
 
     <!-- Help Dialog Content (multi-line) -->

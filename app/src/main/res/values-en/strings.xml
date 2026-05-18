@@ -17,6 +17,10 @@
     <string name="local_ai_engine_cloud">☁️ Cloud API</string>
     <string name="local_ai_engine_local">📱 Local Model</string>
     <string name="local_ai_section">🤖 Local AI Translation</string>
+    <string name="local_ai_gpu_accel">⚡ GPU Acceleration</string>
+    <string name="local_ai_gpu_on">GPU acceleration on (Vulkan)</string>
+    <string name="local_ai_gpu_off">Running on CPU</string>
+    <string name="local_ai_gpu_hint">2-4x speed boost, may be unstable on some phones</string>
     <string name="help_title">Help</string>
 
     <!-- Help Dialog Content -->

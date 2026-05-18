@@ -92,6 +92,7 @@ data class ReaderUiState(
     // Translation engine: cloud vs local
     val translateEngine: TranslateEngine = TranslateEngine.CLOUD,
     val localAiModelName: String = "",  // Name of loaded local model
+    val localAiGpuLayers: Int = 0,  // GPU layers for Vulkan (0=CPU, 999=all GPU)
 ) {
     val canGoBack: Boolean get() = navHistory.isNotEmpty()
 }
@@ -132,6 +133,7 @@ class ReaderViewModel(
             ttsHighlightOffset = prefs.getInt("tts_highlight_offset", 0),
             translateEngine = TranslateEngine.valueOf(prefs.getString("translate_engine", "CLOUD") ?: "CLOUD"),
             localAiModelName = localAiEngine.getModelName(application),
+            localAiGpuLayers = localAiEngine.getGpuLayers(application),
         )
     )
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
@@ -674,7 +676,7 @@ class ReaderViewModel(
 
     // === Local AI engine management ===
     fun setTranslateEngine(engine: TranslateEngine) {
-        _uiState.update { it.copy(translateEngine = engine, localAiModelName = localAiEngine.getModelName(getApplication())) }
+        _uiState.update { it.copy(translateEngine = engine, localAiModelName = localAiEngine.getModelName(getApplication()), localAiGpuLayers = localAiEngine.getGpuLayers(getApplication())) }
         prefs.edit().putString("translate_engine", engine.name).apply()
     }
 
@@ -682,7 +684,11 @@ class ReaderViewModel(
         _uiState.update { it.copy(loadingMessage = "Loading local AI model...") }
         val result = localAiEngine.loadModelFromUri(getApplication(), uri)
         result.onSuccess { msg ->
-            _uiState.update { it.copy(localAiModelName = localAiEngine.getModelName(getApplication()), loadingMessage = "") }
+            _uiState.update { it.copy(
+                localAiModelName = localAiEngine.getModelName(getApplication()),
+                localAiGpuLayers = localAiEngine.getGpuLayers(getApplication()),
+                loadingMessage = ""
+            ) }
         }.onFailure { e ->
             _uiState.update { it.copy(localAiModelName = "Failed: ${e.message}", loadingMessage = "") }
         }
@@ -690,11 +696,22 @@ class ReaderViewModel(
 
     fun unloadLocalAiModel() {
         localAiEngine.releaseModel(getApplication())
-        _uiState.update { it.copy(localAiModelName = "", translateEngine = TranslateEngine.CLOUD) }
+        _uiState.update { it.copy(localAiModelName = "", localAiGpuLayers = 0, translateEngine = TranslateEngine.CLOUD) }
         prefs.edit().putString("translate_engine", TranslateEngine.CLOUD.name).apply()
     }
 
     fun getLocalAiLogs(): String = localAiEngine.getLogs()
+
+    fun setGpuLayers(layers: Int) {
+        val app = getApplication<android.app.Application>()
+        localAiEngine.setGpuLayers(app, layers)
+        _uiState.update { it.copy(localAiGpuLayers = layers) }
+        // Reload model with new GPU setting
+        if (localAiEngine.isReady()) {
+            localAiEngine.releaseModel(app)
+            localAiEngine.init(app)
+        }
+    }
 
     fun toggleTocPanel() { _uiState.update { it.copy(showTocPanel = !it.showTocPanel) } }
     fun toggleTtsSettingsPanel() { _uiState.update { it.copy(showTtsSettingsPanel = !it.showTtsSettingsPanel) } }

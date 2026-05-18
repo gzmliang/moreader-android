@@ -536,6 +536,7 @@ fun ReaderScreen(
                     // Local AI
                     translateEngine = state.translateEngine,
                     localAiModelName = state.localAiModelName,
+                    localAiGpuLayers = state.localAiGpuLayers,
                     currentTheme = state.theme,
                     onProviderChange = { viewModel.setTTSProvider(it) },
                     onSpeedChange = { viewModel.setTTSSpeed(it) },
@@ -549,6 +550,7 @@ fun ReaderScreen(
                     },
                     onLocalAiModelUnload = { viewModel.unloadLocalAiModel() },
                     getLocalAiLogs = { viewModel.getLocalAiLogs() },
+                    onGpuLayersChange = { viewModel.setGpuLayers(it) },
                     onThemeChange = { viewModel.setTheme(it) },
                     onClose = { viewModel.toggleTtsSettingsPanel() },
                 )

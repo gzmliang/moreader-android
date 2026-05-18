@@ -11,7 +11,7 @@ option(LLAMA_CURL "Build with curl support" OFF)
 option(GGML_LLAMAFILE "Build with llamafile support" OFF)
 option(GGML_OPENMP "Build with OpenMP support" OFF)
 option(GGML_NATIVE "Build with native optimizations" OFF)
-option(GGML_VULKAN "Enable Vulkan backend" OFF)
+option(GGML_VULKAN "Enable Vulkan backend" ON)
 
 set(LLAMA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../llama.cpp)
 
