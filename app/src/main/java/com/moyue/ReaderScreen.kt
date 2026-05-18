@@ -22,6 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -106,13 +107,17 @@ fun ReaderScreen(
             onDismissRequest = { viewModel.dismissTranslationPanel() },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(when (state.translationMode) { "translate" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title); "explain" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.explain_title); "analyze" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_title); else -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title) },
+                    Text(when (state.translationMode) { "translate" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title); "dictionary" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.explain_title); "analyze" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_title); else -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title) },
                         modifier = Modifier.weight(1f))
                     // Speaker button to read the selected text aloud
                     if (state.selectedText != null) {
                         IconButton(onClick = { viewModel.speakTranslationText(state.selectedText!!) }) {
                             Icon(Icons.Default.VolumeUp, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_tts_speak), tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
                         }
+                    }
+                    // Add to vocabulary button — saves word + translation in one tap
+                    IconButton(onClick = { viewModel.addSelectedWordToVocabulary() }) {
+                        Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_add), tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
                     }
                 }
             },
@@ -158,6 +163,27 @@ fun ReaderScreen(
                     if (state.translationResult != null) {
                         Text(state.translationResult!!, fontSize = 14.sp, lineHeight = 22.sp)
                     }
+                    // Dictionary debug log
+                    if (state.dictionaryDebugLog.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        androidx.compose.material3.HorizontalDivider()
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("🔍 词典调试日志", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
+                            TextButton(
+                                onClick = { viewModel.copyDictionaryDebugLog() },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                            ) {
+                                Text("📋 复制日志", fontSize = 10.sp, color = Color(0xFF059669))
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(state.dictionaryDebugLog, fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 16.sp)
+                    }
                 }
             },
             confirmButton = { TextButton(onClick = { viewModel.dismissTranslationPanel() }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close)) } },
@@ -170,6 +196,12 @@ fun ReaderScreen(
     LaunchedEffect(state.showBookmarkToast) {
         if (state.showBookmarkToast) {
             snackbarHostState.showSnackbar(state.bookmarkToastMsg)
+        }
+    }
+    LaunchedEffect(state.showVocabToast) {
+        if (state.showVocabToast) {
+            snackbarHostState.showSnackbar(state.vocabToastMsg)
+            viewModel.dismissVocabToast()
         }
     }
     
@@ -285,7 +317,7 @@ fun ReaderScreen(
                             }
                             TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.readSelection(state.selectedText!!) }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF059669)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_aloud), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
                             TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("translate") }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate), fontSize = 11.sp, maxLines = 1) }
-                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("explain") }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.explain), fontSize = 11.sp, maxLines = 1) }
+                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("dictionary") }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.dictionary), fontSize = 11.sp, maxLines = 1) }
                             TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("analyze") }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_analysis), fontSize = 11.sp, maxLines = 1) }
                         }
                     }
@@ -550,6 +582,7 @@ fun ReaderScreen(
                     },
                     onLocalAiModelUnload = { viewModel.unloadLocalAiModel() },
                     getLocalAiLogs = { viewModel.getLocalAiLogs() },
+                    clearLocalAiLogs = { viewModel.clearLocalAiLogs() },
                     onGpuLayersChange = { viewModel.setGpuLayers(it) },
                     onThemeChange = { viewModel.setTheme(it) },
                     onClose = { viewModel.toggleTtsSettingsPanel() },

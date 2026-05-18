@@ -82,6 +82,9 @@ data class ReaderUiState(
     // Bookmark
     val showBookmarkToast: Boolean = false,
     val bookmarkToastMsg: String = "",
+    // Vocabulary quick-add from translation
+    val showVocabToast: Boolean = false,
+    val vocabToastMsg: String = "",
     val showBookmarkPanel: Boolean = false,
     val showHighlightPanel: Boolean = false,
     val currentParagraphIndex: Int = 0,       // 当前阅读/朗读的段落
@@ -93,6 +96,9 @@ data class ReaderUiState(
     val translateEngine: TranslateEngine = TranslateEngine.CLOUD,
     val localAiModelName: String = "",  // Name of loaded local model
     val localAiGpuLayers: Int = 0,  // GPU layers for Vulkan (0=CPU, 999=all GPU)
+    // Dictionary query result (for structured data display)
+    val isDictionaryResult: Boolean = false,
+    val dictionaryDebugLog: String = "",
 ) {
     val canGoBack: Boolean get() = navHistory.isNotEmpty()
 }
@@ -390,7 +396,59 @@ class ReaderViewModel(
     fun toggleTtsDebugLog() { _uiState.update { it.copy(showTtsDebugLog = !it.showTtsDebugLog) } }
     fun translate(mode: String = "translate") {
         val t = _uiState.value.selectedText ?: return
-        _uiState.update { it.copy(isTranslating = true, translationMode = mode, showTranslationPanel = true, translationResult = null) }
+        _uiState.update { it.copy(isTranslating = true, translationMode = mode, showTranslationPanel = true, translationResult = null, isDictionaryResult = false, dictionaryDebugLog = "") }
+
+        // === Dictionary mode: try local dictionary, fallback to AI with label ===
+        if (mode == "dictionary") {
+            com.moyue.app.localai.DictionaryEngine.init(getApplication())
+            com.moyue.app.localai.DictionaryEngine.clearDebugLog()
+            val dictResult = com.moyue.app.localai.DictionaryEngine.query(t.trim())
+            val debugLog = com.moyue.app.localai.DictionaryEngine.getDebugLog()
+            
+            if (dictResult is com.moyue.app.data.models.DictionaryResult.Found) {
+                // Found in dictionary — show instantly
+                _uiState.update { 
+                    it.copy(
+                        isTranslating = false,
+                        translationResult = dictResult.entry.formatForDisplay(),
+                        isDictionaryResult = true,
+                        dictionaryDebugLog = debugLog
+                    )
+                }
+                return
+            }
+            // Not in dictionary — fallback to AI translation with label
+            _uiState.update { 
+                it.copy(
+                    translationResult = "（词典未收录，以下使用 AI 翻译）\n\n",
+                    dictionaryDebugLog = debugLog
+                )
+            }
+            // Fall through to AI/cloud route below
+        }
+
+        // === Translate mode: try dictionary as hidden optimization for short English words ===
+        if (mode == "translate") {
+            val isShortWord = t.trim().length < 50 && t.none { it in '\u4e00'..'\u9fff' }
+            if (isShortWord) {
+                com.moyue.app.localai.DictionaryEngine.init(getApplication())
+                com.moyue.app.localai.DictionaryEngine.clearDebugLog()
+                val dictResult = com.moyue.app.localai.DictionaryEngine.query(t.trim())
+                val debugLog = com.moyue.app.localai.DictionaryEngine.getDebugLog()
+                if (dictResult is com.moyue.app.data.models.DictionaryResult.Found) {
+                    _uiState.update { 
+                        it.copy(
+                            isTranslating = false,
+                            translationResult = dictResult.entry.formatForDisplay(),
+                            isDictionaryResult = true,
+                            dictionaryDebugLog = debugLog
+                        )
+                    }
+                    return
+                }
+                _uiState.update { it.copy(dictionaryDebugLog = debugLog) }
+            }
+        }
 
         if (_uiState.value.translateEngine == TranslateEngine.LOCAL) {
             // === Local AI route ===
@@ -399,8 +457,7 @@ class ReaderViewModel(
                 return
             }
             viewModelScope.launch {
-                val isChinese = t.any { it in '\u4e00'..'\u9fff' }
-                val result = if (isChinese) localAiEngine.translate(t) else localAiEngine.translate(t)
+                val result = localAiEngine.translate(t)
                 result.onFailure { e ->
                     _uiState.update { it.copy(isTranslating = false, translationResult = "翻译失败: ${e.message ?: ""}") }
                 }.onSuccess { text ->
@@ -427,6 +484,87 @@ class ReaderViewModel(
         }
     }
     fun dismissTranslationPanel() { _uiState.update { it.copy(showTranslationPanel = false, translationResult = null) } }
+
+    /** Add the currently selected text + translation result to vocabulary in one tap */
+    fun addSelectedWordToVocabulary() {
+        val word = _uiState.value.selectedText?.trim() ?: return
+        val translation = _uiState.value.translationResult ?: ""
+        if (word.isEmpty()) return
+
+        val book = _uiState.value.book
+        val s = _uiState.value
+
+        viewModelScope.launch {
+            try {
+                // Check if already exists
+                val exists = repository.isWordExists(word)
+                if (exists) {
+                    _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.vocabulary_already_exists)) }
+                    return@launch
+                }
+
+                val isChinese = word.any { it in '\u4e00'..'\u9fff' }
+                val vocab: Vocabulary
+
+                // If result came from dictionary, use structured data directly
+                if (s.isDictionaryResult) {
+                    com.moyue.app.localai.DictionaryEngine.init(getApplication())
+                    val dictResult = com.moyue.app.localai.DictionaryEngine.query(word)
+                    if (dictResult is com.moyue.app.data.models.DictionaryResult.Found) {
+                        val entry = dictResult.entry
+                        vocab = Vocabulary(
+                            word = entry.word,
+                            pronunciation = entry.phonetic,
+                            chineseDef = entry.translation.takeIf { it.isNotEmpty() },
+                            englishDef = null,
+                            wordForms = entry.exchangeJson,
+                            bookId = book?.id?.toLongOrNull(),
+                            chapterIndex = s.currentChapterIndex,
+                        )
+                    } else {
+                        // Fallback to raw text
+                        vocab = Vocabulary(
+                            word = word,
+                            definition = translation.takeIf { it.isNotEmpty() },
+                            bookId = book?.id?.toLongOrNull(),
+                            chapterIndex = s.currentChapterIndex,
+                        )
+                    }
+                } else {
+                    // AI/Cloud translation result — store as-is
+                    vocab = Vocabulary(
+                        word = word,
+                        chineseDef = if (isChinese) translation.takeIf { it.isNotEmpty() } else null,
+                        englishDef = if (!isChinese) translation.takeIf { it.isNotEmpty() } else null,
+                        definition = translation.takeIf { it.isNotEmpty() },
+                        bookId = book?.id?.toLongOrNull(),
+                        chapterIndex = s.currentChapterIndex,
+                    )
+                }
+
+                repository.insertVocabulary(vocab)
+                _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.vocabulary_added)) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = "添加失败: ${e.message}") }
+            }
+        }
+    }
+
+    fun dismissVocabToast() { _uiState.update { it.copy(showVocabToast = false) } }
+
+    fun copyDictionaryDebugLog() {
+        val log = _uiState.value.dictionaryDebugLog
+        if (log.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val clipboard = getApplication<android.app.Application>().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Dictionary Debug Log", log))
+                _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = "词典日志已复制到剪贴板") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = "复制失败: ${e.message}") }
+            }
+        }
+    }
 
     /** Speak arbitrary text (used by translation panel speaker button) */
     fun speakTranslationText(text: String) {
@@ -702,14 +840,18 @@ class ReaderViewModel(
 
     fun getLocalAiLogs(): String = localAiEngine.getLogs()
 
+    fun clearLocalAiLogs() = localAiEngine.clearLogs()
+
     fun setGpuLayers(layers: Int) {
         val app = getApplication<android.app.Application>()
+        val current = localAiEngine.getGpuLayers(app)
+        if (layers == current) return  // No change, skip reload
         localAiEngine.setGpuLayers(app, layers)
         _uiState.update { it.copy(localAiGpuLayers = layers) }
         // Reload model with new GPU setting
         if (localAiEngine.isReady()) {
             localAiEngine.releaseModel(app)
-            localAiEngine.init(app)
+            localAiEngine.reloadModel(app)
         }
     }
 

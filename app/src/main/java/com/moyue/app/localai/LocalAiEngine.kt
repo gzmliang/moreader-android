@@ -117,6 +117,16 @@ object LocalAiEngine {
         }
     }
 
+    /** Reload model with current GPU setting. Use instead of init() after release. */
+    fun reloadModel(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val modelPath = prefs.getString(KEY_MODEL_PATH, null) ?: return false
+        val file = File(modelPath)
+        if (!file.exists()) return false
+        // Don't reset isInitialized — just reload the model
+        return loadModelSync(context, modelPath)
+    }
+
     /** Check if model is loaded and ready */
     fun isReady(): Boolean = modelHandle != 0L
 
@@ -159,6 +169,9 @@ object LocalAiEngine {
 
     /** Get all logs for debugging */
     fun getLogs(): String = LlamaJniWrapper.getLogs()
+
+    /** Clear the log buffer */
+    fun clearLogs() = LlamaJniWrapper.clearLogs()
 
     // ---- Private ----
 

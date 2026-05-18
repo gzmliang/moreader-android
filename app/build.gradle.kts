@@ -62,6 +62,13 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
+        // Prevent .db files from being compressed in APK (SQLite can't read compressed DBs)
+        resources {
+            excludes += listOf("META-INF/**")
+        }
+    }
+    aaptOptions {
+        noCompress += listOf("db", "dictionary.db", "hanzi_dict.db")
     }
 }
 

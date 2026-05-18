@@ -5,6 +5,7 @@ object LlamaJniWrapper {
 
     external fun initLogs()
     external fun getLogs(): String
+    external fun clearLogs()
     external fun loadModel(modelPath: String, nCtx: Int, nThreads: Int, nGpuLayers: Int): Long
     external fun freeModel(handle: Long)
 

@@ -82,6 +82,10 @@ JNIEXPORT void JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_initLogs(JNIEn
     add_app_log("INFO", "LocalAI engine initialized");
 }
 
+JNIEXPORT void JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_clearLogs(JNIEnv*, jobject) {
+    g_logs.clear();
+}
+
 JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_getLogs(JNIEnv* env, jobject) {
     std::string s;
     for (auto& l : g_logs) s += l + "\n";

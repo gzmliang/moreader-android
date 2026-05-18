@@ -35,14 +35,14 @@
 
     <!-- Selection menu -->
     <string name="ai_translate">🤖 翻译</string>
-    <string name="explain">📖 解释</string>
+    <string name="dictionary">📖 词典</string>
     <string name="grammar_analysis">🔍 语法</string>
     <string name="read_aloud">🔊 朗读</string>
 
     <!-- Translation -->
     <string name="translating">翻译中...</string>
     <string name="ai_translate_title">AI 翻译</string>
-    <string name="explain_title">AI 解释</string>
+    <string name="explain_title">词典</string>
     <string name="grammar_title">语法分析</string>
     <string name="translation_failed">翻译失败: %1$s</string>
     <string name="configure_api_key_first">请先配置 API Key</string>

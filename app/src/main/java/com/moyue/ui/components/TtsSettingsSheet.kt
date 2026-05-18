@@ -78,6 +78,7 @@ fun TtsSettingsSheet(
     onLocalAiModelSelect: (android.net.Uri) -> Unit = {},
     onLocalAiModelUnload: () -> Unit = {},
     getLocalAiLogs: () -> String = { "" },
+    clearLocalAiLogs: () -> Unit = {},
     onGpuLayersChange: (Int) -> Unit = {},
     onThemeChange: (ReaderTheme) -> Unit = {},
     onClose: () -> Unit,
@@ -495,36 +496,41 @@ fun TtsSettingsSheet(
             if (showLogs) {
                 val logs = getLocalAiLogs()
                 var logCopied by remember { mutableStateOf(false) }
+                val context = androidx.compose.ui.platform.LocalContext.current
                 AlertDialog(
                     onDismissRequest = { showLogs = false },
                     title = { Text("📋 本地AI日志", fontSize = 14.sp) },
                     text = {
                         val scrollState = rememberScrollState()
-                        Text(
-                            text = logs.ifEmpty { "暂无日志" },
-                            fontSize = 10.sp,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 300.dp)
-                                .verticalScroll(scrollState)
-                        )
-                    },
-                    confirmButton = {
-                        val context = androidx.compose.ui.platform.LocalContext.current
-                        TextButton(onClick = {
-                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            cm.setPrimaryClip(android.content.ClipData.newPlainText("AI日志", logs))
-                            logCopied = true
-                        }) {
-                            Text(if (logCopied)
-                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_logs_copied)
-                            else
-                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_copy_logs))
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = logs.ifEmpty { "暂无日志" },
+                                fontSize = 10.sp,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 260.dp)
+                                    .verticalScroll(scrollState)
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                OutlinedButton(onClick = {
+                                    val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    cm.setPrimaryClip(android.content.ClipData.newPlainText("AI日志", logs))
+                                    logCopied = true
+                                }, modifier = Modifier.weight(1f)) {
+                                    Text(if (logCopied) "✅ 已复制" else "📋 复制日志", fontSize = 11.sp)
+                                }
+                                OutlinedButton(onClick = { clearLocalAiLogs(); logCopied = false }, modifier = Modifier.weight(1f)) {
+                                    Text("🗑️ 清空", fontSize = 11.sp)
+                                }
+                            }
                         }
                     },
-                    dismissButton = {
-                        TextButton(onClick = { showLogs = false }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_close)) }
+                    confirmButton = {
+                        TextButton(onClick = { showLogs = false }) {
+                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_close))
+                        }
                     },
                 )
             }
