@@ -23,9 +23,6 @@ object DictionaryEngine {
     private var enDatabase: SQLiteDatabase? = null
     @Volatile
     private var cnDatabase: SQLiteDatabase? = null
-    private var appContext: android.content.Context? = null
-    private fun str(@androidx.annotation.StringRes id: Int): String = 
-        appContext?.getString(id) ?: "???"
     
     // Debug log for troubleshooting
     private val debugLog = StringBuilder()
@@ -38,7 +35,6 @@ object DictionaryEngine {
     
     /** Initialize: copy DBs from assets if needed, then open */
     fun init(context: Context): Boolean {
-        appContext = context.applicationContext
         dlog("=== init called ===")
         var success = true
         
@@ -112,57 +108,34 @@ object DictionaryEngine {
         }
         
         // Initialize Chinese character dictionary
-        // NUCLEAR: Always delete and replace — this is read-only dict, user data (vocabulary)
-        // is in a separate Room database, completely unaffected.
         val dbPath = context.getDatabasePath(CN_DB_NAME).parent ?: "null"
         val dbFile = File(dbPath, CN_DB_NAME)
         
-        // Force close and replace
-        dlog("CN dict: force-closing existing connection...")
+        dlog("CN dict path: ${dbFile.absolutePath}")
+        dlog("CN dict exists: ${dbFile.exists()}, size: ${if (dbFile.exists()) dbFile.length() / 1024 else 0}KB")
+        
+        // Force close existing connection
         cnDatabase?.close()
         cnDatabase = null
         
-        // Try multiple times to delete (file might be locked by WAL/SHM files)
-        var deleted = dbFile.delete()
-        if (!deleted) {
-            // Remove WAL/SHM journal files first
-            File(dbFile.absolutePath + "-wal").delete()
-            File(dbFile.absolutePath + "-shm").delete()
-            File(dbFile.absolutePath + "-journal").delete()
-            // Try delete again
-            deleted = dbFile.delete()
-            dlog("CN dict: retry delete = $deleted")
-        }
-        dlog("CN dict: file deleted = $deleted")
-        
-        if (deleted) {
+        // Only copy from assets if file doesn't exist
+        if (!dbFile.exists()) {
+            dlog("CN dict not found, copying from assets...")
             try {
                 context.assets.open(CN_DB_NAME).use { input ->
                     FileOutputStream(dbFile).use { output ->
                         input.copyTo(output)
                     }
                 }
-                dlog("CN dict: replaced from assets, size=${dbFile.length() / 1024}KB")
-                
-                // Verify: read back "晶" definition to confirm it's the new version
-                val verifyDb = SQLiteDatabase.openDatabase(
-                    dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY
-                )
-                val cursor = verifyDb.rawQuery(
-                    "SELECT definition FROM hanzi_dict WHERE character = '晶' LIMIT 1", null
-                )
-                if (cursor.moveToFirst()) {
-                    val def = cursor.getString(0) ?: ""
-                    dlog("CN dict verified: 晶 definition = '$def'")
-                }
-                cursor.close()
-                verifyDb.close()
+                dlog("CN dict copied from assets, size=${dbFile.length() / 1024}KB")
             } catch (e: Exception) {
-                dlog("CN dict copy FAILED: ${e.message}")
-                android.util.Log.e("DictionaryEngine", "Copy failed", e)
+                dlog("CN dict copy from assets FAILED: ${e.message}")
+                android.util.Log.e("DictionaryEngine", "CN copy failed", e)
+                success = false
+                return@init false
             }
         } else {
-            dlog("CN dict: delete FAILED — using existing file")
+            dlog("CN dict already exists, skipping copy")
         }
         
         if (cnDatabase?.isOpen != true) {
@@ -362,8 +335,8 @@ object DictionaryEngine {
                 append("  【${tonedPinyin}】")
             }
             append("\n")
-            if (!radical.isNullOrBlank()) append("${str(com.moyue.app.R.string.dict_radical)}：${radical}    ")
-            if (strokes > 0) append("${str(com.moyue.app.R.string.dict_strokes)}：${strokes}")
+            if (!radical.isNullOrBlank()) append("部首：${radical}    ")
+            if (strokes > 0) append("笔画：${strokes}")
             append("\n\n")
             
             if (!definition.isNullOrBlank()) {
@@ -380,10 +353,10 @@ object DictionaryEngine {
                 if (cleaned.length > 1) {
                     append(cleaned)
                 } else {
-                    append(str(com.moyue.app.R.string.dict_def_placeholder))
+                    append("（释义待补充）")
                 }
             } else {
-                append(str(com.moyue.app.R.string.dict_def_placeholder))
+                append("（释义待补充）")
             }
             
             // 组词
@@ -391,7 +364,7 @@ object DictionaryEngine {
                 try {
                     val groups = org.json.JSONArray(wordGroupsJson)
                     if (groups.length() > 0) {
-                        append("\n\n${str(com.moyue.app.R.string.dict_word_groups)}：\n")
+                        append("\n\n📝 组词：\n")
                         for (i in 0 until groups.length()) {
                             val pair = groups.getJSONArray(i)
                             val word = pair.getString(0)

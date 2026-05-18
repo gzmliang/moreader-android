@@ -400,8 +400,8 @@ class ReaderViewModel(
 
         // === Dictionary mode: try local dictionary, fallback to AI with label ===
         if (mode == "dictionary") {
+            com.moyue.app.localai.DictionaryEngine.clearDebugLog()  // clear BEFORE init so we keep init logs
             com.moyue.app.localai.DictionaryEngine.init(getApplication())
-            com.moyue.app.localai.DictionaryEngine.clearDebugLog()
             val dictResult = com.moyue.app.localai.DictionaryEngine.query(t.trim())
             val debugLog = com.moyue.app.localai.DictionaryEngine.getDebugLog()
             
