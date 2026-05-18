@@ -407,10 +407,11 @@ class ReaderViewModel(
             
             if (dictResult is com.moyue.app.data.models.DictionaryResult.Found) {
                 // Found in dictionary — show instantly
+                val ctx = getApplication<android.app.Application>()
                 _uiState.update { 
                     it.copy(
                         isTranslating = false,
-                        translationResult = dictResult.entry.formatForDisplay(),
+                        translationResult = dictResult.entry.formatForDisplay(ctx),
                         isDictionaryResult = true,
                         dictionaryDebugLog = debugLog
                     )
@@ -420,7 +421,7 @@ class ReaderViewModel(
             // Not in dictionary — fallback to AI translation with label
             _uiState.update { 
                 it.copy(
-                    translationResult = "（词典未收录，以下使用 AI 翻译）\n\n",
+                    translationResult = "${getApplication<android.app.Application>().getString(com.moyue.app.R.string.dict_not_found_fallback)}\n\n",
                     dictionaryDebugLog = debugLog
                 )
             }
@@ -436,10 +437,11 @@ class ReaderViewModel(
                 val dictResult = com.moyue.app.localai.DictionaryEngine.query(t.trim())
                 val debugLog = com.moyue.app.localai.DictionaryEngine.getDebugLog()
                 if (dictResult is com.moyue.app.data.models.DictionaryResult.Found) {
+                    val ctx = getApplication<android.app.Application>()
                     _uiState.update { 
                         it.copy(
                             isTranslating = false,
-                            translationResult = dictResult.entry.formatForDisplay(),
+                            translationResult = dictResult.entry.formatForDisplay(ctx),
                             isDictionaryResult = true,
                             dictionaryDebugLog = debugLog
                         )
@@ -453,13 +455,13 @@ class ReaderViewModel(
         if (_uiState.value.translateEngine == TranslateEngine.LOCAL) {
             // === Local AI route ===
             if (!localAiEngine.isReady()) {
-                _uiState.update { it.copy(isTranslating = false, translationResult = "本地模型未加载，请在设置中加载模型") }
+                _uiState.update { it.copy(isTranslating = false, translationResult = getApplication<android.app.Application>().getString(com.moyue.app.R.string.local_model_not_loaded)) }
                 return
             }
             viewModelScope.launch {
                 val result = localAiEngine.translate(t)
                 result.onFailure { e ->
-                    _uiState.update { it.copy(isTranslating = false, translationResult = "翻译失败: ${e.message ?: ""}") }
+                    _uiState.update { it.copy(isTranslating = false, translationResult = getApplication<android.app.Application>().getString(com.moyue.app.R.string.translation_failed_fmt, e.message ?: "")) }
                 }.onSuccess { text ->
                     _uiState.update { it.copy(isTranslating = false, translationResult = text) }
                 }
@@ -468,7 +470,7 @@ class ReaderViewModel(
             // === Cloud API route (existing code unchanged) ===
             val c = _uiState.value.llmConfig
             if (c.apiKey.isEmpty()) {
-                _uiState.update { it.copy(translationResult = "请先配置 API Key", showTranslationPanel = true) }
+                _uiState.update { it.copy(translationResult = getApplication<android.app.Application>().getString(com.moyue.app.R.string.config_api_key_first), showTranslationPanel = true) }
                 return
             }
             viewModelScope.launch {
@@ -476,7 +478,7 @@ class ReaderViewModel(
                     _uiState.update { it.copy(translationResult = (it.translationResult ?: "") + ch) }
                 }
                 r.onFailure { e ->
-                    _uiState.update { it.copy(isTranslating = false, translationResult = "翻译失败: ${e.message ?: ""}") }
+                    _uiState.update { it.copy(isTranslating = false, translationResult = getApplication<android.app.Application>().getString(com.moyue.app.R.string.translation_failed_fmt, e.message ?: "")) }
                 }.onSuccess {
                     _uiState.update { it.copy(isTranslating = false) }
                 }
@@ -545,7 +547,7 @@ class ReaderViewModel(
                 repository.insertVocabulary(vocab)
                 _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.vocabulary_added)) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = "添加失败: ${e.message}") }
+                _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.vocab_add_failed, e.message)) }
             }
         }
     }
@@ -559,9 +561,9 @@ class ReaderViewModel(
             try {
                 val clipboard = getApplication<android.app.Application>().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Dictionary Debug Log", log))
-                _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = "词典日志已复制到剪贴板") }
+                _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.dict_log_copied)) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = "复制失败: ${e.message}") }
+                _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.copy_failed_fmt, e.message)) }
             }
         }
     }

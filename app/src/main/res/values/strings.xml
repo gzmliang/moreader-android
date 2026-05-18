@@ -416,4 +416,79 @@ AI Voice（云端 TTS）：
     <string name="vocab_export_md_pos">**词性**: %1$s</string>
     <string name="vocab_export_md_def">**释义**: %1$s</string>
     <string name="vocab_export_md_example">**例句**: %1$s</string>
+
+    <!-- TTS Help Dialog Content -->
+    <string name="help_tts_intro">墨阅提供多种 TTS 朗读引擎，按场景自由选择。</string>
+    <string name="help_tts_edge_title">☁️ Edge TTS（免费推荐）</string>
+    <string name="help_tts_edge_bullet1">微软免费语音合成，音质清晰自然</string>
+    <string name="help_tts_edge_bullet2">需联网，无需 API Key，即开即用</string>
+    <string name="help_tts_edge_bullet3">支持多国语言，男女声可选</string>
+    <string name="help_tts_ai_title">🤖 AI Voice（云端 TTS）</string>
+    <string name="help_tts_ai_bullet1">使用云端 TTS 服务，如硅基流动 SiliconFlow</string>
+    <string name="help_tts_ai_bullet2">支持 MOSS-TTSD、CosyVoice2 等高质模型</string>
+    <string name="help_tts_ai_bullet3">需配置服务端地址和 API Key</string>
+    <string name="help_tts_ai_example">例：SiliconFlow → https://api.siliconflow.cn</string>
+    <string name="help_tts_custom_title">🔧 自定义 TTS</string>
+    <string name="help_tts_custom_bullet1">兼容 OpenAI TTS 接口格式</string>
+    <string name="help_tts_custom_bullet2">可对接任意 OpenAI 兼容的 TTS 服务</string>
+    <string name="help_tts_speed_title">⚙️ 语速调节</string>
+    <string name="help_tts_speed_bullet1">拖动滑块调整朗读速度</string>
+    <string name="help_tts_speed_bullet2">0.5x = 慢速  ·  1.0x = 正常  ·  2.0x = 快速</string>
+
+    <!-- Cloud AI Help -->
+    <string name="help_cloud_ai_intro">云端翻译使用在线 API，速度快质量高。</string>
+    <string name="help_cloud_ai_default">默认配置：\n• API: DeepSeek (api.deepseek.com)\n• 模型: deepseek-chat\n• 只需填写 API Key 即可使用</string>
+    <string name="help_cloud_ai_steps">获取 DeepSeek API Key：\n1. 访问 https://platform.deepseek.com\n2. 用手机号或邮箱注册账号\n3. 登录后点击右上角头像 → 「API Keys」\n4. 点击「创建 API Key」，复制保存\n5. 粘贴到下方「API Key」输入框</string>
+    <string name="help_cloud_ai_bonus">🎁 注册即送 5 元额度，约可调用 10 万次翻译</string>
+    <string name="help_cloud_ai_alternative">也可以使用其他兼容 OpenAI 的 API：\n• 通义千问: dashscope.aliyuncs.com（百炼平台）\n• Moonshot: api.moonshot.cn\n• SiliconFlow: api.siliconflow.cn\n只需修改 Base URL 和 API Key 即可</string>
+
+    <!-- Local AI Help -->
+    <string name="help_local_ai_intro">本地 AI 翻译无需联网即可查词翻译，数据完全在本地。</string>
+    <string name="help_local_ai_steps">使用步骤：\n1. 切换为「本地模型」\n2. 点击下方按钮选择模型文件\n3. 阅读时长按选中文本，点「AI翻译」即可</string>
+    <string name="help_local_ai_download">下载模型（.gguf 格式）：</string>
+    <string name="help_local_ai_recommended">推荐: Qwen2.5-1.5B-Instruct-Q4_K_M.gguf（约 1GB，翻译质量稳定）\n  下载地址:\n  https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF\n  或国内镜像:\n  https://www.modelscope.cn/models/Qwen/Qwen2.5-1.5B-Instruct-GGUF</string>
+    <string name="help_local_ai_light">轻量选择: Qwen2.5-0.5B-Instruct-Q4_K_M.gguf（约 354MB）\n  https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF</string>
+    <string name="help_local_ai_speed">速度参考（一加12 骁龙8 Gen3）：\n• 0.5B: 首字 0.7-1.3s，翻译 4-8s\n• 1.5B: 首字 1.3-2.1s，翻译 6-15s\n• 模型越大翻译越准确，建议用 1.5B 兜底</string>
+
+    <!-- Dictionary display strings -->
+    <string name="dict_radical">部首</string>
+    <string name="dict_strokes">笔画</string>
+    <string name="dict_def_placeholder">（释义待补充）</string>
+    <string name="dict_word_groups">📝 组词</string>
+    <string name="dict_word_forms">📝 词形变化</string>
+    <string name="dict_form_plural">复数</string>
+    <string name="dict_form_past">过去式</string>
+    <string name="dict_form_past_part">过去分词</string>
+    <string name="dict_form_pres_part">现在分词</string>
+    <string name="dict_form_3rd">三单</string>
+    <string name="dict_form_comparative">比较级</string>
+    <string name="dict_form_superlative">最高级</string>
+
+    <!-- Toast and status messages -->
+    <string name="dict_not_found_fallback">（词典未收录，以下使用 AI 翻译）</string>
+    <string name="local_model_not_loaded">本地模型未加载，请在设置中加载模型</string>
+    <string name="translation_failed_fmt">翻译失败: %1$s</string>
+    <string name="config_api_key_first">请先配置 API Key</string>
+    <string name="vocab_add_failed">添加失败: %1$s</string>
+    <string name="dict_log_copied">词典日志已复制到剪贴板</string>
+    <string name="copy_failed_fmt">复制失败: %1$s</string>
+    <string name="default_plan_name">默认</string>
+    <string name="tts_log_empty">暂无日志</string>
+    <string name="copy_log">📋 复制日志</string>
+    <string name="copied">✅ 已复制</string>
+
+    <!-- Settings labels -->
+    <string name="setting_local_ai">🤖 本地AI翻译</string>
+    <string name="setting_gpu_accel">⚡ GPU 加速</string>
+    <string name="setting_cloud_ai">☁️ 云端API翻译</string>
+    <string name="setting_gpu_on">GPU 加速已开启 (Vulkan)</string>
+    <string name="setting_gpu_off">CPU 运行中</string>
+    <string name="setting_gpu_hint">开启后速度可提升 2-4 倍，部分手机可能不稳定</string>
+    <string name="setting_local_model">本地模型</string>
+    <string name="setting_select_model">选择 .gguf 模型文件</string>
+    <string name="setting_change_model">更换模型</string>
+    <string name="setting_no_model">未加载模型</string>
+    <string name="setting_unload">卸载</string>
+    <string name="setting_view_logs">📋 查看翻译日志</string>
+
 </resources>

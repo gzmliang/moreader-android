@@ -40,7 +40,7 @@ data class DictionaryEntry(
     }
 
     /** Format a display-friendly string for the translation panel */
-    fun formatForDisplay(): String {
+    fun formatForDisplay(ctx: android.content.Context): String {
         val sb = StringBuilder()
         
         // Check if this is a Chinese character query (single char with radical info)
@@ -64,15 +64,15 @@ data class DictionaryEntry(
         // Word forms if available
         val forms = getWordForms()
         if (forms.isNotEmpty()) {
-            sb.append("\n\n📝 词形变化：")
+            sb.append("\n\n${ctx.getString(com.moyue.app.R.string.dict_word_forms)}")
             val formLabels = mapOf(
-                "plural" to "复数",
-                "past_tense" to "过去式",
-                "past_participle" to "过去分词",
-                "present_participle" to "现在分词",
-                "third_person" to "三单",
-                "comparative" to "比较级",
-                "superlative" to "最高级"
+                "plural" to ctx.getString(com.moyue.app.R.string.dict_form_plural),
+                "past_tense" to ctx.getString(com.moyue.app.R.string.dict_form_past),
+                "past_participle" to ctx.getString(com.moyue.app.R.string.dict_form_past_part),
+                "present_participle" to ctx.getString(com.moyue.app.R.string.dict_form_pres_part),
+                "third_person" to ctx.getString(com.moyue.app.R.string.dict_form_3rd),
+                "comparative" to ctx.getString(com.moyue.app.R.string.dict_form_comparative),
+                "superlative" to ctx.getString(com.moyue.app.R.string.dict_form_superlative)
             )
             forms.forEach { (key, value) ->
                 val label = formLabels[key] ?: key

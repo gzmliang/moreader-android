@@ -23,6 +23,9 @@ object DictionaryEngine {
     private var enDatabase: SQLiteDatabase? = null
     @Volatile
     private var cnDatabase: SQLiteDatabase? = null
+    private var appContext: android.content.Context? = null
+    private fun str(@androidx.annotation.StringRes id: Int): String = 
+        appContext?.getString(id) ?: "???"
     
     // Debug log for troubleshooting
     private val debugLog = StringBuilder()
@@ -35,6 +38,7 @@ object DictionaryEngine {
     
     /** Initialize: copy DBs from assets if needed, then open */
     fun init(context: Context): Boolean {
+        appContext = context.applicationContext
         dlog("=== init called ===")
         var success = true
         
@@ -358,8 +362,8 @@ object DictionaryEngine {
                 append("  【${tonedPinyin}】")
             }
             append("\n")
-            if (!radical.isNullOrBlank()) append("部首：${radical}    ")
-            if (strokes > 0) append("笔画：${strokes}")
+            if (!radical.isNullOrBlank()) append("${str(com.moyue.app.R.string.dict_radical)}：${radical}    ")
+            if (strokes > 0) append("${str(com.moyue.app.R.string.dict_strokes)}：${strokes}")
             append("\n\n")
             
             if (!definition.isNullOrBlank()) {
@@ -376,10 +380,10 @@ object DictionaryEngine {
                 if (cleaned.length > 1) {
                     append(cleaned)
                 } else {
-                    append("（释义待补充）")
+                    append(str(com.moyue.app.R.string.dict_def_placeholder))
                 }
             } else {
-                append("（释义待补充）")
+                append(str(com.moyue.app.R.string.dict_def_placeholder))
             }
             
             // 组词
@@ -387,7 +391,7 @@ object DictionaryEngine {
                 try {
                     val groups = org.json.JSONArray(wordGroupsJson)
                     if (groups.length() > 0) {
-                        append("\n\n📝 组词：\n")
+                        append("\n\n${str(com.moyue.app.R.string.dict_word_groups)}：\n")
                         for (i in 0 until groups.length()) {
                             val pair = groups.getJSONArray(i)
                             val word = pair.getString(0)

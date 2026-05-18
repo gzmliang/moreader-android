@@ -39,7 +39,7 @@ class FlashcardDataStore(context: Context) {
     )
 
     companion object {
-        const val DEFAULT_PLAN = "默认"
+        const val DEFAULT_PLAN = "__default"
         // SM-2 inspired intervals (minutes): 1 → 10 → 1day → 3days → 7days → 15days → 30days
         val INTERVALS = listOf(1L, 10L, 1440L, 4320L, 10080L, 21600L, 43200L)
     }

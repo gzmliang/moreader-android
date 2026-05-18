@@ -107,22 +107,22 @@ fun TtsSettingsSheet(
                         title = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_btn_tts),
                         onDismiss = { showTtsHelp = false }
                     ) {
-                        HelpText("墨阅提供多种 TTS 朗读引擎，按场景自由选择。")
-                        HelpSection("☁️ Edge TTS（免费推荐）")
-                        HelpBullet("微软免费语音合成，音质清晰自然")
-                        HelpBullet("需联网，无需 API Key，即开即用")
-                        HelpBullet("支持多国语言，男女声可选")
-                        HelpSection("🤖 AI Voice（云端 TTS）")
-                        HelpBullet("使用云端 TTS 服务，如硅基流动 SiliconFlow")
-                        HelpBullet("支持 MOSS-TTSD、CosyVoice2 等高质模型")
-                        HelpBullet("需配置服务端地址和 API Key")
-                        HelpText("例：SiliconFlow → https://api.siliconflow.cn")
-                        HelpSection("🔧 自定义 TTS")
-                        HelpBullet("兼容 OpenAI TTS 接口格式")
-                        HelpBullet("可对接任意 OpenAI 兼容的 TTS 服务")
-                        HelpSection("⚙️ 语速调节")
-                        HelpBullet("拖动滑块调整朗读速度")
-                        HelpBullet("0.5x = 慢速  ·  1.0x = 正常  ·  2.0x = 快速")
+                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_intro))
+                        HelpSection(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_edge_title))
+                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_edge_bullet1))
+                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_edge_bullet2))
+                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_edge_bullet3))
+                        HelpSection(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_ai_title))
+                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_ai_bullet1))
+                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_ai_bullet2))
+                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_ai_bullet3))
+                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_ai_example))
+                        HelpSection(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_custom_title))
+                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_custom_bullet1))
+                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_custom_bullet2))
+                        HelpSection(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_speed_title))
+                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_speed_bullet1))
+                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_speed_bullet2))
                     }
                 }
             }
@@ -297,7 +297,7 @@ fun TtsSettingsSheet(
                         modifier = Modifier.menuAnchor().fillMaxWidth(), singleLine = true)
                     ExposedDropdownMenu(expanded = voiceExpanded, onDismissRequest = { voiceExpanded = false }) {
                         // Group by gender
-                        // Group by gender — Edge voices use "女"/"男", AI voices use "♀"/"♂"
+                        // Group by gender — Edge voices use "♀"/"♂"
                         val (female, male) = voices.partition { v -> v.second.contains("♀") || v.second.contains("女") }
                         Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.voice_female), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                         female.forEach { (id, name) ->
@@ -326,23 +326,14 @@ fun TtsSettingsSheet(
                         title = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_btn_cloud_ai),
                         onDismiss = { showCloudAiHelp = false }
                     ) {
-                        HelpText("云端翻译使用在线 API，速度快、翻译质量高。")
+                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_intro))
                         HelpSection("☁️ 默认配置（DeepSeek）")
-                        HelpBullet("API 地址：api.deepseek.com")
-                        HelpBullet("模型：deepseek-chat")
-                        HelpBullet("只需填写 API Key 即可使用")
+                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_default))
                         HelpSection("📌 如何获取 DeepSeek API Key")
-                        HelpText("1. 访问 platform.deepseek.com")
-                        HelpText("2. 用手机号或邮箱注册账号")
-                        HelpText("3. 登录后点击右上角头像 → 「API Keys」")
-                        HelpText("4. 点击「创建 API Key」，复制保存")
-                        HelpText("5. 粘贴到下方「API Key」输入框")
-                        HelpHighlight("🎁 注册即送 5 元额度，约可调用 10 万次翻译")
+                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_steps))
+                        HelpHighlight(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_bonus))
                         HelpSection("💡 其他兼容 API")
-                        HelpBullet("通义千问：dashscope.aliyuncs.com（百炼平台）")
-                        HelpBullet("Moonshot：api.moonshot.cn")
-                        HelpBullet("SiliconFlow：api.siliconflow.cn")
-                        HelpText("只需修改 Base URL 和 API Key 即可切换")
+                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_alternative))
                     }
                 }
             }
@@ -406,20 +397,15 @@ fun TtsSettingsSheet(
                         title = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_btn_local_ai),
                         onDismiss = { showLocalAiHelp = false }
                     ) {
-                        HelpText("本地 AI 翻译无需联网即可查词翻译，数据完全在本地。")
+                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_intro))
                         HelpSection("📌 使用步骤")
-                        HelpText("1. 切换为「📱 本地模型」")
-                        HelpText("2. 点击下方按钮选择模型文件")
-                        HelpText("3. 阅读时长按选中文本，点「AI翻译」即可")
+                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_steps))
                         HelpSection("📥 推荐模型（.gguf 格式）")
                         HelpHighlight("⭐ Qwen2.5-1.5B-Instruct-Q4_K_M.gguf\n约 1GB，翻译质量稳定，查词典准确")
-                        HelpLink("huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF")
-                        HelpLink("modelscope.cn/models/Qwen/Qwen2.5-1.5B-Instruct-GGUF")
-                        HelpText("国内镜像可选 ModelScope（魔搭）")
+                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_recommended))
+                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_light))
                         HelpSection("⚡ 速度参考（一加12 骁龙8 Gen3）")
-                        HelpBullet("0.5B：首字 0.7-1.3s，翻译 4-8s")
-                        HelpBullet("1.5B：首字 1.3-2.1s，翻译 6-15s")
-                        HelpText("模型越大翻译越准确，建议用 1.5B 兜底")
+                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_speed))
                     }
                 }
             }
@@ -499,12 +485,12 @@ fun TtsSettingsSheet(
                 val context = androidx.compose.ui.platform.LocalContext.current
                 AlertDialog(
                     onDismissRequest = { showLogs = false },
-                    title = { Text("📋 本地AI日志", fontSize = 14.sp) },
+                    title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.setting_view_logs), fontSize = 14.sp) },
                     text = {
                         val scrollState = rememberScrollState()
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = logs.ifEmpty { "暂无日志" },
+                                text = logs.ifEmpty { androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_log_empty) },
                                 fontSize = 10.sp,
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                                 modifier = Modifier
@@ -516,13 +502,14 @@ fun TtsSettingsSheet(
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                 OutlinedButton(onClick = {
                                     val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    cm.setPrimaryClip(android.content.ClipData.newPlainText("AI日志", logs))
+                                    val clipboard = cm
+                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("AI Log", logs))
                                     logCopied = true
                                 }, modifier = Modifier.weight(1f)) {
-                                    Text(if (logCopied) "✅ 已复制" else "📋 复制日志", fontSize = 11.sp)
+                                    Text(if (logCopied) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.copied) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.copy_log), fontSize = 11.sp)
                                 }
                                 OutlinedButton(onClick = { clearLocalAiLogs(); logCopied = false }, modifier = Modifier.weight(1f)) {
-                                    Text("🗑️ 清空", fontSize = 11.sp)
+                                    Text("🗑️ ${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete)}", fontSize = 11.sp)
                                 }
                             }
                         }

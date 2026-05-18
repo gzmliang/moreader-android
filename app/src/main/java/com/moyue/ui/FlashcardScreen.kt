@@ -298,7 +298,7 @@ private fun PlanSelector(
                 onClick = { onSelectPlan(plan) },
                 label = {
                     Text(
-                        plan,
+                        if (plan == DEFAULT_PLAN) stringResource(R.string.flashcard_plan_default) else plan,
                         style = if (isSelected) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodySmall,
                         color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
