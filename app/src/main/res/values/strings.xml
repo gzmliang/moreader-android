@@ -521,5 +521,7 @@ AI Voice（云端 TTS）：
     <string name="recording_no_recordings">暂无录音文件</string>
     <string name="recording_back">返回</string>
     <string name="recording_entry">🎙️ 录制TTS音频</string>
+    <string name="recording_browse">📂 浏览录音</string>
+    <string name="recording_share">分享文件</string>
 
 </resources>

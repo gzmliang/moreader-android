@@ -324,6 +324,7 @@ fun RecordingManagerScreen(
     recordings: List<RecordingItem>,
     onPlay: (File) -> Unit,
     onDelete: (File) -> Unit,
+    onShare: (File) -> Unit = {},
     onBack: () -> Unit,
 ) {
     Column(
@@ -367,10 +368,11 @@ fun RecordingManagerScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(recordings) { item ->
-                    RecordingListItem(
+                    com.moyue.app.ui.components.RecordingListItem(
                         item = item,
                         onPlay = { onPlay(item.file) },
                         onDelete = { onDelete(item.file) },
+                        onShare = { onShare(item.file) },
                     )
                 }
             }
@@ -383,6 +385,7 @@ private fun RecordingListItem(
     item: RecordingItem,
     onPlay: () -> Unit,
     onDelete: () -> Unit,
+    onShare: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -419,6 +422,9 @@ private fun RecordingListItem(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 FilledTonalButton(onClick = onPlay) {
                     Text("▶️")
+                }
+                FilledTonalButton(onClick = onShare) {
+                    Text("📤")
                 }
                 OutlinedButton(onClick = onDelete) {
                     Text("🗑️")

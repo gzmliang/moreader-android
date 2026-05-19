@@ -403,5 +403,7 @@ Just change the Base URL and API Key</string>
     <string name="recording_no_recordings">No recordings yet</string>
     <string name="recording_back">Back</string>
     <string name="recording_entry">🎙️ Record TTS Audio</string>
+    <string name="recording_browse">📂 Browse Recordings</string>
+    <string name="recording_share">Share File</string>
 
 </resources>

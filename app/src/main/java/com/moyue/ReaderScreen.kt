@@ -586,6 +586,7 @@ fun ReaderScreen(
                     onGpuLayersChange = { viewModel.setGpuLayers(it) },
                     onThemeChange = { viewModel.setTheme(it) },
                     onRecordingClick = { viewModel.showRecordingDialog() },
+                    onBrowseRecordingsClick = { viewModel.showRecordingManager() },
                     onClose = { viewModel.toggleTtsSettingsPanel() },
                 )
             }
@@ -643,9 +644,36 @@ fun ReaderScreen(
                     onCancel = { viewModel.cancelRecording() },
                     onDismiss = { viewModel.clearRecordingResult() },
                     onPlayRecording = { file ->
-                        // This will be handled by the composable since LocalContext can't be used here
+                        // Handled internally by RecordingProgressDialog
                     },
                 )
+            }
+
+            // Recording Manager Screen
+            if (state.showRecordingManager) {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(androidx.compose.material3.MaterialTheme.colorScheme.surface),
+                ) {
+                    com.moyue.app.ui.components.RecordingManagerScreen(
+                        recordings = state.recordingsList,
+                        onPlay = { file ->
+                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                context, "${context.packageName}.fileprovider", file
+                            )
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, "audio/mpeg")
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(intent)
+                        },
+                        onDelete = { file -> viewModel.deleteRecording(file) },
+                        onShare = { file -> viewModel.shareRecording(file) },
+                        onBack = { viewModel.hideRecordingManager() },
+                    )
+                }
             }
         }
     }

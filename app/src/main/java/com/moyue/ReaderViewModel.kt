@@ -111,6 +111,8 @@ data class ReaderUiState(
     val recordingBytesWritten: Long = 0L,
     val recordingResult: String? = null,  // success file path or error message
     val showRecordingDialog: Boolean = false,
+    val showRecordingManager: Boolean = false,
+    val recordingsList: List<com.moyue.app.ui.components.RecordingItem> = emptyList(),
 ) {
     val canGoBack: Boolean get() = navHistory.isNotEmpty()
 }
@@ -1229,6 +1231,67 @@ class ReaderViewModel(
 
     fun clearRecordingResult() {
         _uiState.update { it.copy(recordingResult = null) }
+    }
+
+    // ===== Browse Recordings =====
+
+    fun showRecordingManager() {
+        viewModelScope.launch {
+            val recordings = loadAllRecordings()
+            _uiState.update { it.copy(
+                showRecordingManager = true,
+                recordingsList = recordings,
+            )}
+        }
+    }
+
+    fun hideRecordingManager() {
+        _uiState.update { it.copy(showRecordingManager = false) }
+    }
+
+    private fun loadAllRecordings(): List<com.moyue.app.ui.components.RecordingItem> {
+        val context = getApplication<android.app.Application>()
+        val recordingsDir = File(context.filesDir, "recordings")
+        if (!recordingsDir.exists()) return emptyList()
+
+        val items = mutableListOf<com.moyue.app.ui.components.RecordingItem>()
+        recordingsDir.listFiles()?.forEach { bookDir ->
+            if (bookDir.isDirectory) {
+                val bookId = bookDir.name
+                val bookTitle = _uiState.value.book?.takeIf { it.id == bookId }?.title ?: bookId
+                bookDir.listFiles { f -> f.extension == "mp3" }?.forEach { file ->
+                    items.add(com.moyue.app.ui.components.RecordingItem(
+                        file = file,
+                        bookTitle = bookTitle,
+                        chapterLabel = null,
+                        sizeKB = file.length() / 1024,
+                        createdAt = file.lastModified(),
+                    ))
+                }
+            }
+        }
+        // Sort by creation time, newest first
+        return items.sortedByDescending { it.createdAt }
+    }
+
+    fun deleteRecording(file: File) {
+        file.delete()
+        // Reload the list
+        val recordings = loadAllRecordings()
+        _uiState.update { it.copy(recordingsList = recordings) }
+    }
+
+    fun shareRecording(file: File) {
+        val context = getApplication<android.app.Application>()
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context, "${context.packageName}.fileprovider", file
+        )
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "audio/mpeg"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(android.content.Intent.createChooser(intent, null))
     }
 
     override fun onCleared() { super.onCleared(); killPlayChain(); currentTTSProvider?.destroy(); recordingJob?.cancel() }
