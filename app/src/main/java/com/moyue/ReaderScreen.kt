@@ -630,7 +630,7 @@ private fun ReaderBottomBar(
                         .height(16.dp) // Larger touch area
                         .onGloballyPositioned { coords -> trackWidth = coords.size.width.toFloat() }
                         .pointerInput(trackWidth, totalChapters, currentIndex) {
-                            if (trackWidth <= 0) return@pointerInput
+                            if (trackWidth <= 0 || totalChapters <= 0) return@pointerInput
                             awaitPointerEventScope {
                                 while (true) {
                                     val event = awaitPointerEvent(PointerEventPass.Main)
