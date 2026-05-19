@@ -81,6 +81,7 @@ fun TtsSettingsSheet(
     clearLocalAiLogs: () -> Unit = {},
     onGpuLayersChange: (Int) -> Unit = {},
     onThemeChange: (ReaderTheme) -> Unit = {},
+    onRecordingClick: () -> Unit = {},
     onClose: () -> Unit,
 ) {
     Surface(
@@ -569,6 +570,14 @@ fun TtsSettingsSheet(
                         ),
                     )
                 }
+            }
+            // TTS Recording entry
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            FilledTonalButton(
+                onClick = onRecordingClick,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("🎙️ ${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.recording_entry)}")
             }
             Spacer(Modifier.height(12.dp))
         }

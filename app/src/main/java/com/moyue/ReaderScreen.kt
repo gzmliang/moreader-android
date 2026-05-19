@@ -585,7 +585,66 @@ fun ReaderScreen(
                     clearLocalAiLogs = { viewModel.clearLocalAiLogs() },
                     onGpuLayersChange = { viewModel.setGpuLayers(it) },
                     onThemeChange = { viewModel.setTheme(it) },
+                    onRecordingClick = { viewModel.showRecordingDialog() },
                     onClose = { viewModel.toggleTtsSettingsPanel() },
+                )
+            }
+
+            // Recording choice dialog
+            if (state.showRecordingDialog) {
+                com.moyue.app.ui.components.RecordDialog(
+                    bookTitle = state.book?.title ?: "",
+                    currentChapterLabel = state.chapters.getOrNull(state.currentChapterIndex)?.id ?: "",
+                    totalChapters = state.chapters.size,
+                    currentChapterIndex = state.currentChapterIndex,
+                    onDismiss = { viewModel.hideRecordingDialog() },
+                    onStartRecording = { isFullBook -> viewModel.startRecording(isFullBook) },
+                )
+            }
+
+            // Recording progress dialog
+            if (state.isRecording || state.recordingResult != null) {
+                val progressState = if (state.isRecording) {
+                    com.moyue.app.ui.components.RecordingState.Progress(
+                        chapterLabel = state.recordingChapterLabel,
+                        isFullBook = state.recordingIsFullBook,
+                        progress = com.moyue.app.tts.TtsRecorder.Progress(
+                            totalSegments = state.recordingTotalSegments.coerceAtLeast(1),
+                            currentSegment = state.recordingCompletedSegments,
+                            currentText = state.recordingCurrentText,
+                            bytesWritten = state.recordingBytesWritten,
+                        ),
+                    )
+                } else {
+                    val result = state.recordingResult ?: ""
+                    when {
+                        result.startsWith("success:") -> {
+                            val path = result.removePrefix("success:")
+                            val file = java.io.File(path)
+                            com.moyue.app.ui.components.RecordingState.Done(
+                                file = file,
+                                segments = state.recordingCompletedSegments,
+                                sizeKB = state.recordingBytesWritten / 1024,
+                            )
+                        }
+                        result == "cancelled" -> com.moyue.app.ui.components.RecordingState.Error(
+                            message = "录制已取消",
+                        )
+                        result.startsWith("error:") -> com.moyue.app.ui.components.RecordingState.Error(
+                            message = result.removePrefix("error:"),
+                        )
+                        else -> com.moyue.app.ui.components.RecordingState.Error(
+                            message = "未知状态",
+                        )
+                    }
+                }
+                com.moyue.app.ui.components.RecordingProgressDialog(
+                    state = progressState,
+                    onCancel = { viewModel.cancelRecording() },
+                    onDismiss = { viewModel.clearRecordingResult() },
+                    onPlayRecording = { file ->
+                        // This will be handled by the composable since LocalContext can't be used here
+                    },
                 )
             }
         }

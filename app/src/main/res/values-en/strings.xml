@@ -311,9 +311,11 @@ Just change the Base URL and API Key</string>
     <string name="tts_log_invalid_paragraph_index">[TTS] ❌ Invalid paragraph index: %1$d</string>
     <string name="tts_log_invalid_restore">[TTS] ❌ Nothing to restore (playIdx=%1$d)</string>
     <string name="tts_log_no_paragraphs">[TTS] ❌ No paragraphs</string>
-    <string name="tts_log_offset_dec">[Setting] Highlight offset -1 = %1$d</string>
     <string name="tts_log_offset_inc">[Setting] Highlight offset +1 = %1$d</string>
+    <string name="tts_log_offset_dec">[Setting] Highlight offset -1 = %1$d</string>
     <string name="tts_log_pause">[TTS] ⏸ Paused idx=%1$d</string>
+    <string name="tts_log_recording_started">🎙️ Recording started: %s (%d segments)</string>
+    <string name="tts_log_recording_done">🎙️ Recording complete: %s (%d KB)</string>
     <string name="tts_log_read_from_paragraph">========== Reading from paragraph %1$d ==========</string>
     <string name="tts_log_resume">[TTS] ▶ Resume</string>
     <string name="tts_log_stop">[TTS] ⏹ Stop</string>
@@ -380,4 +382,26 @@ Just change the Base URL and API Key</string>
     <string name="voice_yunjhe">YunJhe (Male)</string>
     <string name="voice_yunjian">Yunjian (Male)</string>
     <string name="voice_yunxi">Yunxi (Male)</string>
+
+    <!-- TTS Recording -->
+    <string name="recording_title">Record TTS Audio</string>
+    <string name="recording_current_chapter">Record Current Chapter</string>
+    <string name="recording_full_book">Record Full Book</string>
+    <string name="recording_chapters_count">%d chapters total</string>
+    <string name="recording_hint">Record using your current TTS voice. Audio will be saved as MP3 files.</string>
+    <string name="recording_in_progress">Recording: %s</string>
+    <string name="recording_full_book_progress">Full book recording: %s</string>
+    <string name="recording_chapter_progress">Chapter recording: %s</string>
+    <string name="recording_segment_info">%1$d / %2$d segments (%3$d%%) · %4$.1f MB</string>
+    <string name="recording_cancel">Cancel Recording</string>
+    <string name="recording_done">Recording Complete!</string>
+    <string name="recording_done_info">%d audio segments · %d KB</string>
+    <string name="recording_play">Play</string>
+    <string name="recording_close">Close</string>
+    <string name="recording_error">Recording Failed</string>
+    <string name="recording_manager_title">TTS Recordings</string>
+    <string name="recording_no_recordings">No recordings yet</string>
+    <string name="recording_back">Back</string>
+    <string name="recording_entry">🎙️ Record TTS Audio</string>
+
 </resources>

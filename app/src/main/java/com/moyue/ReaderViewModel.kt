@@ -12,6 +12,7 @@ import com.moyue.app.translate.TranslationService
 import com.moyue.app.localai.LocalAiEngine
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
 import org.json.JSONObject
@@ -99,6 +100,17 @@ data class ReaderUiState(
     // Dictionary query result (for structured data display)
     val isDictionaryResult: Boolean = false,
     val dictionaryDebugLog: String = "",
+    // TTS Recording
+    val isRecording: Boolean = false,
+    val recordingChapterLabel: String = "",
+    val recordingIsFullBook: Boolean = false,
+    val recordingProgress: Int = 0,
+    val recordingTotalSegments: Int = 0,
+    val recordingCompletedSegments: Int = 0,
+    val recordingCurrentText: String = "",
+    val recordingBytesWritten: Long = 0L,
+    val recordingResult: String? = null,  // success file path or error message
+    val showRecordingDialog: Boolean = false,
 ) {
     val canGoBack: Boolean get() = navHistory.isNotEmpty()
 }
@@ -1081,5 +1093,143 @@ class ReaderViewModel(
         }
     }
 
-    override fun onCleared() { super.onCleared(); killPlayChain(); currentTTSProvider?.destroy() }
+    // ===== TTS Recording =====
+
+    private var recordingJob: Job? = null
+
+    fun showRecordingDialog() { _uiState.update { it.copy(showRecordingDialog = true) } }
+    fun hideRecordingDialog() { _uiState.update { it.copy(showRecordingDialog = false) } }
+
+    /** Start recording: isFullBook=true for entire book, false for current chapter only */
+    fun startRecording(isFullBook: Boolean) {
+        val s = _uiState.value
+        val book = s.book ?: return
+        val chapters = s.chapters
+        if (chapters.isEmpty()) return
+
+        hideRecordingDialog()
+
+        // Cancel any existing recording
+        recordingJob?.cancel()
+
+        val targetChapters = if (isFullBook) {
+            chapters
+        } else {
+            listOf(chapters[s.currentChapterIndex])
+        }
+
+        val chapterLabel = if (isFullBook) book.title else targetChapters.firstOrNull()?.id ?: "chapter"
+
+        recordingJob = viewModelScope.launch {
+            _uiState.update { it.copy(
+                isRecording = true,
+                recordingChapterLabel = chapterLabel,
+                recordingIsFullBook = isFullBook,
+                recordingProgress = 0,
+                recordingResult = null,
+            )}
+
+            val outputDir = TtsRecorder.getRecordingsDir(getApplication(), book.id)
+            val filename = TtsRecorder.generateFilename(book.title, if (isFullBook) null else chapterLabel)
+            val outputFile = File(outputDir, filename)
+
+            // Collect all text segments from target chapters
+            val allSegments = mutableListOf<String>()
+            for (chapter in targetChapters) {
+                val html = repository.getChapterContent(book.id, chapter.href)
+                if (html != null) {
+                    allSegments.addAll(extractParagraphsFromHtml(html))
+                }
+            }
+
+            if (allSegments.isEmpty()) {
+                _uiState.update { it.copy(
+                    isRecording = false,
+                    recordingResult = "没有可录制的文本内容",
+                )}
+                return@launch
+            }
+
+            // Get the current TTS provider
+            val provider = recreateProvider()
+            if (provider == null) {
+                _uiState.update { it.copy(
+                    isRecording = false,
+                    recordingResult = "TTS 引擎未就绪",
+                )}
+                return@launch
+            }
+
+            // Check if provider supports recording (System TTS does not)
+            if (provider is SystemTTSProvider) {
+                _uiState.update { it.copy(
+                    isRecording = false,
+                    recordingResult = "系统TTS不支持录音，请切换到 Edge TTS / AI Voice / 自定义TTS",
+                )}
+                return@launch
+            }
+
+            log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_recording_started, chapterLabel, allSegments.size))
+
+            val speed = s.ttsSpeed
+
+            val result = TtsRecorder.record(
+                fetchAudio = { text ->
+                    when (provider) {
+                        is EdgeTTSProvider -> provider.fetchAudio(text, speed)
+                        is AIVoiceTTSProvider -> provider.fetchAudio(text, speed)
+                        is CustomTTSProvider -> provider.fetchAudio(text, speed)
+                        else -> null
+                    }
+                },
+                segments = allSegments,
+                outputFile = outputFile,
+                onProgress = { progress ->
+                    _uiState.update { it.copy(
+                        recordingProgress = progress.percentage,
+                        recordingTotalSegments = progress.totalSegments,
+                        recordingCompletedSegments = progress.currentSegment,
+                        recordingCurrentText = progress.currentText,
+                        recordingBytesWritten = progress.bytesWritten,
+                    )}
+                },
+            )
+
+            when (result) {
+                is TtsRecorder.Result.Success -> {
+                    log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_recording_done, result.file.name, result.totalBytes / 1024))
+                    _uiState.update { it.copy(
+                        isRecording = false,
+                        recordingResult = "success:${result.file.absolutePath}",
+                    )}
+                }
+                is TtsRecorder.Result.Cancelled -> {
+                    _uiState.update { it.copy(
+                        isRecording = false,
+                        recordingResult = "cancelled",
+                    )}
+                }
+                is TtsRecorder.Result.Error -> {
+                    _uiState.update { it.copy(
+                        isRecording = false,
+                        recordingResult = "error:${result.message}",
+                    )}
+                }
+            }
+        }
+    }
+
+    fun cancelRecording() {
+        recordingJob?.cancel()
+        _uiState.update { it.copy(
+            isRecording = false,
+            recordingResult = "cancelled",
+        )}
+    }
+
+    fun clearRecordingResult() {
+        _uiState.update { it.copy(recordingResult = null) }
+    }
+
+    override fun onCleared() { super.onCleared(); killPlayChain(); currentTTSProvider?.destroy(); recordingJob?.cancel() }
 }

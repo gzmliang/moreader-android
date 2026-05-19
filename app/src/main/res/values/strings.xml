@@ -245,6 +245,8 @@ AI Voice（云端 TTS）：
     <string name="tts_log_switch_engine">切换 TTS 引擎: %1$s</string>
     <string name="tts_log_offset_inc">[设置] 高亮偏移 +1 = %1$d</string>
     <string name="tts_log_offset_dec">[设置] 高亮偏移 -1 = %1$d</string>
+    <string name="tts_log_recording_started">🎙️ 开始录制：%s（%d 段）</string>
+    <string name="tts_log_recording_done">🎙️ 录制完成：%s（%d KB）</string>
     <string name="tts_log_edge_config">[设置] Edge TTS: voice=%1$s</string>
     <string name="tts_log_ai_config">[设置] AI Voice: voice=%1$s</string>
     <string name="tts_log_engine_error">[TTS] ❌ onError idx=%1$d: %2$s</string>
@@ -498,5 +500,26 @@ AI Voice（云端 TTS）：
     <string name="setting_no_model">未加载模型</string>
     <string name="setting_unload">卸载</string>
     <string name="setting_view_logs">📋 查看翻译日志</string>
+
+    <!-- TTS Recording -->
+    <string name="recording_title">录制TTS音频</string>
+    <string name="recording_current_chapter">录制当前章节</string>
+    <string name="recording_full_book">录制整本书</string>
+    <string name="recording_chapters_count">共 %d 章</string>
+    <string name="recording_hint">使用当前TTS音色进行录制，音频将保存为MP3文件</string>
+    <string name="recording_in_progress">正在录制：%s</string>
+    <string name="recording_full_book_progress">整书录制中：%s</string>
+    <string name="recording_chapter_progress">章节录制中：%s</string>
+    <string name="recording_segment_info">%1$d / %2$d 段 (%3$d%%) · %4$.1f MB</string>
+    <string name="recording_cancel">取消录制</string>
+    <string name="recording_done">录制完成！</string>
+    <string name="recording_done_info">%d 个音频段落 · %d KB</string>
+    <string name="recording_play">播放</string>
+    <string name="recording_close">关闭</string>
+    <string name="recording_error">录制失败</string>
+    <string name="recording_manager_title">TTS录音管理</string>
+    <string name="recording_no_recordings">暂无录音文件</string>
+    <string name="recording_back">返回</string>
+    <string name="recording_entry">🎙️ 录制TTS音频</string>
 
 </resources>
