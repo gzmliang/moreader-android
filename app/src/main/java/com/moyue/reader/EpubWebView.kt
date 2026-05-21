@@ -159,11 +159,18 @@ fun EpubWebView(
     }
 
     // Dynamic theme/font update via JS (does not reload page, preserves scroll)
+    // For font size changes: save scroll ratio before, restore after to keep visual position
+    var lastFontScale by remember { mutableStateOf(fontScale) }
     LaunchedEffect(fontScale, bgColor, textColor, fontFamily, fontWeight) {
         webView?.let { wv ->
             if (lastLoadedContent == null) return@let // Not loaded yet
             
             val sz = (fontScale * 100).toInt()
+            
+            // If font size changed, save scroll ratio before applying new size
+            val fontChanged = lastFontScale != fontScale
+            lastFontScale = fontScale
+            
             val js = """(function(){
                 var e=document.getElementById('mt');
                 if(!e)return;
@@ -178,7 +185,26 @@ fun EpubWebView(
                 '.user-highlight{background-color:rgba(255,255,0,0.35)!important;border-radius:2px!important}'+
                 '::-webkit-scrollbar{width:0!important;height:0!important}';
             })()"""
-            wv.evaluateJavascript(js, null)
+            
+            if (fontChanged) {
+                // Step 1: Save scroll ratio
+                wv.evaluateJavascript(
+                    "(function(){var sy=window.scrollY;var sh=document.body.scrollHeight;var vh=window.innerHeight;window._savedScrollRatio=sy/Math.max(1,sh-vh);})()"
+                ) { _ ->
+                    // Step 2: Apply font change
+                    wv.evaluateJavascript(js) { _ ->
+                        // Step 3: Restore scroll ratio after reflow
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            wv.evaluateJavascript(
+                                "(function(){if(window._savedScrollRatio!==undefined){var sh=document.body.scrollHeight;var vh=window.innerHeight;window.scrollTo(0,window._savedScrollRatio*Math.max(1,sh-vh));}})()",
+                                null
+                            )
+                        }, 200)
+                    }
+                }
+            } else {
+                wv.evaluateJavascript(js, null)
+            }
         }
     }
 
