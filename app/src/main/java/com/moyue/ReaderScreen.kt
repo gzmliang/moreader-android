@@ -163,7 +163,7 @@ fun ReaderScreen(
                     if (state.translationResult != null) {
                         Text(state.translationResult!!, fontSize = 14.sp, lineHeight = 22.sp)
                     }
-                    // Dictionary debug log — visible for troubleshooting
+                    // Dictionary debug log — hidden by default, toggle to show
                     if (state.dictionaryDebugLog.isNotEmpty()) {
                         Spacer(Modifier.height(12.dp))
                         androidx.compose.material3.HorizontalDivider()
@@ -173,16 +173,26 @@ fun ReaderScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("🔍 词典调试日志", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
                             TextButton(
-                                onClick = { viewModel.copyDictionaryDebugLog() },
+                                onClick = { viewModel.toggleDictionaryDebugLog() },
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                             ) {
-                                Text("📋 复制日志", fontSize = 10.sp, color = Color(0xFF059669))
+                                val arrow = if (state.showDictionaryDebugLog) "▼" else "▶"
+                                Text("$arrow 词典调试", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
+                            }
+                            if (state.showDictionaryDebugLog) {
+                                TextButton(
+                                    onClick = { viewModel.copyDictionaryDebugLog() },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                ) {
+                                    Text("📋 复制", fontSize = 10.sp, color = Color(0xFF059669))
+                                }
                             }
                         }
-                        Spacer(Modifier.height(4.dp))
-                        Text(state.dictionaryDebugLog, fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 16.sp)
+                        if (state.showDictionaryDebugLog) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(state.dictionaryDebugLog, fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 16.sp)
+                        }
                     }
                 }
             },

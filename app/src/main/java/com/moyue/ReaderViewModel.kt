@@ -100,6 +100,7 @@ data class ReaderUiState(
     // Dictionary query result (for structured data display)
     val isDictionaryResult: Boolean = false,
     val dictionaryDebugLog: String = "",
+    val showDictionaryDebugLog: Boolean = false,
     // TTS Recording
     val isRecording: Boolean = false,
     val recordingChapterLabel: String = "",
@@ -580,6 +581,10 @@ class ReaderViewModel(
                 _uiState.update { it.copy(showVocabToast = true, vocabToastMsg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.copy_failed_fmt, e.message)) }
             }
         }
+    }
+
+    fun toggleDictionaryDebugLog() {
+        _uiState.update { it.copy(showDictionaryDebugLog = !it.showDictionaryDebugLog) }
     }
 
     /** Speak arbitrary text (used by translation panel speaker button) */
