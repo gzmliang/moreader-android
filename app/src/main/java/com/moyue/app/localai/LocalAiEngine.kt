@@ -146,7 +146,7 @@ object LocalAiEngine {
             // Auto-detect language
             val hasChinese = text.any { it in '\u4e00'..'\u9fff' }
             val mode = if (hasChinese) 1 else 0  // 0=EN→CN, 1=CN→EN
-            val maxTokens = 128  // Translation doesn't need many tokens
+            val maxTokens = 2048  // Allow longer translation output
             val result = LlamaJniWrapper.generate(modelHandle, text, mode, maxTokens)
             Result.success(result)
         } catch (e: Exception) {
@@ -160,7 +160,7 @@ object LocalAiEngine {
             return@withContext Result.failure(Exception("Model not loaded"))
         }
         try {
-            val result = LlamaJniWrapper.generate(modelHandle, text, 2, 192)
+            val result = LlamaJniWrapper.generate(modelHandle, text, 2, 2048)
             Result.success(result)
         } catch (e: Exception) {
             Result.failure(e)
@@ -178,7 +178,7 @@ object LocalAiEngine {
     private fun loadModelSync(context: Context, path: String): Boolean {
         try {
             val gpuLayers = getGpuLayers(context)
-            modelHandle = LlamaJniWrapper.loadModel(path, 512, 8, gpuLayers)
+            modelHandle = LlamaJniWrapper.loadModel(path, 4096, 8, gpuLayers)
             if (modelHandle != 0L) {
                 context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .edit()

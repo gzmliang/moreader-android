@@ -196,12 +196,10 @@ JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_generate(
                 prompt = qwen_prompt(
                     "你是英汉词典。给出：音标、简短中文释义、一个例句及翻译。每项一行，不要多话。",
                     text);
-                effective_max = 64;
             } else {
                 prompt = qwen_prompt(
                     "把以下英文翻译成中文，只输出译文。",
                     text);
-                effective_max = 64;
             }
             temp = 0.3f; penalty = 1.2f;
             break;
@@ -212,12 +210,10 @@ JNIEXPORT jstring JNICALL Java_com_moyue_app_localai_LlamaJniWrapper_generate(
                 prompt = qwen_prompt(
                     "你是汉英词典。给出：拼音、简短英文释义、一个例句及翻译。每项一行，不要多话。",
                     text);
-                effective_max = 64;
             } else {
                 prompt = qwen_prompt(
                     "把以下中文翻译成英文，只输出译文。",
                     text);
-                effective_max = 64;
             }
             temp = 0.3f; penalty = 1.2f;
             break;
