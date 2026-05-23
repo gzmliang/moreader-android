@@ -846,7 +846,14 @@ class ReaderViewModel(
     }
     private fun killPlayChain() { playChainActive = false; currentTTSProvider?.stop(); audioCache.clear() }
     fun ttsStop() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_stop)); killPlayChain(); _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) } }
-    fun togglePlayPause() { val s = _uiState.value; when { s.isTtsPlaying -> ttsPause(); s.isTtsPaused -> ttsResume(); else -> readChapter() } }
+    private var lastToggleTime = 0L
+
+    fun togglePlayPause() {
+        val now = System.currentTimeMillis()
+        if (now - lastToggleTime < 300) return // debounce: prevent rapid double-taps
+        lastToggleTime = now
+        val s = _uiState.value; when { s.isTtsPlaying -> ttsPause(); s.isTtsPaused -> ttsResume(); else -> readChapter() }
+    }
 
     fun setTTSProvider(type: TTSProviderType) { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_switch_engine, type.name)); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(ttsProvider = type) }; savePerBookTtsConfig() }
     fun setTTSSpeed(s: Float) {
