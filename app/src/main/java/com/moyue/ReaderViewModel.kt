@@ -170,8 +170,6 @@ class ReaderViewModel(
     private val audioCache = mutableMapOf<Int, ByteArray>()
     // Flag to stop the current play chain
     private var playChainActive = false
-    // Track which paragraph indices are currently being processed to prevent duplicate speak() calls
-    private val activePlayIndices = mutableSetOf<Int>()
 
     private fun log(msg: String) {
         Log.d(TAG, msg)
@@ -678,22 +676,9 @@ class ReaderViewModel(
      */
     private fun playOne(idx: Int) {
         if (!playChainActive) return
-
-        // Prevent duplicate processing of the same index
-        if (activePlayIndices.contains(idx)) {
-            log("[TTS] ⚠️ playOne($idx) already active, skipping duplicate")
-            return
-        }
-        activePlayIndices.add(idx)
-        // Clean up old indices (keep only last 5 to prevent memory leak)
-        if (activePlayIndices.size > 10) {
-            activePlayIndices.minOrNull()?.let { activePlayIndices.remove(it) }
-        }
-
         val s = _uiState.value
         val paragraphs = s.ttsParagraphs
         if (idx < 0 || idx >= paragraphs.size) {
-            activePlayIndices.remove(idx)
             // End of chapter reached — auto-advance to next chapter if available
             if (s.currentChapterIndex < s.chapters.size - 1) {
                 log("[TTS] 📖 ${getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_tts_chapter_complete)}")
@@ -727,20 +712,9 @@ class ReaderViewModel(
         val cached = audioCache.remove(idx)
 
         val listener = object : TTSListener {
-            override fun onStart() {
-                // Update highlight when this utterance actually starts playing
-                _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx) }
-            }
-            override fun onDone() { 
-                activePlayIndices.remove(idx)
-                // Trigger next paragraph prefetch and play
-                playOne(idx + 1) 
-            }
-            override fun onError(msg: String) { 
-                activePlayIndices.remove(idx)
-                log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg))
-                playOne(idx + 1) 
-            }
+            override fun onStart() { _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx) } }
+            override fun onDone() { playOne(idx + 1) }
+            override fun onError(msg: String) { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg)); playOne(idx + 1) }
         }
 
         if (cached != null && cached.isNotEmpty()) {
@@ -838,7 +812,25 @@ class ReaderViewModel(
     }
 
     fun ttsPause() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_pause, _uiState.value.ttsPlayIdx)); playChainActive = false; currentTTSProvider?.stop(); _uiState.update { it.copy(isTtsPaused = true, isTtsPlaying = false) } }
-    fun ttsResume() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_resume)); val s = _uiState.value; val playIdx = s.ttsPlayIdx; if (s.ttsParagraphs.isEmpty() || playIdx < 0) { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_invalid_restore, playIdx)); return }; playChainActive = true; _uiState.update { it.copy(isTtsPaused = false, isTtsPlaying = true) }; playOne(playIdx) }
+    fun ttsResume() {
+        log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_resume))
+        val s = _uiState.value
+        val playIdx = s.ttsPlayIdx
+        if (s.ttsParagraphs.isEmpty() || playIdx < 0) {
+            log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_invalid_restore, playIdx))
+            return
+        }
+        // Clean restart: fully destroy to get fresh TTS engine state after stop()
+        if (currentTTSProvider is SystemTTSProvider) {
+            (currentTTSProvider as SystemTTSProvider).fullDestroy()
+        } else {
+            currentTTSProvider?.destroy()
+        }
+        currentTTSProvider = null
+        playChainActive = true
+        _uiState.update { it.copy(isTtsPaused = false, isTtsPlaying = true, ttsCurrentIdx = playIdx) }
+        playOne(playIdx)
+    }
     private fun killPlayChain() { playChainActive = false; currentTTSProvider?.stop(); audioCache.clear() }
     fun ttsStop() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_stop)); killPlayChain(); _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) } }
     fun togglePlayPause() { val s = _uiState.value; when { s.isTtsPlaying -> ttsPause(); s.isTtsPaused -> ttsResume(); else -> readChapter() } }
