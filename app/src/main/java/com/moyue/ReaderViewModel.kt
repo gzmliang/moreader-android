@@ -170,6 +170,8 @@ class ReaderViewModel(
     private val audioCache = mutableMapOf<Int, ByteArray>()
     // Flag to stop the current play chain
     private var playChainActive = false
+    // Consecutive error counter — if TTS engine is broken, stop retrying
+    private var consecutiveErrors = 0
 
     private fun log(msg: String) {
         Log.d(TAG, msg)
@@ -713,8 +715,18 @@ class ReaderViewModel(
 
         val listener = object : TTSListener {
             override fun onStart() { _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx) } }
-            override fun onDone() { playOne(idx + 1) }
-            override fun onError(msg: String) { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg)); playOne(idx + 1) }
+            override fun onDone() { consecutiveErrors = 0; playOne(idx + 1) }
+            override fun onError(msg: String) {
+                log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg))
+                consecutiveErrors++
+                if (consecutiveErrors >= 3) {
+                    log("[TTS] ⛔ ${getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_stop)}")
+                    killPlayChain()
+                    _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }
+                } else {
+                    playOne(idx + 1)
+                }
+            }
         }
 
         if (cached != null && cached.isNotEmpty()) {
@@ -757,6 +769,7 @@ class ReaderViewModel(
         killPlayChain(); audioCache.clear()
         currentTTSProvider?.destroy(); currentTTSProvider = null
         _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = 0, ttsPlayIdx = 0) }
+        consecutiveErrors = 0
         playChainActive = true
 
         // Preload first 5 paragraphs
@@ -791,6 +804,7 @@ class ReaderViewModel(
         val highlightIdx = (index - offset).coerceIn(0, maxOf(0, paragraphs.size - 1))
         
         _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = highlightIdx, ttsPlayIdx = index) }
+        consecutiveErrors = 0
         playChainActive = true
 
         // Preload from current position

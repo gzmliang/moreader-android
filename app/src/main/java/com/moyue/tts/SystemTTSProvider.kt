@@ -150,7 +150,8 @@ class SystemTTSProvider(context: Context) : TTSProvider {
 
         if (result == TextToSpeech.ERROR) {
             utteranceListeners.remove(id)
-            listener.onError("speak()失败")
+            // Post via handler to break synchronous recursion loop
+            Handler(Looper.getMainLooper()).post { listener.onError("speak() failed") }
         }
     }
 
