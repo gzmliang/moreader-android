@@ -22,6 +22,12 @@ class SystemTTSProvider(context: Context) : TTSProvider {
         private var globalIsReady = false
         private val initLock = Object()
 
+        // Shared across ALL instances — critical because setupTts() binds
+        // UtteranceProgressListener to this map only ONCE (first init).
+        // Instance-level maps would become stale after destroy/recreate.
+        private val utteranceListeners = java.util.concurrent.ConcurrentHashMap<String, TTSListener>()
+        private var counter = 0
+
         private val debugLog = StringBuilder()
         fun getDebugLog(): String = debugLog.toString()
         fun clearDebugLog() { debugLog.clear() }
@@ -34,9 +40,6 @@ class SystemTTSProvider(context: Context) : TTSProvider {
 
     private val appContext = context.applicationContext
     private var activityContext: Context? = null
-
-    private val utteranceListeners = mutableMapOf<String, TTSListener>()
-    private var counter = 0
 
     override val type: TTSProviderType get() = TTSProviderType.SYSTEM
     override val isSpeaking: Boolean get() = globalTts?.isSpeaking ?: false
@@ -68,8 +71,11 @@ class SystemTTSProvider(context: Context) : TTSProvider {
                     dlog("onInit: status=$status")
                     if (status == TextToSpeech.SUCCESS) {
                         globalIsReady = true
-                        dlog("✅ TTS 就绪: ${globalTts?.defaultEngine}")
-                        setupTts()
+                        // Use the companion field directly — this callback
+                        // only fires for the engine we just created.
+                        val tts = globalTts
+                        dlog("✅ TTS 就绪: ${tts?.defaultEngine}")
+                        if (tts != null) setupTts(tts)
                     } else {
                         dlog("❌ 失败: $status")
                     }
@@ -81,12 +87,12 @@ class SystemTTSProvider(context: Context) : TTSProvider {
         }
     }
 
-    private fun setupTts() {
+    private fun setupTts(tts: TextToSpeech) {
         try {
-            globalTts?.setLanguage(Locale.CHINESE)
+            tts.setLanguage(Locale.CHINESE)
             dlog("中文设置完成")
 
-            globalTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(id: String?) {
                     val listener = id?.let { utteranceListeners[it] }
                     dlog("onStart: $id")
@@ -170,6 +176,10 @@ class SystemTTSProvider(context: Context) : TTSProvider {
 
     override fun destroy() {
         dlog("destroy()")
+        globalTts?.stop()
+        globalTts?.shutdown()
+        globalTts = null
+        globalIsReady = false
         utteranceListeners.clear()
     }
 
