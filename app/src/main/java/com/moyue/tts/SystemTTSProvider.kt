@@ -126,14 +126,22 @@ class SystemTTSProvider(context: Context) : TTSProvider {
     }
 
     override fun speak(text: String, rate: Float, listener: TTSListener) {
+        speakWithRetry(text, rate, listener, 0)
+    }
+
+    private fun speakWithRetry(text: String, rate: Float, listener: TTSListener, retryCount: Int) {
         if (text.isBlank()) { Handler(Looper.getMainLooper()).post { listener.onDone() }; return }
         ensureInitialized()
 
         if (!globalIsReady) {
-            dlog("speak: 未就绪，延迟")
+            if (retryCount >= 40) { // 40 × 500ms = 20s timeout
+                dlog("speak: 初始化超时")
+                Handler(Looper.getMainLooper()).post { listener.onError("TTS初始化超时") }
+                return
+            }
+            dlog("speak: 未就绪，重试#$retryCount")
             Handler(Looper.getMainLooper()).postDelayed({
-                if (globalIsReady) speak(text, rate, listener)
-                else Handler(Looper.getMainLooper()).post { listener.onError("TTS未就绪") }
+                speakWithRetry(text, rate, listener, retryCount + 1)
             }, 500)
             return
         }
@@ -150,7 +158,6 @@ class SystemTTSProvider(context: Context) : TTSProvider {
 
         if (result == TextToSpeech.ERROR) {
             utteranceListeners.remove(id)
-            // Post via handler to break synchronous recursion loop
             Handler(Looper.getMainLooper()).post { listener.onError("speak() failed") }
         }
     }
