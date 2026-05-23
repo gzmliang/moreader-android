@@ -710,6 +710,8 @@ class ReaderViewModel(
         // Note: highlight update moved to listener.onStart() to sync with actual audio playback
 
         val text = paragraphs[idx]
+        // Skip blank paragraphs entirely — prevents infinite error loops
+        if (text.isBlank()) { playOne(idx + 1); return }
         val speed = s.ttsSpeed
         val cached = audioCache.remove(idx)
 

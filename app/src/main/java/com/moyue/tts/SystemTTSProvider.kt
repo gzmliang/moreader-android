@@ -126,14 +126,14 @@ class SystemTTSProvider(context: Context) : TTSProvider {
     }
 
     override fun speak(text: String, rate: Float, listener: TTSListener) {
-        if (text.isBlank()) { listener.onDone(); return }
+        if (text.isBlank()) { Handler(Looper.getMainLooper()).post { listener.onDone() }; return }
         ensureInitialized()
 
         if (!globalIsReady) {
             dlog("speak: 未就绪，延迟")
             Handler(Looper.getMainLooper()).postDelayed({
                 if (globalIsReady) speak(text, rate, listener)
-                else listener.onError("TTS未就绪")
+                else Handler(Looper.getMainLooper()).post { listener.onError("TTS未就绪") }
             }, 500)
             return
         }
