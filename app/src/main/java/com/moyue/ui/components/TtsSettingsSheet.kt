@@ -130,8 +130,8 @@ fun TtsSettingsSheet(
             }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // 排除SYSTEM，因为Android 16上有兼容问题
-                val available = TTSProviderType.entries.filter { it != TTSProviderType.SYSTEM }
+                // 系统TTS已通过MiniTTS验证在OnePlus/Google TTS上工作正常
+                val available = TTSProviderType.entries
                 available.forEach { provider ->
                     FilterChip(selected = currentProvider == provider,
                         onClick = { onProviderChange(provider) },

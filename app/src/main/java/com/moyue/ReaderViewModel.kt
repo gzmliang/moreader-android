@@ -126,6 +126,10 @@ class ReaderViewModel(
 
     companion object { private const val TAG = "ReaderVM" }
 
+    // Activity context for System TTS (some ROMs require Activity, not Application)
+    private var activityContext: Context? = null
+    fun setActivityContext(ctx: Context) { activityContext = ctx }
+
     private val prefs = application.getSharedPreferences("moreader_config", Context.MODE_PRIVATE)
 
     // Local AI engine — completely independent of TranslationService
@@ -166,10 +170,14 @@ class ReaderViewModel(
     private val audioCache = mutableMapOf<Int, ByteArray>()
     // Flag to stop the current play chain
     private var playChainActive = false
+    // Track which paragraph indices are currently being processed to prevent duplicate speak() calls
+    private val activePlayIndices = mutableSetOf<Int>()
 
     private fun log(msg: String) {
         Log.d(TAG, msg)
-        _uiState.update { it.copy(ttsDebugLog = it.ttsDebugLog + msg + "\n") }
+        // Also pull SystemTTSProvider's debug log
+        val sysLog = com.moyue.app.tts.SystemTTSProvider.getDebugLog()
+        _uiState.update { it.copy(ttsDebugLog = sysLog + it.ttsDebugLog + msg + "\n") }
     }
 
     private fun extractParagraphsFromHtml(html: String): List<String> {
@@ -409,6 +417,12 @@ class ReaderViewModel(
     }
     fun dismissSelectionMenu() { _uiState.update { it.copy(showSelectionMenu = false) } }
     fun toggleTtsDebugLog() { _uiState.update { it.copy(showTtsDebugLog = !it.showTtsDebugLog) } }
+    fun copyTtsDebugLog() {
+        val log = _uiState.value.ttsDebugLog
+        val clipboard = getApplication<android.app.Application>()
+            .getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("TTS Log", log))
+    }
     fun translate(mode: String = "translate") {
         val t = _uiState.value.selectedText ?: return
         _uiState.update { it.copy(isTranslating = true, translationMode = mode, showTranslationPanel = true, translationResult = null, isDictionaryResult = false, dictionaryDebugLog = "") }
@@ -618,7 +632,11 @@ class ReaderViewModel(
         lastProviderType = s.ttsProvider
         
         return when (s.ttsProvider) {
-            TTSProviderType.SYSTEM -> { SystemTTSProvider(getApplication()).also { currentTTSProvider = it } }
+            TTSProviderType.SYSTEM -> {
+                // System TTS needs Activity context on some ROMs (e.g. ColorOS)
+                val ctx = activityContext ?: getApplication()
+                SystemTTSProvider(ctx).also { currentTTSProvider = it }
+            }
             TTSProviderType.EDGE_TTS -> { EdgeTTSProvider(s.edgeTtsEndpoint, s.edgeTtsVoice).also { currentTTSProvider = it } }
             TTSProviderType.AI_VOICE -> { AIVoiceTTSProvider(s.aiVoiceEndpoint, s.aiVoiceApiKey, s.aiVoiceModel, s.aiVoiceId).also { currentTTSProvider = it } }
             TTSProviderType.CUSTOM_TTS -> { CustomTTSProvider(s.customTtsEndpoint, s.customTtsApiKey, s.customTtsModel, s.customTtsVoice).also { currentTTSProvider = it } }
@@ -660,9 +678,22 @@ class ReaderViewModel(
      */
     private fun playOne(idx: Int) {
         if (!playChainActive) return
+
+        // Prevent duplicate processing of the same index
+        if (activePlayIndices.contains(idx)) {
+            log("[TTS] ⚠️ playOne($idx) already active, skipping duplicate")
+            return
+        }
+        activePlayIndices.add(idx)
+        // Clean up old indices (keep only last 5 to prevent memory leak)
+        if (activePlayIndices.size > 10) {
+            activePlayIndices.minOrNull()?.let { activePlayIndices.remove(it) }
+        }
+
         val s = _uiState.value
         val paragraphs = s.ttsParagraphs
         if (idx < 0 || idx >= paragraphs.size) {
+            activePlayIndices.remove(idx)
             // End of chapter reached — auto-advance to next chapter if available
             if (s.currentChapterIndex < s.chapters.size - 1) {
                 log("[TTS] 📖 ${getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_tts_chapter_complete)}")
@@ -689,18 +720,27 @@ class ReaderViewModel(
         // Highlight = current index - ttsHighlightOffset (user-adjustable, negative = earlier)
         val offset = s.ttsHighlightOffset
         val highlightIdx = (idx - offset).coerceIn(0, maxOf(0, paragraphs.size - 1))
-        _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx) }
+        // Note: highlight update moved to listener.onStart() to sync with actual audio playback
 
         val text = paragraphs[idx]
         val speed = s.ttsSpeed
-
-        // Try to get audio from cache first
         val cached = audioCache.remove(idx)
 
         val listener = object : TTSListener {
-            override fun onStart() {}
-            override fun onDone() { playOne(idx + 1) }
-            override fun onError(msg: String) { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg)); playOne(idx + 1) }
+            override fun onStart() {
+                // Update highlight when this utterance actually starts playing
+                _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx) }
+            }
+            override fun onDone() { 
+                activePlayIndices.remove(idx)
+                // Trigger next paragraph prefetch and play
+                playOne(idx + 1) 
+            }
+            override fun onError(msg: String) { 
+                activePlayIndices.remove(idx)
+                log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg))
+                playOne(idx + 1) 
+            }
         }
 
         if (cached != null && cached.isNotEmpty()) {
@@ -709,20 +749,24 @@ class ReaderViewModel(
                 is EdgeTTSProvider -> p.playRaw(cached, listener)
                 is AIVoiceTTSProvider -> p.playRaw(cached, listener)
                 is CustomTTSProvider -> p.playRaw(cached, listener)
-                is SystemTTSProvider -> {
-                    // System TTS doesn't use audio cache, speak directly
-                    p.speak(text, speed, listener)
-                }
+                is SystemTTSProvider -> p.speak(text, speed, listener)
             }
         } else {
-            // Request live
             val p = recreateProvider()
             if (p == null) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }; return }
-            p.speak(text, speed, listener)
+
+            // System TTS: just speak, onDone/onStart drive the chain
+            if (p is SystemTTSProvider) {
+                p.speak(text, speed, listener)
+            } else if (p != null) {
+                p.speak(text, speed, listener)
+            }
         }
 
-        // Preload next paragraphs in background
-        preloadRange(idx + 1, idx + 6)
+        // Preload next paragraphs in background (for non-System providers)
+        if (s.ttsProvider != TTSProviderType.SYSTEM) {
+            preloadRange(idx + 1, idx + 6)
+        }
     }
 
     fun readChapter() {

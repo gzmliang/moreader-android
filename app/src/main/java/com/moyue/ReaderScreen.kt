@@ -62,6 +62,15 @@ fun ReaderScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val highlights by viewModel.loadedHighlights.collectAsStateWithLifecycle()
     val allBookHighlights by repository.getHighlightsForBook(bookId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val context = LocalContext.current
+
+    // Pass Activity context to ViewModel for System TTS initialization
+    LaunchedEffect(Unit) {
+        val activity = context as? android.app.Activity
+        if (activity != null) {
+            viewModel.setActivityContext(activity)
+        }
+    }
 
     // Load highlights when chapter changes
     LaunchedEffect(state.currentChapterIndex, state.currentHtml) {
@@ -282,6 +291,20 @@ fun ReaderScreen(
                                 IconButton(onClick = { viewModel.decreaseHighlightOffset() }, modifier = Modifier.size(28.dp)) { Text("-", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White) }
                                 Text("${state.ttsHighlightOffset}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
                                 IconButton(onClick = { viewModel.increaseHighlightOffset() }, modifier = Modifier.size(28.dp)) { Text("+", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+                            }
+                        }
+                    }
+                    Surface(color = Color(0xFF1A1A2E)) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.End) {
+                            TextButton(
+                                onClick = {
+                                    viewModel.copyTtsDebugLog()
+                                    android.widget.Toast.makeText(context, "TTS 日志已复制!", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                            ) {
+                                Text("📋 复制 TTS 日志", fontSize = 10.sp, color = Color(0xFF888888))
                             }
                         }
                     }
