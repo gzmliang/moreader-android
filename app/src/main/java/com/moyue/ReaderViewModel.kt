@@ -836,13 +836,10 @@ class ReaderViewModel(
             log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_invalid_restore, playIdx))
             return
         }
-        // Clean restart: fully destroy to get fresh TTS engine state after stop()
-        if (currentTTSProvider is SystemTTSProvider) {
-            (currentTTSProvider as SystemTTSProvider).fullDestroy()
-        } else {
-            currentTTSProvider?.destroy()
-        }
-        currentTTSProvider = null
+        // Lightweight reset: just stop current speech, don't shutdown the engine.
+        // fullDestroy() + re-init causes Google TTS to accept speak() but never
+        // fire onStart on ColorOS, breaking the chain.
+        currentTTSProvider?.stop()
         playChainActive = true
         _uiState.update { it.copy(isTtsPaused = false, isTtsPlaying = true, ttsCurrentIdx = playIdx) }
         playOne(playIdx)
