@@ -175,11 +175,12 @@ class SystemTTSProvider(context: Context) : TTSProvider {
     }
 
     override fun destroy() {
-        dlog("destroy()")
+        // 只停止当前朗读，不 shutdown 引擎。
+        // Android TTS Service Binding 释放是异步的，
+        // shutdown 后立即创建新实例会导致 bind 冲突，onInit 永远不回调。
+        // 引擎作为单例保持存活，下次 speak 时直接复用。
+        dlog("destroy() — 仅停止，保留引擎")
         globalTts?.stop()
-        globalTts?.shutdown()
-        globalTts = null
-        globalIsReady = false
         utteranceListeners.clear()
     }
 
