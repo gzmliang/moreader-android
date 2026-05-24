@@ -13,8 +13,8 @@ android {
         applicationId = "com.moyue.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 26
-        versionName = "2.2.0"
+        versionCode = 27
+        versionName = "2.2.1"
 
         // Local AI NDK config
         externalNativeBuild {
