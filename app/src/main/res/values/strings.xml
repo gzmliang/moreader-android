@@ -295,6 +295,8 @@ AI Voice（云端 TTS）：
     <string name="tts_hint_voice">Lingyu</string>
     <string name="tts_api_key_only_hint">API Key (仅需填写此项)</string>
     <string name="tts_custom_tts_hint">适用于 MOSS-TTS-Nano、CosyVoice 等本地部署</string>
+    <string name="tts_system_settings">系统语音设置</string>
+    <string name="tts_system_settings_desc">选择引擎、声音、语速等，设置后自动生效</string>
     <string name="tts_custom_tts_title">OpenAI 兼容 TTS</string>
 
     <!-- Navigation History -->

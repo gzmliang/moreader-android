@@ -290,6 +290,8 @@ Just change the Base URL and API Key</string>
     <string name="tts_api_key_only_hint">API Key (only this field needed)</string>
     <string name="tts_base_url">Base URL</string>
     <string name="tts_custom_tts_hint">For MOSS-TTSD-Nano, CosyVoice and other local deployments</string>
+    <string name="tts_system_settings">System Voice Settings</string>
+    <string name="tts_system_settings_desc">Choose engine, voice, speed, etc. Changes take effect immediately</string>
     <string name="tts_custom_tts_title">OpenAI-compatible TTS</string>
     <string name="tts_custom_voice">Custom Voice ID</string>
     <string name="tts_custom_voice_hint">✏️ Enter custom voice...</string>

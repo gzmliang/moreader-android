@@ -22,6 +22,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moyue.app.data.models.LLMConfig
@@ -330,6 +331,47 @@ fun TtsSettingsSheet(
                         label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_voice), fontSize = 11.sp) },
                         singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
                     )
+                }
+            }
+
+            if (currentProvider == TTSProviderType.SYSTEM) {
+                val context = LocalContext.current
+                OutlinedCard(
+                    onClick = {
+                        try {
+                            val intent = android.content.Intent("com.android.settings.TTS_SETTINGS")
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            try {
+                                val intent = android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                context.startActivity(intent)
+                            } catch (_: Exception) {}
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp).fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_system_settings),
+                                fontWeight = FontWeight.Medium, fontSize = 13.sp,
+                            )
+                            Text(
+                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_system_settings_desc),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            )
+                        }
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        )
+                    }
                 }
             }
 
