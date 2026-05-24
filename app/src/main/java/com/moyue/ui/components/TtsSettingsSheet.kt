@@ -450,6 +450,23 @@ fun TtsSettingsSheet(
             )
             AnimatedVisibility(visible = showLLMConfig, enter = expandVertically(), exit = shrinkVertically()) {
                 Column(modifier = Modifier.padding(start = 22.dp)) {
+                    // 翻译引擎选择 — 云端/本地
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(
+                            selected = translateEngine == com.moyue.app.data.models.TranslateEngine.CLOUD,
+                            onClick = { onTranslateEngineChange(com.moyue.app.data.models.TranslateEngine.CLOUD) },
+                            label = { Text("☁️ " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_engine_cloud), fontSize = 12.sp) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        FilterChip(
+                            selected = translateEngine == com.moyue.app.data.models.TranslateEngine.LOCAL,
+                            onClick = { onTranslateEngineChange(com.moyue.app.data.models.TranslateEngine.LOCAL) },
+                            label = { Text("📱 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_engine_local), fontSize = 12.sp) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+
                     val defaultEndpoint = "https://api.deepseek.com"
                     val defaultModel = "deepseek-chat"
 
