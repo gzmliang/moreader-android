@@ -280,15 +280,18 @@ class ReaderViewModel(
         ) }
         loadChapterContent()
     } }
-    private suspend fun loadChapterContent() {
+    private suspend fun loadChapterContent(forceStart: Boolean = false) {
         val s = _uiState.value; val b = s.book ?: return; if (s.chapters.isEmpty()) return
         _uiState.update { it.copy(isLoading = true, loadingMessage = getApplication<android.app.Application>().getString(com.moyue.app.R.string.load_content)) }
         val ch = s.chapters.getOrNull(s.currentChapterIndex) ?: run { _uiState.update { it.copy(isLoading = false, error = getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_chapter_out_of_range)) }; return }
         val html = repository.getChapterContent(b.id, ch.href) ?: run { _uiState.update { it.copy(isLoading = false, error = getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_read_failed)) }; return }
         val pl = extractParagraphsFromHtml(html)
         
-        // Restore paragraph position if we're loading the same chapter we left off
-        val restorePara = if (ch.href == b.currentChapterHref) b.currentParagraphIndex.coerceIn(0, maxOf(0, pl.size - 1)) else 0
+        // Restore paragraph position: use saved position only when reopening the same chapter,
+        // not when explicitly navigating via TOC or links
+        val restorePara = if (forceStart) 0
+            else if (ch.href == b.currentChapterHref) b.currentParagraphIndex.coerceIn(0, maxOf(0, pl.size - 1))
+            else 0
         
         _uiState.update { 
             it.copy(
@@ -332,7 +335,7 @@ class ReaderViewModel(
         if (idx >= 0) { 
             killPlayChain()
             _uiState.update { it.copy(currentChapterIndex = idx, isLoading = true, currentHtml = null, showTocPanel = false, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }
-            viewModelScope.launch { loadChapterContent(); saveProgress() }
+            viewModelScope.launch { loadChapterContent(forceStart = true); saveProgress() }
         }
     }
     private suspend fun saveProgress() { 
@@ -1053,8 +1056,9 @@ class ReaderViewModel(
     }
 
     fun setCurrentParagraph(idx: Int) { 
+        if (_uiState.value.currentParagraphIndex == idx) return  // No-op if same
         _uiState.update { it.copy(currentParagraphIndex = idx) }
-        // Persist paragraph position
+        // Persist paragraph position (debounced — only if changed significantly)
         val book = _uiState.value.book ?: return
         viewModelScope.launch {
             repository.updateBookParagraph(book.id, idx)

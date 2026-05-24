@@ -46,6 +46,7 @@ fun EpubWebView(
     onTextSelected: (String) -> Unit,
     onLinkClicked: (String) -> Unit = {},
     onParagraphClicked: ((Int) -> Unit)? = null,
+    onScrollToParagraph: ((Int) -> Unit)? = null,
     ttsHighlightIndex: Int = -1,
     scrollToParagraph: Int? = null,
     highlightsToRender: List<Triple<Int, Int, Int>> = emptyList(),  // (startParagraph, startOffset, endOffset)
@@ -61,7 +62,7 @@ fun EpubWebView(
     LaunchedEffect(onTextSelected) { callbackRef.value = onTextSelected }
     LaunchedEffect(onLinkClicked) { linkCallbackRef.value = onLinkClicked }
     LaunchedEffect(onParagraphClicked) { paragraphCallbackRef.value = { idx -> onParagraphClicked?.invoke(idx) ?: Unit } }
-    LaunchedEffect(scrollCallbackRef) { /* updated by caller */ }
+    LaunchedEffect(onScrollToParagraph) { scrollCallbackRef.value = { idx -> onScrollToParagraph?.invoke(idx) ?: Unit } }
 
     // TTS highlight: call JS when index changes
     LaunchedEffect(ttsHighlightIndex) {

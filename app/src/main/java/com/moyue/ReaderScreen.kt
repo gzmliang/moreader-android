@@ -435,6 +435,7 @@ fun ReaderScreen(
                         clickedParagraphIndex = idx
                         showParagraphMenu = true
                     },
+                    onScrollToParagraph = { idx -> viewModel.setCurrentParagraph(idx) },
                     ttsHighlightIndex = ttsHighlightIdx,
                     scrollToParagraph = if (state.scrollToParagraph >= 0) state.scrollToParagraph else null,
                     highlightsToRender = highlights.map { Triple(it.startParagraph, it.startOffset, it.endOffset) },
