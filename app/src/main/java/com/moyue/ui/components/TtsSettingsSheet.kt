@@ -243,6 +243,8 @@ fun TtsSettingsSheet(
             if (currentProvider == TTSProviderType.EDGE_TTS) {
                 val localEp = remember(edgeEndpoint) { mutableStateOf(edgeEndpoint) }
                 val localVoice = remember(edgeVoice) { mutableStateOf(edgeVoice) }
+                var showVoiceMenu by remember { mutableStateOf(false) }
+                val context = LocalContext.current
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -255,12 +257,55 @@ fun TtsSettingsSheet(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                         textStyle = TextStyle(fontSize = 12.sp),
                     )
-                    OutlinedTextField(
-                        value = localVoice.value, onValueChange = {}, readOnly = true,
-                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_voice), fontSize = 11.sp) },
-                        singleLine = true, modifier = Modifier.weight(1f),
-                        textStyle = TextStyle(fontSize = 12.sp),
-                    )
+                    Box(modifier = Modifier.weight(1f)) {
+                        OutlinedTextField(
+                            value = localVoice.value.let { voiceId ->
+                                EDGE_VOICES.find { it.id == voiceId }?.displayName(context) ?: voiceId
+                            },
+                            onValueChange = {}, readOnly = true,
+                            label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_voice), fontSize = 11.sp) },
+                            singleLine = true, modifier = Modifier.fillMaxWidth(),
+                            textStyle = TextStyle(fontSize = 12.sp),
+                            trailingIcon = {
+                                IconButton(onClick = { showVoiceMenu = true }) {
+                                    Icon(
+                                        Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            },
+                        )
+                        DropdownMenu(
+                            expanded = showVoiceMenu,
+                            onDismissRequest = { showVoiceMenu = false },
+                            modifier = Modifier.heightIn(max = 300.dp),
+                        ) {
+                            groupedEdgeVoices().forEach { (localeName, voices) ->
+                                DropdownMenuItem(
+                                    text = { Text(localeName, fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                                    onClick = {},
+                                    enabled = false,
+                                )
+                                voices.forEach { voice ->
+                                    val isSelected = voice.id == localVoice.value
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                (if (isSelected) "✓ " else "    ") + voice.displayName(context),
+                                                fontSize = 12.sp,
+                                            )
+                                        },
+                                        onClick = {
+                                            localVoice.value = voice.id
+                                            onEdgeConfigChange(localEp.value, voice.id)
+                                            showVoiceMenu = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
