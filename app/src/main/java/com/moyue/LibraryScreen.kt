@@ -54,6 +54,9 @@ fun LibraryScreen(
     ),
 ) {
     val books by viewModel.books.collectAsStateWithLifecycle()
+    val filteredBooks by viewModel.filteredBooks.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    var isSearchActive by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     // Handle shared files from other apps
@@ -79,9 +82,41 @@ fun LibraryScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.library_title), fontWeight = FontWeight.Bold)
+                    if (isSearchActive) {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.setSearchQuery(it) },
+                            placeholder = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.search_hint), fontSize = 14.sp) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                            ),
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp),
+                        )
+                    } else {
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.library_title), fontWeight = FontWeight.Bold)
+                    }
+                },
+                navigationIcon = {
+                    if (isSearchActive) {
+                        IconButton(onClick = {
+                            isSearchActive = false
+                            viewModel.setSearchQuery("")
+                        }) {
+                            Icon(Icons.Default.Close, contentDescription = null)
+                        }
+                    }
                 },
                 actions = {
+                    if (!isSearchActive) {
+                        IconButton(onClick = { isSearchActive = true }) {
+                            Icon(Icons.Default.Search, contentDescription = null)
+                        }
+                    }
                     IconButton(onClick = onOpenBookmarks) {
                         Icon(Icons.Default.Bookmark, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title))
                     }
@@ -197,6 +232,29 @@ fun LibraryScreen(
                     }
                 }
             }
+        } else if (filteredBooks.isEmpty()) {
+            // No search results
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.search_no_results),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        fontSize = 14.sp,
+                    )
+                }
+            }
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
@@ -207,7 +265,7 @@ fun LibraryScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                items(books, key = { it.id }) { book ->
+                items(filteredBooks, key = { it.id }) { book ->
                     BookCard(
                         book = book,
                         onClick = { onOpenBook(book.id) },

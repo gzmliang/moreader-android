@@ -21,6 +21,8 @@
 
     <!-- Library -->
     <string name="library_title">墨阅</string>
+    <string name="search_hint">搜索书名…</string>
+    <string name="search_no_results">没有找到匹配的书</string>
     <string name="import_book">导入书籍</string>
     <string name="empty_library_hint">导入一本 EPUB 开始阅读吧</string>
     <string name="delete_book_title">删除书籍</string>
