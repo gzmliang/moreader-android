@@ -13,7 +13,7 @@ android {
         applicationId = "com.moyue.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 24
+        versionCode = 32
         versionName = "2.1.1"
 
         // Local AI NDK config

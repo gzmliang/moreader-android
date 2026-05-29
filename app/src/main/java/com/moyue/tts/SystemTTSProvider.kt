@@ -48,8 +48,15 @@ class SystemTTSProvider(context: Context) : TTSProvider {
     }
 
     private fun ensureInitialized() {
-        if (globalIsReady) return
-        if (globalTts != null) return
+        // If engine already exists, just re-bind listener to this instance
+        // Critical: each SystemTTSProvider instance has its own utteranceListeners map.
+        // Without re-binding, the old listener fires but looks in the old (empty) map,
+        // and the play chain silently breaks.
+        if (globalTts != null) {
+            setupTts()
+            globalIsReady = true
+            return
+        }
 
         synchronized(initLock) {
             if (globalIsReady || globalTts != null) return
@@ -165,6 +172,9 @@ class SystemTTSProvider(context: Context) : TTSProvider {
     override fun stop() {
         dlog("stop()")
         globalTts?.stop()
+        // Flush queue — critical for clean restart after stop
+        // Without flush, next speak() may succeed but subsequent ones fail
+        globalTts?.speak("", TextToSpeech.QUEUE_FLUSH, null, null)
         utteranceListeners.clear()
     }
 
