@@ -182,9 +182,17 @@ class ReaderViewModel(
 
     private fun extractParagraphsFromHtml(html: String): List<String> {
         val doc = org.jsoup.Jsoup.parse(html)
-        // 注意：这里不能过滤，必须与 WebView 中的 querySelectorAll 结果一致
-        // WebView 中给所有 p,h1-h6 元素添加了点击监听，索引必须对应
-        val paragraphs = doc.select("p, h1, h2, h3, h4, h5, h6").map { it.text().trim() }
+        // 去掉注释符和拼音再提取文本（只删子元素不删段落，不影响索引对应）
+        doc.select("sup").remove()
+        doc.select("rt, rp").remove()
+        val paragraphs = doc.select("p, h1, h2, h3, h4, h5, h6").map {
+            var text = it.text().trim()
+            // 文本级清理：方括号注释 [1] [2]、括号注释 ① ②、ruby 残留 /*/
+            text = text.replace(Regex("""\[\d+\]"""), "")
+            text = text.replace(Regex("""[①②③④⑤⑥⑦⑧⑨⑩]"""), "")
+            text = text.replace(Regex("""/\*+/\s*"""), "")
+            text.trim()
+        }
         // 如果过滤后为空，返回整个 body 文本
         if (paragraphs.isEmpty() || paragraphs.all { it.isEmpty() }) { 
             val t = doc.body()?.text()?.trim() ?: "" 
