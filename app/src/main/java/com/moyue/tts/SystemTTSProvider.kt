@@ -56,7 +56,7 @@ class SystemTTSProvider(context: Context) : TTSProvider {
         // Without re-binding, the old listener fires but looks in the old (empty) map,
         // and the play chain silently breaks.
         if (globalTts != null) {
-            setupTts()
+            setupTts(globalTts!!)
             globalIsReady = true
             return
         }

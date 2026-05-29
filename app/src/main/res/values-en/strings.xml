@@ -146,24 +146,28 @@ Tap the 🔊 button in vocabulary list to test pronunciation first</string>
     <string name="help_close">Got it</string>
     <string name="help_cloud_ai_alternative">You can also use other OpenAI-compatible APIs:
 • Tongyi Qianwen: dashscope.aliyuncs.com
+• SiliconFlow: api.siliconflow.cn (free credits!)
 • Moonshot: api.moonshot.cn
-• SiliconFlow: api.siliconflow.cn
+• DeepSeek: api.deepseek.com
 Just change the Base URL and API Key</string>
     <string name="help_cloud_ai_alternative_title">Other Compatible APIs</string>
-    <string name="help_cloud_ai_bonus">🎁 DeepSeek gives 5 CNY free credits (~100,000 translations)</string>
+    <string name="help_cloud_ai_bonus">💰 Money-saving tip: SiliconFlow gives free credits on signup,
+    Alibaba Bailian offers free tokens for new users,
+    DeepSeek requires topping up (min 1 CNY)</string>
     <string name="help_cloud_ai_default">Default config:
 • API: DeepSeek (api.deepseek.com)
 • Model: deepseek-chat
 • Only need an API Key to use</string>
     <string name="help_cloud_ai_default_title">Default Config (DeepSeek)</string>
-    <string name="help_cloud_ai_get_key_title">How to Get DeepSeek API Key</string>
+    <string name="help_cloud_ai_get_key_title">How to Get an API Key</string>
     <string name="help_cloud_ai_intro">Cloud translation uses online API for fast, high-quality results.</string>
-    <string name="help_cloud_ai_steps">How to get DeepSeek API Key:
-1. Visit https://platform.deepseek.com
-2. Register with phone or email
-3. After login, click avatar → "API Keys"
-4. Click "Create API Key" and copy it
-5. Paste into the "API Key" field below</string>
+    <string name="help_cloud_ai_steps">How to get an API Key:
+1. Recommended: SiliconFlow (free credits for China users)
+   https://siliconflow.cn → signup gives 20M tokens
+2. Or Alibaba Bailian (Tongyi Qianwen free tier)
+   https://bailian.console.aliyun.com
+3. DeepSeek no longer offers signup bonuses
+   To use DeepSeek: https://platform.deepseek.com</string>
     <string name="help_local_ai_download">Download models (.gguf format):</string>
     <string name="help_local_ai_intro">Local AI translation works offline, all data stays on your device.</string>
     <string name="help_local_ai_light">Lightweight: Qwen2.5-0.5B-Instruct-Q4_K_M.gguf (~354MB)
@@ -297,6 +301,8 @@ Just change the Base URL and API Key</string>
     <string name="tts_custom_tts_title">OpenAI-compatible TTS</string>
     <string name="tts_custom_voice">Custom Voice ID</string>
     <string name="tts_custom_voice_hint">✏️ Enter custom voice...</string>
+    <string name="tts_flashcard_engine">Flashcard TTS Engine</string>
+    <string name="tts_flashcard_engine_desc">Set a separate TTS engine for vocabulary &amp; flashcard pronunciation</string>
     <string name="tts_engine">Voice Engine</string>
     <string name="tts_hint_api_key">dummy</string>
     <string name="tts_hint_base_url">http://192.168.199.101:18083</string>

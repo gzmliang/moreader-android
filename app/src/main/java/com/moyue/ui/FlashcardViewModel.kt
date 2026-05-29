@@ -2,6 +2,7 @@ package com.moyue.app.ui
 
 import android.content.Context
 import android.media.MediaPlayer
+import android.speech.tts.TextToSpeech
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -630,10 +631,21 @@ class FlashcardViewModel(
             withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     val prefs = context.getSharedPreferences("moreader_config", Context.MODE_PRIVATE)
-                    val providerType = prefs.getString("tts_provider", "edge_tts") ?: "edge_tts"
+                    // Use flashcard-specific TTS provider, fall back to global TTS provider
+                    val providerType = prefs.getString("flashcard_tts_provider", prefs.getString("tts_provider", "edge_tts")) ?: "edge_tts"
                     val ttsType = try { TTSProviderType.valueOf(providerType) } catch (e: IllegalArgumentException) { TTSProviderType.EDGE_TTS }
 
                     log.append("Provider from prefs: '$providerType' -> resolved: $ttsType\n")
+
+                    // System TTS uses direct speech (no audio bytes)
+                    if (ttsType == TTSProviderType.SYSTEM) {
+                        log.append("Using System TTS for word pronunciation\n")
+                        lastTtsLog = log.toString()
+                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            speakWithSystemTTS(context, word, log)
+                        }
+                        return@withContext
+                    }
 
                     val audioBytes = when (ttsType) {
                         TTSProviderType.EDGE_TTS -> {
@@ -668,14 +680,7 @@ class FlashcardViewModel(
                             log.append("AI TTS: endpoint=$endpoint model=$model voice=$voice\n")
                             fetchAITTSWorking(endpoint, apiKey, model, voice, word, log)
                         }
-                        TTSProviderType.SYSTEM -> {
-                            log.append("SYSTEM TTS not supported for flashcard, falling back to Edge TTS\n")
-                            // Also apply language auto-detection for the fallback
-                            var fallbackVoice = "zh-CN-XiaoxiaoNeural"
-                            val isChinese = word.any { it in '\u4e00'..'\u9fff' }
-                            if (!isChinese) fallbackVoice = "en-US-GuyNeural"
-                            fetchEdgeTTSWorking("http://powerplus.blogsyte.com:5001", fallbackVoice, "", word, log)
-                        }
+                        TTSProviderType.SYSTEM -> null  // handled before when
                     }
 
                     log.append("Audio bytes: ${audioBytes?.size ?: 0}\n")
@@ -719,6 +724,47 @@ class FlashcardViewModel(
                     lastTtsLog = log.toString()
                 }
             }
+        }
+    }
+
+    /** Speak a word using Android's built-in TextToSpeech engine */
+    private fun speakWithSystemTTS(context: Context, word: String, log: StringBuilder) {
+        try {
+            var tts: TextToSpeech? = null
+            tts = TextToSpeech(context) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    val engine = tts ?: run { log.append("System TTS init: engine null\n"); lastTtsLog = log.toString(); return@TextToSpeech }
+                    val isChinese = word.any { it in '\u4e00'..'\u9fff' }
+                    engine.language = if (isChinese) java.util.Locale.CHINESE else java.util.Locale.US
+                    engine.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                        override fun onStart(id: String?) {}
+                        override fun onDone(id: String?) {
+                            log.append("System TTS playback completed\n")
+                            lastTtsLog = log.toString()
+                            engine.shutdown()
+                        }
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(id: String?) {
+                            log.append("System TTS error\n")
+                            lastTtsLog = log.toString()
+                            engine.shutdown()
+                        }
+                        override fun onError(id: String?, code: Int) {
+                            log.append("System TTS error: code=$code\n")
+                            lastTtsLog = log.toString()
+                            engine.shutdown()
+                        }
+                    })
+                    engine.speak(word, TextToSpeech.QUEUE_FLUSH, null, "flashcard_${System.currentTimeMillis()}")
+                    log.append("System TTS started for word: $word\n")
+                } else {
+                    log.append("System TTS init failed: status=$status\n")
+                    lastTtsLog = log.toString()
+                }
+            }
+        } catch (e: Exception) {
+            log.append("System TTS exception: ${e.javaClass.name}: ${e.message}\n")
+            lastTtsLog = log.toString()
         }
     }
 

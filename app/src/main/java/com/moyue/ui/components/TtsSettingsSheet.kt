@@ -215,6 +215,53 @@ fun TtsSettingsSheet(
                 }
             }
 
+            // === Flashcard TTS Engine (独立设置) ===
+            Spacer(Modifier.height(12.dp))
+            val context = LocalContext.current
+            val flashcardPrefs = remember { context.getSharedPreferences("moreader_config", android.content.Context.MODE_PRIVATE) }
+            var flashcardProviderStr by remember { mutableStateOf(flashcardPrefs.getString("flashcard_tts_provider", "system") ?: "system") }
+            val flashcardProvider = try { TTSProviderType.valueOf(flashcardProviderStr) } catch (e: IllegalArgumentException) { TTSProviderType.SYSTEM }
+
+            Text(
+                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_flashcard_engine),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_flashcard_engine_desc),
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            )
+            Spacer(Modifier.height(4.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                TTSProviderType.entries.forEach { provider ->
+                    FilterChip(
+                        selected = flashcardProvider == provider,
+                        onClick = {
+                            flashcardPrefs.edit().putString("flashcard_tts_provider", provider.name).apply()
+                            flashcardProviderStr = provider.name
+                        },
+                        label = {
+                            Text(
+                                androidx.compose.ui.res.stringResource(
+                                    when (provider) {
+                                        TTSProviderType.EDGE_TTS -> com.moyue.app.R.string.tts_provider_edge
+                                        TTSProviderType.AI_VOICE -> com.moyue.app.R.string.tts_provider_ai
+                                        TTSProviderType.CUSTOM_TTS -> com.moyue.app.R.string.tts_provider_custom
+                                        TTSProviderType.SYSTEM -> com.moyue.app.R.string.tts_provider_system
+                                    }
+                                ),
+                                fontSize = 12.sp,
+                            )
+                        },
+                    )
+                }
+            }
+
             // Speed — compact inline row
             Row(
                 verticalAlignment = Alignment.CenterVertically,

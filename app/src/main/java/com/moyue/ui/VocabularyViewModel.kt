@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
 import android.net.Uri
+import android.speech.tts.TextToSpeech
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -29,6 +31,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
 
 class VocabularyViewModel(
     private val repository: BookRepository
@@ -51,7 +54,7 @@ class VocabularyViewModel(
         }
     }
 
-    /** Speak a word using the app's configured TTS provider (Edge TTS / Custom TTS) */
+    /** Speak a word using the app's configured flashcard TTS provider (System / Edge / Custom / AI) */
     fun speakWord(vocabId: Long, word: String, context: Context) {
         // Stop any current playback
         audioPlayer?.apply { if (isPlaying) stop(); release() }
@@ -62,8 +65,17 @@ class VocabularyViewModel(
             withContext(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     val prefs = context.getSharedPreferences("moreader_config", Context.MODE_PRIVATE)
-                    val providerType = prefs.getString("tts_provider", "edge_tts") ?: "edge_tts"
+                    // Use flashcard-specific TTS provider, fall back to global TTS provider
+                    val providerType = prefs.getString("flashcard_tts_provider", prefs.getString("tts_provider", "edge_tts")) ?: "edge_tts"
                     val ttsType = try { TTSProviderType.valueOf(providerType) } catch (e: IllegalArgumentException) { TTSProviderType.EDGE_TTS }
+
+                    // System TTS uses direct speech (no audio bytes)
+                    if (ttsType == TTSProviderType.SYSTEM) {
+                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            speakWithSystemTTS(context, word)
+                        }
+                        return@withContext
+                    }
 
                     val audioBytes = when (ttsType) {
                         TTSProviderType.EDGE_TTS -> {
@@ -193,6 +205,42 @@ class VocabularyViewModel(
             val response = client.newCall(request).execute()
             if (response.isSuccessful) response.body?.bytes() else null
         } catch (e: Exception) { null }
+    }
+
+    /** Speak a word using Android's built-in TextToSpeech engine */
+    private fun speakWithSystemTTS(context: Context, word: String) {
+        try {
+            _isSpeakingWord.value = -1L  // Mark as speaking
+            var tts: TextToSpeech? = null
+            tts = TextToSpeech(context) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    val engine = tts ?: run { _isSpeakingWord.value = null; return@TextToSpeech }
+                    val isChinese = word.any { it in '\u4e00'..'\u9fff' }
+                    engine.language = if (isChinese) java.util.Locale.CHINESE else java.util.Locale.US
+                    engine.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                        override fun onStart(id: String?) {}
+                        override fun onDone(id: String?) {
+                            engine.shutdown()
+                            _isSpeakingWord.value = null
+                        }
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(id: String?) {
+                            engine.shutdown()
+                            _isSpeakingWord.value = null
+                        }
+                        override fun onError(id: String?, code: Int) {
+                            engine.shutdown()
+                            _isSpeakingWord.value = null
+                        }
+                    })
+                    engine.speak(word, TextToSpeech.QUEUE_FLUSH, null, "vocab_${System.currentTimeMillis()}")
+                } else {
+                    _isSpeakingWord.value = null
+                }
+            }
+        } catch (e: Exception) {
+            _isSpeakingWord.value = null
+        }
     }
 
     override fun onCleared() {

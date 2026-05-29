@@ -51,6 +51,8 @@
 
     <!-- TTS -->
     <string name="tts_settings">朗读设置</string>
+    <string name="tts_flashcard_engine">单词/闪卡发音引擎</string>
+    <string name="tts_flashcard_engine_desc">独立设置单词和闪卡发音引擎，不影响正文朗读</string>
     <string name="tts_engine">语音引擎</string>
     <string name="tts_speed">语速: %1$sx</string>
     <string name="tts_speed_label">语速</string>
@@ -452,9 +454,9 @@ AI Voice（云端 TTS）：
     <string name="help_local_ai_speed_title">速度参考</string>
     <string name="help_cloud_ai_intro">云端翻译使用在线 API，速度快质量高。</string>
     <string name="help_cloud_ai_default">默认配置：\n• API: DeepSeek (api.deepseek.com)\n• 模型: deepseek-chat\n• 只需填写 API Key 即可使用</string>
-    <string name="help_cloud_ai_steps">获取 DeepSeek API Key：\n1. 访问 https://platform.deepseek.com\n2. 用手机号或邮箱注册账号\n3. 登录后点击右上角头像 → 「API Keys」\n4. 点击「创建 API Key」，复制保存\n5. 粘贴到下方「API Key」输入框</string>
-    <string name="help_cloud_ai_bonus">🎁 注册即送 5 元额度，约可调用 10 万次翻译</string>
-    <string name="help_cloud_ai_alternative">也可以使用其他兼容 OpenAI 的 API：\n• 通义千问: dashscope.aliyuncs.com（百炼平台）\n• Moonshot: api.moonshot.cn\n• SiliconFlow: api.siliconflow.cn\n只需修改 Base URL 和 API Key 即可</string>
+    <string name="help_cloud_ai_steps">获取 API Key：\\n1. 推荐使用硅基流动 SiliconFlow（国内免费额度）\\n   https://siliconflow.cn → 注册送 2000 万 tokens\\n2. 或使用阿里百炼（通义千问免费额度）\\n   https://bailian.console.aliyun.com\\n3. DeepSeek 已取消注册赠送，需充值才能用\\n   如需使用 DeepSeek：https://platform.deepseek.com</string>
+    <string name="help_cloud_ai_bonus">💰 省钱提示：SiliconFlow 注册送免费额度，\\n    阿里百炼新用户送百万 tokens，\\n    DeepSeek 需自行充值（起充 1 元）</string>
+    <string name="help_cloud_ai_alternative">也可以用其他 OpenAI 兼容 API：\\n• 通义千问（百炼）: dashscope.aliyuncs.com\\n• SiliconFlow: api.siliconflow.cn\\n• Moonshot: api.moonshot.cn\\n• DeepSeek: api.deepseek.com\\n只需修改 Base URL 和 API Key</string>
 
     <!-- Local AI Help -->
     <string name="help_local_ai_intro">本地 AI 翻译无需联网即可查词翻译，数据完全在本地。</string>

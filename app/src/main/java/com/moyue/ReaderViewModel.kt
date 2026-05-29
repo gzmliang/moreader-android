@@ -191,7 +191,13 @@ class ReaderViewModel(
             text = text.replace(Regex("""\[\d+\]"""), "")
             text = text.replace(Regex("""[①②③④⑤⑥⑦⑧⑨⑩]"""), "")
             text = text.replace(Regex("""/\*+/\s*"""), "")
-            text.trim()
+            // 全角符号变体（部分 EPUB 使用全角斜线／星号）
+            text = text.replace(Regex("""／\＊+／\s*"""), "")
+            // 过滤纯符号段落：置空保留索引对齐，playOne() 自动跳过空段落
+            text = text.replace(Regex("""[*＊·•●▶▷◀◁◆◇○◎●◉○□■△▲☆★]+"""), "")
+            text = text.trim()
+            // 纯符号段落置空但保留位置（避免高亮索引错位）
+            if (text.isNotEmpty() && text.none { c -> (c in '\u4e00'..'\u9fff') || c.isLetter() }) "" else text
         }
         // 如果过滤后为空，返回整个 body 文本
         if (paragraphs.isEmpty() || paragraphs.all { it.isEmpty() }) { 
