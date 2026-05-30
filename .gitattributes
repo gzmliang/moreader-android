@@ -1,1 +1,2 @@
 assets/*.apk filter=lfs diff=lfs merge=lfs -text
+assets/moreader-v2.4.0.apk filter=lfs diff=lfs merge=lfs -text
