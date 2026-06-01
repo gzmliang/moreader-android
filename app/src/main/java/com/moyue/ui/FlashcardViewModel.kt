@@ -2,6 +2,8 @@ package com.moyue.app.ui
 
 import android.content.Context
 import android.media.MediaPlayer
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -12,6 +14,7 @@ import com.moyue.app.data.FlashcardDataStore.Companion.DEFAULT_PLAN
 import com.moyue.app.data.FlashcardDataStore.Companion.INTERVALS
 import com.moyue.app.data.models.TTSProviderType
 import com.moyue.app.data.models.Vocabulary
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +28,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 data class FlashcardUiState(
@@ -54,9 +58,49 @@ class FlashcardViewModel(
     val uiState: StateFlow<FlashcardUiState> = _uiState.asStateFlow()
 
     private var audioPlayer: MediaPlayer? = null
+    private var systemTts: TextToSpeech? = null
+    private var systemTtsReady = false
+    private var pendingSystemSpeak: String? = null
+    private var systemTtsInitLock = java.util.concurrent.locks.ReentrantLock()
 
     init {
         refreshAll()
+    }
+
+    private fun ensureSystemTts(context: Context): TextToSpeech? {
+        systemTtsInitLock.lock()
+        try {
+            if (systemTts == null) {
+                systemTts = TextToSpeech(context) { status ->
+                    systemTtsReady = (status == TextToSpeech.SUCCESS)
+                    if (systemTtsReady) {
+                        pendingSystemSpeak?.let { text ->
+                            pendingSystemSpeak = null
+                            speakWithSystemTts(text)
+                        }
+                    }
+                }
+            }
+            return systemTts
+        } finally {
+            systemTtsInitLock.unlock()
+        }
+    }
+
+    private fun speakWithSystemTts(text: String) {
+        if (!systemTtsReady) {
+            pendingSystemSpeak = text
+            return
+        }
+        // Auto-detect language: Chinese chars -> Chinese TTS, else English TTS
+        val hasChinese = text.any { it in '一'..'鿿' }
+        systemTts?.language = if (hasChinese) Locale.CHINESE else Locale.US
+        systemTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onDone(utteranceId: String?) {}
+            override fun onError(utteranceId: String?) {}
+            override fun onStart(utteranceId: String?) {}
+        })
+        systemTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "flashcard_tts")
     }
 
     fun refreshAll() {
@@ -237,7 +281,7 @@ class FlashcardViewModel(
     }
 
     private suspend fun callDictionaryAPI(config: DictionaryConfig, word: String, log: StringBuilder): DefinitionResult? {
-        val chinese = word.any { it in '\u4e00'..'\u9fff' }
+val chinese = word.any { it in '一'..'鿿' }
         val systemPrompt = if (chinese) {
             "你是专业的汉语词典助手，擅长《现代汉语词典》风格的释义。请务必为每个汉字标注标准拼音。"
         } else {
@@ -620,6 +664,9 @@ class FlashcardViewModel(
         audioPlayer?.apply { if (isPlaying) stop(); release() }
         audioPlayer = null
 
+        // Stop any pending system TTS
+        systemTts?.stop()
+
         val log = StringBuilder()
         log.append("=== Flashcard TTS Log ===\n")
         log.append("Word: $word\n")
@@ -627,20 +674,30 @@ class FlashcardViewModel(
         lastTtsLog = log.toString()
 
         viewModelScope.launch {
-            withContext(kotlinx.coroutines.Dispatchers.IO) {
+            withContext(Dispatchers.IO) {
                 try {
                     val prefs = context.getSharedPreferences("moreader_config", Context.MODE_PRIVATE)
-                    val providerType = prefs.getString("tts_provider", "edge_tts") ?: "edge_tts"
+                    // Use flashcard-specific TTS provider, defaults to edge_tts
+                    val providerType = prefs.getString("flashcard_tts_provider", "edge_tts") ?: "edge_tts"
                     val ttsType = try { TTSProviderType.valueOf(providerType) } catch (e: IllegalArgumentException) { TTSProviderType.EDGE_TTS }
 
-                    log.append("Provider from prefs: '$providerType' -> resolved: $ttsType\n")
+                    log.append("Flashcard TTS Provider: '$providerType' -> $ttsType\n")
 
                     val audioBytes = when (ttsType) {
+                        TTSProviderType.SYSTEM -> {
+                            log.append("Using SYSTEM TTS\n")
+                            withContext(Dispatchers.Main) {
+                                ensureSystemTts(context)
+                                speakWithSystemTts(word)
+                            }
+                            // Return null -> code below uses system TTS path
+                            null
+                        }
                         TTSProviderType.EDGE_TTS -> {
                             val endpoint = prefs.getString("edge_endpoint", "http://powerplus.blogsyte.com:5001") ?: "http://powerplus.blogsyte.com:5001"
                             var voice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural"
-                            // Auto-detect language: if Chinese text but English voice (or vice versa), fix it
-                            val isChinese = word.any { it in '\u4e00'..'\u9fff' }
+                            // Auto-detect language
+val isChinese = word.any { it in '一'..'鿿' }
                             if (isChinese && !voice.startsWith("zh-")) {
                                 log.append("Voice mismatch detected ($voice for Chinese text), auto-switching to zh-CN-XiaoxiaoNeural\n")
                                 voice = "zh-CN-XiaoxiaoNeural"
@@ -668,20 +725,19 @@ class FlashcardViewModel(
                             log.append("AI TTS: endpoint=$endpoint model=$model voice=$voice\n")
                             fetchAITTSWorking(endpoint, apiKey, model, voice, word, log)
                         }
-                        TTSProviderType.SYSTEM -> {
-                            log.append("SYSTEM TTS not supported for flashcard, falling back to Edge TTS\n")
-                            // Also apply language auto-detection for the fallback
-                            var fallbackVoice = "zh-CN-XiaoxiaoNeural"
-                            val isChinese = word.any { it in '\u4e00'..'\u9fff' }
-                            if (!isChinese) fallbackVoice = "en-US-GuyNeural"
-                            fetchEdgeTTSWorking("http://powerplus.blogsyte.com:5001", fallbackVoice, "", word, log)
-                        }
+                    }
+
+                    // SYSTEM TTS has already been spoken — skip audio bytes playback
+                    if (ttsType == TTSProviderType.SYSTEM) {
+                        log.append("System TTS pronunciation triggered\n")
+                        lastTtsLog = log.toString()
+                        return@withContext
                     }
 
                     log.append("Audio bytes: ${audioBytes?.size ?: 0}\n")
 
                     if (audioBytes != null && audioBytes.isNotEmpty()) {
-                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        withContext(Dispatchers.Main) {
                             try {
                                 val tempFile = File.createTempFile("flashcard_tts_", ".mp3", context.cacheDir)
                                 tempFile.writeBytes(audioBytes)
@@ -726,6 +782,9 @@ class FlashcardViewModel(
         super.onCleared()
         audioPlayer?.apply { if (isPlaying) stop(); release() }
         audioPlayer = null
+        systemTts?.stop()
+        systemTts?.shutdown()
+        systemTts = null
     }
 }
 

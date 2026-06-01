@@ -360,6 +360,8 @@ AI Voice（云端 TTS）：
     <string name="flashcard_no_definition">暂无释义</string>
     <string name="flashcard_no_definition_hint">请检查 AI 词典 API 配置</string>
     <string name="flashcard_tap_back_front">点击返回正面</string>
+    <string name="flashcard_tts_engine">发音引擎</string>
+    <string name="flashcard_tts_engine_label">闪卡发音</string>
 
     <!-- Fonts -->
     <string name="font_label_sans_serif">无衬线</string>

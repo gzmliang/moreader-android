@@ -182,9 +182,25 @@ class ReaderViewModel(
 
     private fun extractParagraphsFromHtml(html: String): List<String> {
         val doc = org.jsoup.Jsoup.parse(html)
-        // 注意：这里不能过滤，必须与 WebView 中的 querySelectorAll 结果一致
+        // 先移除不需要朗读的 HTML 标签（注音、注释、脚注标记等），保留汉字本身
+        doc.select("rt, rp, sup, sub, .note, .footnote, .annotation, .tcy").remove()
+        // 注意：此处可以做文本级过滤但保留段落索引对齐
         // WebView 中给所有 p,h1-h6 元素添加了点击监听，索引必须对应
-        val paragraphs = doc.select("p, h1, h2, h3, h4, h5, h6").map { it.text().trim() }
+        val paragraphs = doc.select("p, h1, h2, h3, h4, h5, h6").map { para ->
+            var text = para.text().trim()
+            // 清除脚注标记 [1] [2] ...
+            text = text.replace(Regex("""\[\d+]"""), "")
+            // 清除圈号 ①②③...
+            text = text.replace(Regex("""[①②③④⑤⑥⑦⑧⑨⑩]"""), "")
+            // 清理注释分隔符 /*/ ／＊／
+            text = text.replace(Regex("""/\*+/\s*"""), "")
+            text = text.replace(Regex("""／\＊+／\s*"""), "")
+            // 清除纯装饰符号段落
+            text = text.replace(Regex("""[*＊·•●▶▷◀◁◆◇○◎●◉○□■△▲☆★❀✿❁🌸🌺]+"""), "")
+            text = text.trim()
+            // 纯符号段落置空（保留索引不删行，playOne 自动跳过空段落）
+            if (text.isNotEmpty() && text.none { c -> (c in '\u4e00'..'\u9fff') || c.isLetter() }) "" else text
+        }
         // 如果过滤后为空，返回整个 body 文本
         if (paragraphs.isEmpty() || paragraphs.all { it.isEmpty() }) { 
             val t = doc.body()?.text()?.trim() ?: "" 

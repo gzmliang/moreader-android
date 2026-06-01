@@ -128,6 +128,8 @@ Tap the 🔊 button in vocabulary list to test pronunciation first</string>
     <string name="flashcard_tts_log_title">🔊 TTS Pronunciation Log</string>
     <string name="flashcard_tts_log_view">View TTS Log</string>
     <string name="follow_system">Follow System</string>
+    <string name="flashcard_tts_engine">Pronounce Engine</string>
+    <string name="flashcard_tts_engine_label">Flashcard TTS</string>
     <string name="font_decrease">A-</string>
     <string name="font_increase">A+</string>
     <string name="font_label_casual">Casual</string>
