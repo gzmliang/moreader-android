@@ -183,7 +183,7 @@ class ReaderViewModel(
     private fun extractParagraphsFromHtml(html: String): List<String> {
         val doc = org.jsoup.Jsoup.parse(html)
         // 先移除不需要朗读的 HTML 标签（注音、注释、脚注标记等），保留汉字本身
-        doc.select("rt, rp, sup, sub, .note, .footnote, .annotation, .tcy").remove()
+        doc.select("rt, rp, rtc, rb, sup, sub, .note, .footnote, .annotation, .tcy, .math-super, [class*=note], [class*=footnote]").remove()
         // 注意：此处可以做文本级过滤但保留段落索引对齐
         // WebView 中给所有 p,h1-h6 元素添加了点击监听，索引必须对应
         val paragraphs = doc.select("p, h1, h2, h3, h4, h5, h6").map { para ->
@@ -196,8 +196,16 @@ class ReaderViewModel(
             text = text.replace(Regex("""/\*+/\s*"""), "")
             text = text.replace(Regex("""／\＊+／\s*"""), "")
             // 清除纯装饰符号段落
-            text = text.replace(Regex("""[*＊·•●▶▷◀◁◆◇○◎●◉○□■△▲☆★❀✿❁🌸🌺]+"""), "")
+            text = text.replace(Regex("""[*＊·•●▶▷◀◁◆◇○◎●◉○□■△▲☆★❀✿❁🌸🌺]"""), "")
+            // 清除其他标记符号 ** ## __ ~~ ``
+            text = text.replace(Regex("""[*]{2,}"""), "")
+            text = text.replace(Regex("""[#]{2,}"""), "")
+            text = text.replace(Regex("""[_]{2,}"""), "")
+            text = text.replace(Regex("""[~]{2,}"""), "")
+            text = text.replace(Regex("""`{2,}"""), "")
             text = text.trim()
+            // 删除汉字间的空格（Edge TTS 把空格当词边界）
+            text = text.replace(Regex("""([\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff])\s+(?=[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff])"""), "$1")
             // 纯符号段落置空（保留索引不删行，playOne 自动跳过空段落）
             if (text.isNotEmpty() && text.none { c -> (c in '\u4e00'..'\u9fff') || c.isLetter() }) "" else text
         }
