@@ -416,4 +416,9 @@ Just change the Base URL and API Key</string>
     <string name="recording_browse">📂 Browse Recordings</string>
     <string name="recording_share">Share File</string>
 
+    <!-- System TTS -->
+    <string name="tts_system_engine">Engine</string>
+    <string name="tts_system_default_voice">Engine Default</string>
+    <string name="tts_system_voices_loading">Loading voices…</string>
+
 </resources>

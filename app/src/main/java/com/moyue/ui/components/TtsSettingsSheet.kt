@@ -91,6 +91,8 @@ fun TtsSettingsSheet(
     customApiKey: String = "dummy",
     customModel: String = "moss-tts-nano",
     customVoice: String = "Lingyu",
+    // System TTS
+    systemTtsVoice: String = "",
     llmConfig: LLMConfig,
     // Local AI
     translateEngine: com.moyue.app.data.models.TranslateEngine = com.moyue.app.data.models.TranslateEngine.CLOUD,
@@ -102,6 +104,7 @@ fun TtsSettingsSheet(
     onEdgeConfigChange: (endpoint: String, voice: String) -> Unit,
     onAIVoiceConfigChange: (endpoint: String, apiKey: String, model: String, voice: String) -> Unit,
     onCustomTTSConfigChange: (endpoint: String, apiKey: String, model: String, voice: String) -> Unit,
+    onSystemVoiceChange: (String) -> Unit = {},
     onLLMConfigChange: (LLMConfig) -> Unit,
     onTranslateEngineChange: (com.moyue.app.data.models.TranslateEngine) -> Unit = {},
     onLocalAiModelSelect: (android.net.Uri) -> Unit = {},
@@ -428,6 +431,75 @@ fun TtsSettingsSheet(
 
             if (currentProvider == TTSProviderType.SYSTEM) {
                 val context = LocalContext.current
+                var showSysVoiceMenu by remember { mutableStateOf(false) }
+                // voice name → display name pairs from the engine companion
+                val sysVoices = remember { mutableStateListOf<Pair<String, String>>() }
+                LaunchedEffect(Unit) {
+                    sysVoices.clear()
+                    val engineVoices = com.moyue.app.tts.SystemTTSProvider.getCurrentVoices()
+                    sysVoices.addAll(engineVoices.map { it.name to it.displayName })
+                }
+                val sysEngine = com.moyue.app.tts.SystemTTSProvider.getCurrentEngineName()
+
+                Text(
+                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_system_engine) + ": ${sysEngine.ifEmpty { "—" }}",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
+                Spacer(Modifier.height(4.dp))
+
+                // Voice picker dropdown (same style as Edge TTS)
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    val displayText = sysVoices.firstOrNull { it.first == systemTtsVoice }?.second
+                        ?: androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_system_default_voice)
+                    OutlinedTextField(
+                        value = displayText,
+                        onValueChange = {}, readOnly = true,
+                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_voice), fontSize = 11.sp) },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(fontSize = 12.sp),
+                        trailingIcon = {
+                            IconButton(onClick = { showSysVoiceMenu = true }) {
+                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                            }
+                        },
+                    )
+                    DropdownMenu(
+                        expanded = showSysVoiceMenu,
+                        onDismissRequest = { showSysVoiceMenu = false },
+                        modifier = Modifier.heightIn(max = 300.dp),
+                    ) {
+                        if (sysVoices.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_system_voices_loading), fontSize = 12.sp) },
+                                onClick = { showSysVoiceMenu = false },
+                                enabled = false,
+                            )
+                        } else {
+                            // Group by locale (extract from display name parenthetical)
+                            val grouped = sysVoices.groupBy { (_, display) ->
+                                val idx = display.lastIndexOf('(')
+                                if (idx > 0) display.substring(idx) else ""
+                            }
+                            grouped.forEach { (locale, voices) ->
+                                DropdownMenuItem(
+                                    text = { Text(locale.ifEmpty { "other" }, fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                                    onClick = {},
+                                    enabled = false,
+                                )
+                                voices.forEach { (name, display) ->
+                                    DropdownMenuItem(
+                                        text = { Text((if (name == systemTtsVoice) "✓ " else "    ") + display, fontSize = 12.sp) },
+                                        onClick = { onSystemVoiceChange(name); showSysVoiceMenu = false },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(4.dp))
+                // Link to system TTS settings
                 OutlinedCard(
                     onClick = {
                         try {

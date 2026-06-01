@@ -56,6 +56,7 @@ data class ReaderUiState(
     val isTtsPlaying: Boolean = false,
     val isTtsPaused: Boolean = false,
     val ttsSpeed: Float = 1.0f,
+    val systemTtsVoice: String = "",
     val ttsParagraphs: List<String> = emptyList(),
     val ttsCurrentIdx: Int = -1,       // 当前高亮索引（考虑了偏移）
     val ttsPlayIdx: Int = -1,          // 当前实际朗读的段落索引（用于恢复）
@@ -155,6 +156,7 @@ class ReaderViewModel(
                 model = prefs.getString("llm_model", "") ?: "",
             ),
             ttsSpeed = prefs.getFloat("tts_speed", 1.0f),
+            systemTtsVoice = prefs.getString("system_tts_voice", "") ?: "",
             ttsHighlightOffset = prefs.getInt("tts_highlight_offset", 0),
             translateEngine = TranslateEngine.valueOf(prefs.getString("translate_engine", "CLOUD") ?: "CLOUD"),
             localAiModelName = localAiEngine.getModelName(application),
@@ -652,7 +654,17 @@ class ReaderViewModel(
             TTSProviderType.SYSTEM -> {
                 // System TTS needs Activity context on some ROMs (e.g. ColorOS)
                 val ctx = activityContext ?: getApplication()
-                SystemTTSProvider(ctx).also { currentTTSProvider = it }
+                SystemTTSProvider(ctx).also { provider ->
+                    currentTTSProvider = provider
+                    // Apply saved voice preference after creation
+                    val savedVoice = s.systemTtsVoice
+                    if (savedVoice.isNotEmpty()) {
+                        // Defer setVoice slightly to let ensureInitialized() finish
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            if (!provider.isSpeaking) provider.setVoice(savedVoice)
+                        }, 100)
+                    }
+                }
             }
             TTSProviderType.EDGE_TTS -> { EdgeTTSProvider(s.edgeTtsEndpoint, s.edgeTtsVoice).also { currentTTSProvider = it } }
             TTSProviderType.AI_VOICE -> { AIVoiceTTSProvider(s.aiVoiceEndpoint, s.aiVoiceApiKey, s.aiVoiceModel, s.aiVoiceId).also { currentTTSProvider = it } }
@@ -881,6 +893,14 @@ class ReaderViewModel(
         if (book != null) {
             viewModelScope.launch { repository.updateBookTtsConfig(book.id, _uiState.value.ttsProvider.name, _uiState.value.edgeTtsVoice, s.coerceIn(0.5f, 2.0f)) }
         }
+    }
+    fun setSystemTTSVoice(voiceName: String) {
+        _uiState.update { it.copy(systemTtsVoice = voiceName) }
+        prefs.edit().putString("system_tts_voice", voiceName).apply()
+        // Recreate TTS provider to apply voice
+        currentTTSProvider?.destroy()
+        currentTTSProvider = null
+        killPlayChain()
     }
     fun increaseHighlightOffset() { _uiState.update { it.copy(ttsHighlightOffset = it.ttsHighlightOffset + 1) }; log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_offset_inc, _uiState.value.ttsHighlightOffset)); prefs.edit().putInt("tts_highlight_offset", _uiState.value.ttsHighlightOffset).apply() }
     fun decreaseHighlightOffset() { _uiState.update { it.copy(ttsHighlightOffset = it.ttsHighlightOffset - 1) }; log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_offset_dec, _uiState.value.ttsHighlightOffset)); prefs.edit().putInt("tts_highlight_offset", _uiState.value.ttsHighlightOffset).apply() }
