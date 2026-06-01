@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import android.util.Log
 import com.moyue.app.data.models.TTSProviderType
 import java.text.SimpleDateFormat
@@ -22,6 +23,12 @@ class SystemTTSProvider(context: Context) : TTSProvider {
         private var globalIsReady = false
         private val initLock = Object()
 
+        // Track which engine was used to create globalTts, for engine change detection
+        @Volatile
+        private var currentEngine: String? = null
+        @Volatile
+        private var currentVoiceName: String? = null
+
         // Shared across ALL instances — critical because setupTts() binds
         // UtteranceProgressListener to this map only ONCE (first init).
         // Instance-level maps would become stale after destroy/recreate.
@@ -36,6 +43,22 @@ class SystemTTSProvider(context: Context) : TTSProvider {
             debugLog.append("[$ts] $msg\n")
             Log.i(TAG, msg)
         }
+
+        /** Get voice display info from the current engine (for UI) */
+        data class VoiceInfo(val name: String, val displayName: String)
+        fun getCurrentVoices(): List<VoiceInfo> {
+            val tts = globalTts ?: return emptyList()
+            return try {
+                tts.voices?.filter { !it.name.isNullOrEmpty() }?.filter { v ->
+                    // Only show voices that make sense: Chinese + English voices
+                    val lang = v.locale?.language ?: ""
+                    lang == "zh" || lang == "cmn" || lang == "eng" || lang == "en"
+                }?.map { v ->
+                    VoiceInfo(v.name, "${v.name.split("#").lastOrNull() ?: v.name} (${v.locale})")
+                } ?: emptyList()
+            } catch (e: Exception) { emptyList() }
+        }
+        fun getCurrentEngineName(): String = currentEngine ?: ""
     }
 
     private val appContext = context.applicationContext
@@ -50,39 +73,102 @@ class SystemTTSProvider(context: Context) : TTSProvider {
         if (context is android.app.Activity) activityContext = context
     }
 
+    /** Read the current system default TTS engine from settings */
+    private fun readCurrentEngine(): String? {
+        return try {
+            android.provider.Settings.Secure.getString(appContext.contentResolver, "tts_default_synth")
+        } catch (e: Exception) { null }
+    }
+
+    /** Get all voices available from the current engine */
+    fun getAvailableVoices(): List<Voice> {
+        return try {
+            globalTts?.voices?.toList()?.filter { !it.name.isNullOrEmpty() } ?: emptyList()
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /** Set a specific voice by its name. Returns true if successful. */
+    fun setVoice(voiceName: String): Boolean {
+        val tts = globalTts ?: return false
+        return try {
+            val voices = tts.voices
+            val match = voices?.find { it.name == voiceName }
+            if (match != null) {
+                val result = tts.setVoice(match)
+                if (result == TextToSpeech.SUCCESS) {
+                    currentVoiceName = voiceName
+                    dlog("setVoice ✅ $voiceName")
+                    true
+                } else {
+                    dlog("setVoice ❌ $voiceName → $result")
+                    false
+                }
+            } else {
+                dlog("setVoice ❌ \"$voiceName\" not found among ${voices?.size ?: 0} voices")
+                false
+            }
+        } catch (e: Exception) {
+            dlog("setVoice ❌ exception: ${e.message}")
+            false
+        }
+    }
+
     private fun ensureInitialized() {
-        if (globalIsReady) return
-        if (globalTts != null) return
+        val systemEngine = readCurrentEngine()
+
+        // If engine already exists AND engine hasn't changed, just re-bind listener
+        if (globalTts != null && currentEngine == systemEngine) {
+            setupTts(globalTts!!)
+            globalIsReady = true
+            return
+        }
+
+        // Engine changed or first time — shutdown old and recreate
+        if (globalTts != null) {
+            dlog("引擎变更 $currentEngine → $systemEngine, 重建中...")
+            fullDestroyInternal()
+        }
 
         synchronized(initLock) {
             if (globalIsReady || globalTts != null) return
 
             dlog("ensureInitialized()")
-            val defaultEngine = try {
-                android.provider.Settings.Secure.getString(appContext.contentResolver, "tts_default_synth")
-            } catch (e: Exception) { null }
+            dlog("系统默认引擎: $systemEngine")
 
             val ctx = activityContext ?: appContext
-            val targetEngine = if (!defaultEngine.isNullOrEmpty()) defaultEngine else "com.google.android.tts"
-            dlog("引擎: $targetEngine")
+            val targetEngine = if (!systemEngine.isNullOrEmpty()) systemEngine else "com.google.android.tts"
+            dlog("目标引擎: $targetEngine")
 
             try {
                 globalTts = TextToSpeech(ctx, { status ->
                     dlog("onInit: status=$status")
                     if (status == TextToSpeech.SUCCESS) {
                         globalIsReady = true
-                        // Use the companion field directly — this callback
-                        // only fires for the engine we just created.
+                        currentEngine = systemEngine
                         val tts = globalTts
                         dlog("✅ TTS 就绪: ${tts?.defaultEngine}")
+                        dlog("可用语音数: ${tts?.voices?.size ?: 0}")
+                        // Log first few Chinese voices for debugging
+                        tts?.voices?.filter { v ->
+                            v.locale?.language == "zh" || v.locale?.language == "cmn"
+                        }?.take(8)?.forEach { v ->
+                            dlog("  语音: ${v.name} (${v.locale})")
+                        }
                         if (tts != null) setupTts(tts)
+                        // Re-apply voice if we have one stored
+                        val savedVoice = currentVoiceName
+                        if (savedVoice != null) {
+                            val voices = tts?.voices
+                            val match = voices?.find { it.name == savedVoice }
+                            if (match != null) tts?.setVoice(match)
+                        }
                     } else {
-                        dlog("❌ 失败: $status")
+                        dlog("❌ TTS 初始化失败: $status")
                     }
                 }, targetEngine)
-                dlog("构造完成")
+                dlog("TTS 构造完成")
             } catch (e: Exception) {
-                dlog("❌ 异常: ${e.message}")
+                dlog("❌ TTS 构造异常: ${e.message}")
             }
         }
     }
@@ -140,7 +226,7 @@ class SystemTTSProvider(context: Context) : TTSProvider {
         ensureInitialized()
 
         if (!globalIsReady) {
-            if (retryCount >= 40) { // 40 × 500ms = 20s timeout
+            if (retryCount >= 60) { // 60 × 500ms = 30s timeout (generous for engine recreation)
                 dlog("speak: 初始化超时")
                 Handler(Looper.getMainLooper()).post { listener.onError("TTS初始化超时") }
                 return
@@ -152,7 +238,11 @@ class SystemTTSProvider(context: Context) : TTSProvider {
             return
         }
 
+        // IMPORTANT: setLanguage before setSpeechRate!
+        // Some engines reset speech rate when language changes,
+        // so we set language FIRST, then override the rate.
         setLanguageForText(text)
+        dlog("speak: rate=$rate")
         globalTts?.setSpeechRate(rate)
 
         val id = "u_${++counter}"
@@ -175,21 +265,28 @@ class SystemTTSProvider(context: Context) : TTSProvider {
     }
 
     override fun destroy() {
-        // 只停止当前朗读，不 shutdown 引擎。
-        // Android TTS Service Binding 释放是异步的，
-        // shutdown 后立即创建新实例会导致 bind 冲突，onInit 永远不回调。
-        // 引擎作为单例保持存活，下次 speak 时直接复用。
+        // Only stop, don't shutdown engine.
+        // Android TTS Service Binding release is async;
+        // shutdown + immediate recreate causes bind conflict, onInit never fires.
+        // Engine lives as singleton, next speak() reuses it.
         dlog("destroy() — 仅停止，保留引擎")
         globalTts?.stop()
         utteranceListeners.clear()
     }
 
-    fun fullDestroy() {
-        dlog("fullDestroy()")
+    private fun fullDestroyInternal() {
+        dlog("fullDestroyInternal()")
         globalTts?.stop()
         globalTts?.shutdown()
         globalTts = null
         globalIsReady = false
         utteranceListeners.clear()
+    }
+
+    fun fullDestroy() {
+        dlog("fullDestroy()")
+        fullDestroyInternal()
+        currentEngine = null
+        currentVoiceName = null
     }
 }

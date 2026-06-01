@@ -530,4 +530,9 @@ AI Voice（云端 TTS）：
     <string name="recording_browse">📂 浏览录音</string>
     <string name="recording_share">分享文件</string>
 
+    <!-- System TTS -->
+    <string name="tts_system_engine">引擎</string>
+    <string name="tts_system_default_voice">引擎默认</string>
+    <string name="tts_system_voices_loading">正在加载语音列表…</string>
+
 </resources>
