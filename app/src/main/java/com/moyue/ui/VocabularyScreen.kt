@@ -90,15 +90,14 @@ fun VocabularyScreen(
                         onClick = { viewModel.switchPlan(plan) },
                         modifier = Modifier.height(28.dp),
                         label = {
-                            Box(modifier = Modifier.height(IntrinsicSize.Min)) {
-                                Text(
-                                    if (plan == "默认") stringResource(R.string.flashcard_plan_default) else plan,
-                                    fontSize = 11.sp,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
+                            Text(
+                                if (plan == "默认") stringResource(R.string.flashcard_plan_default) else plan,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 120.dp),
+                            )
                         },
                         trailingIcon = if (isSelected && plan != "默认") {
                             {
