@@ -20,6 +20,9 @@ interface VocabularyDao {
     @Query("SELECT DISTINCT plan FROM vocabulary ORDER BY plan")
     fun getPlanNames(): Flow<List<String>>
 
+    @Query("SELECT DISTINCT plan FROM vocabulary ORDER BY plan")
+    suspend fun getPlanNamesOnce(): List<String>
+
     @Query("UPDATE vocabulary SET plan = :newPlan WHERE plan = :oldPlan")
     suspend fun renamePlan(oldPlan: String, newPlan: String)
 

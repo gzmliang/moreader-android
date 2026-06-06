@@ -58,6 +58,7 @@ class VocabularyViewModel(
             prefs = context.getSharedPreferences("moreader_vocab", Context.MODE_PRIVATE)
             val saved = prefs.getStringSet(prefsKey, setOf(DEFAULT_PLAN)) ?: setOf(DEFAULT_PLAN)
             _createdPlans.value = saved
+            refreshPlanNames()
         }
     }
 
@@ -67,12 +68,20 @@ class VocabularyViewModel(
     // Plans user has created (persisted), separate from DB query
     private val _createdPlans = MutableStateFlow(setOf(DEFAULT_PLAN))
 
-    val planNames: StateFlow<List<String>> = combine(
-        repository.getPlanNames(),
-        _createdPlans
-    ) { dbPlans, created ->
-        (dbPlans.toSet() + created).sorted()
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf(DEFAULT_PLAN))
+    // planNames — manually managed to avoid reliance on Room Flow emissions.
+    // combine(repository.getPlanNames(), _createdPlans) doesn't work because
+    // Room Flow only emits when the DB table changes, but createPlan only writes
+    // to SharedPreferences (no DB insert until a word is added to the new plan).
+    private val _planNames = MutableStateFlow(listOf(DEFAULT_PLAN))
+    val planNames: StateFlow<List<String>> = _planNames.asStateFlow()
+
+    /** Recompute planNames from shared prefs plans + DB plans + current in-memory plans */
+    private fun refreshPlanNames() {
+        viewModelScope.launch {
+            val dbPlans = repository.getPlanNamesOnce()
+            _planNames.value = (dbPlans.toSet() + _createdPlans.value).sorted()
+        }
+    }
 
     val vocabulary: StateFlow<List<Vocabulary>> = _currentPlan.flatMapLatest { plan ->
         repository.getVocabularyByPlan(plan)
@@ -88,6 +97,7 @@ class VocabularyViewModel(
         _createdPlans.value = newSet
         prefs.edit().putStringSet(prefsKey, newSet).apply()
         _currentPlan.value = trimmed
+        refreshPlanNames()
     }
 
     fun deletePlan(context: Context, name: String) {
@@ -99,6 +109,7 @@ class VocabularyViewModel(
             _createdPlans.value = newSet
             prefs.edit().putStringSet(prefsKey, newSet).apply()
             if (_currentPlan.value == name) _currentPlan.value = DEFAULT_PLAN
+            refreshPlanNames()
         }
     }
 
