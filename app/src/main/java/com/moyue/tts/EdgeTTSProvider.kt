@@ -23,19 +23,17 @@ class EdgeTTSProvider(
 
     private var currentCall: Call? = null
     private var audioPlayer: android.media.MediaPlayer? = null
-    // Last fetched word boundaries (populated by fetchAudio for preload caching)
-    @Volatile private var lastBoundaries: List<WordBoundary> = emptyList()
 
     override val type: TTSProviderType get() = TTSProviderType.EDGE_TTS
     override val isSpeaking: Boolean get() = audioPlayer?.isPlaying ?: false
 
     /**
-     * Fetch audio bytes + word boundaries for a text segment (preloading).
-     * After calling, use getLastBoundaries() to retrieve word timing data.
+     * Fetch audio bytes for a text segment (preloading — fast /tts endpoint).
+     * After calling, use getLastBoundaries() which will be empty (populated
+     * separately via fetchBoundariesOnly during post-preload pass).
      */
     suspend fun fetchAudio(text: String, rate: Float = 1.0f): ByteArray? {
         return try {
-            lastBoundaries = emptyList()
             val ratePercent = if (rate >= 1.0f) "+${((rate - 1.0f) * 100).toInt()}%" else "-${((1.0f - rate) * 100).toInt()}%"
             val json = JSONObject().apply {
                 put("text", text)
@@ -45,25 +43,47 @@ class EdgeTTSProvider(
             }
             val body = json.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
-                .url("${endpoint.removeSuffix("/")}/tts_with_boundaries")
+                .url("${endpoint.removeSuffix("/")}/tts")
                 .post(body)
                 .apply { if (apiKey.isNotEmpty()) addHeader("X-API-Key", apiKey) }
                 .build()
 
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) null else {
-                // Parse word boundaries from response header
-                val wb = parseWordBoundaries(response.header("X-Word-Boundaries") ?: "")
-                if (wb.isNotEmpty()) lastBoundaries = wb
-                response.body?.bytes()
-            }
+            if (!response.isSuccessful) null else response.body?.bytes()
         } catch (e: Exception) {
             null
         }
     }
 
-    /** Get word boundaries from the last fetchAudio() call (for preload caching). */
-    fun getLastBoundaries(): List<WordBoundary> = lastBoundaries
+    /** Fetch word boundaries only (lightweight JSON, no audio).
+     *  Used for post-preload pass to populate boundariesCache without re-downloading audio. */
+    suspend fun fetchBoundariesOnly(text: String, rate: Float = 1.0f): List<WordBoundary> {
+        return try {
+            val ratePercent = if (rate >= 1.0f) "+${((rate - 1.0f) * 100).toInt()}%" else "-${((1.0f - rate) * 100).toInt()}%"
+            val json = JSONObject().apply {
+                put("text", text)
+                put("voice", voice)
+                put("rate", ratePercent)
+                put("pitch", pitch)
+            }
+            val body = json.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder()
+                .url("${endpoint.removeSuffix("/")}/tts_boundaries_only")
+                .post(body)
+                .apply { if (apiKey.isNotEmpty()) addHeader("X-API-Key", apiKey) }
+                .build()
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) emptyList()
+            else {
+                val jsonObj = JSONObject(response.body?.string() ?: "{}")
+                val arr = jsonObj.optJSONArray("words") ?: return emptyList()
+                parseWordBoundaries(arr.toString())
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 
     /**
      * Download audio + word boundaries and play via MediaPlayer.

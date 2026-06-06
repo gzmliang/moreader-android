@@ -731,16 +731,25 @@ class ReaderViewModel(
                 if (audioCache.containsKey(i)) continue
                 val text = paragraphs[i]; if (text.length < 2) { audioCache[i] = ByteArray(0); continue }
                 val bytes = when (val p = getProvider()) {
-                    is EdgeTTSProvider -> {
-                        val b = p.fetchAudio(text, ttsSpeed)
-                        if (b != null) boundariesCache[i] = p.getLastBoundaries()
-                        b
-                    }
+                    is EdgeTTSProvider -> p.fetchAudio(text, ttsSpeed)
                     is AIVoiceTTSProvider -> p.fetchAudio(text, ttsSpeed)
                     is CustomTTSProvider -> p.fetchAudio(text, ttsSpeed)
                     else -> null
                 }
                 if (bytes != null && bytes.isNotEmpty()) { audioCache[i] = bytes }
+            }
+
+            // Post-preload pass: fetch word boundaries for Edge TTS asynchronously.
+            // This runs AFTER all audio is cached, so the play chain isn't blocked.
+            if (getProvider() is EdgeTTSProvider) {
+                val edgeP = getProvider() as EdgeTTSProvider
+                for (i in startIdx until actualEnd) {
+                    if (!playChainActive) break
+                    if (boundariesCache.containsKey(i)) continue
+                    val text = paragraphs[i]; if (text.length < 2) continue
+                    val wb = edgeP.fetchBoundariesOnly(text, ttsSpeed)
+                    if (wb.isNotEmpty()) boundariesCache[i] = wb
+                }
             }
         }
     }
