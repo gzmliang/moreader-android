@@ -38,6 +38,11 @@ class SystemTTSProvider(context: Context) : TTSProvider {
         private val debugLog = StringBuilder()
         fun getDebugLog(): String = debugLog.toString()
         fun clearDebugLog() { debugLog.clear() }
+        // Public accessor for WebView JS console capture
+        fun appendDebugLog(msg: String) {
+            val ts = dateFmt.format(java.util.Date())
+            debugLog.append("[$ts] $msg\n")
+        }
         private fun dlog(msg: String) {
             val ts = dateFmt.format(java.util.Date())
             debugLog.append("[$ts] $msg\n")
