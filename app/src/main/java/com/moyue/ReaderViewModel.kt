@@ -782,8 +782,15 @@ class ReaderViewModel(
         val cached = audioCache.remove(idx)
 
         val listener = object : TTSListener {
-            override fun onStart() { _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx) } }
-            override fun onDone() { consecutiveErrors = 0; playOne(idx + 1) }
+            override fun onStart() {
+                _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx) }
+                log("[TTS.ch] ▶ P${idx + 1}/${paragraphs.size} ${text.take(30)}...")
+            }
+            override fun onDone() {
+                consecutiveErrors = 0
+                log("[TTS.ch] ✓ P${idx + 1}")
+                playOne(idx + 1)
+            }
             override fun onError(msg: String) {
                 log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg))
                 consecutiveErrors++
@@ -792,6 +799,7 @@ class ReaderViewModel(
                     killPlayChain()
                     _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }
                 } else {
+                    log("[TTS.ch] ✗ P${idx + 1} err=$msg")
                     playOne(idx + 1)
                 }
             }
