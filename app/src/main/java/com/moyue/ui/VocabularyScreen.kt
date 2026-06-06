@@ -93,6 +93,8 @@ fun VocabularyScreen(
                                 if (plan == "默认") stringResource(R.string.flashcard_plan_default) else plan,
                                 fontSize = 11.sp,
                                 maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         },
                         trailingIcon = if (isSelected && plan != "默认") {
