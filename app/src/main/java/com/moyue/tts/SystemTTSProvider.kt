@@ -116,9 +116,15 @@ class SystemTTSProvider(context: Context) : TTSProvider {
     private fun ensureInitialized() {
         val systemEngine = readCurrentEngine()
 
-        // If engine already exists AND engine hasn't changed, just re-bind listener
+        // Engine already alive and ready — nothing to do.
+        // Do NOT call setupTts() again: it resets language and listener,
+        // which confuses Oppo/某些引擎导致高亮乱跳。
+        if (globalTts != null && currentEngine == systemEngine && globalIsReady) return
+
+        // Engine exists but not yet marked ready — mark it.
+        // Language is set per-speak by setLanguageForText(), listener
+        // was installed by onInit callback.
         if (globalTts != null && currentEngine == systemEngine) {
-            setupTts(globalTts!!)
             globalIsReady = true
             return
         }
