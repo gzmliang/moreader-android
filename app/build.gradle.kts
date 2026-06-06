@@ -49,6 +49,20 @@ android {
         }
     }
 
+    flavorDimensions += "app"
+    productFlavors {
+        create("moyue") {
+            dimension = "app"
+            applicationId = "com.moyue.app"
+        }
+        create("tingshu") {
+            dimension = "app"
+            applicationId = "com.moyue.tingshu"
+            versionCode = 101
+            resValue("string", "app_name", "墨悦听书")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
