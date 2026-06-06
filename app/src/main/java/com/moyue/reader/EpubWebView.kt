@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.view.MotionEvent
 import android.view.View
 import android.webkit.*
-import com.moyue.app.tts.SystemTTSProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -77,11 +76,9 @@ fun EpubWebView(
                 }
                 ttsSentenceIdx == 0 -> {
                     // New paragraph: paragraph highlight + sentence init in ONE call
-                    SystemTTSProvider.appendDebugLog("Kotlin: eval initAndHighlight($ttsHighlightIndex,0) webViewOk=${wv != null}")
                     wv.evaluateJavascript("window.initAndHighlight($ttsHighlightIndex,0)", null)
                 }
                 ttsSentenceIdx > 0 -> {
-                    SystemTTSProvider.appendDebugLog("Kotlin: eval ttsHLSentence($ttsSentenceIdx)")
                     wv.evaluateJavascript("window.ttsHLSentence($ttsSentenceIdx)", null)
                 }
             }
@@ -249,12 +246,6 @@ fun EpubWebView(
                     setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
 
-                    webChromeClient = object : WebChromeClient() {
-                        override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
-                            SystemTTSProvider.appendDebugLog("JS: [${msg.messageLevel()}] ${msg.message()}")
-                            return true
-                        }
-                    }
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(
                             view: WebView?, request: WebResourceRequest?
@@ -316,7 +307,6 @@ fun EpubWebView(
                                     el.classList.add('tts-hl');
                                     el.scrollIntoView({behavior:'smooth',block:'center'});
                                     // Initialize sentences
-                                    console.log('[iAH] paraIdx='+paraIdx+' sentenceIdx='+sentenceIdx);
                                     window.ttsSentences=[];
                                     window._ttsSentencePara=el;
                                     var text=el.textContent;
@@ -343,7 +333,7 @@ fun EpubWebView(
                                     if(!window.ttsSentences||idx<0||idx>=window.ttsSentences.length)return;
                                     var sent=window.ttsSentences[idx];
                                     var hl=window._ttsSentencePara;
-                                    if(!hl){console.log('[tSHL] no para element');return;}
+                                    if(!hl)return;
                                     var textNodes=[];
                                     var walker=document.createTreeWalker(hl,NodeFilter.SHOW_TEXT);
                                     var charCount=0;
@@ -364,8 +354,7 @@ fun EpubWebView(
                                     var span=document.createElement('span');
                                     span.className='tts-sentence-hl';
                                     span.setAttribute('data-tts-sentence','1');
-                                    try{range.surroundContents(span);}catch(e){console.log('[tSHL] surround failed: '+e.message);range.insertNode(span);}
-                                    console.log('[tSHL] highlighted sentence '+idx+' ['+sent.start+'-'+sent.end+']');
+                                    try{range.surroundContents(span);}catch(e){range.insertNode(span);}
                                 };
                                 window.ttsSentenceClear=function(){
                                     document.querySelectorAll('span[data-tts-sentence="1"]').forEach(function(s){

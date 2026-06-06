@@ -785,44 +785,56 @@ class ReaderViewModel(
         val cached = audioCache.remove(idx)
 
         val listener = object : TTSListener {
-            private var sentenceJob: Job? = null
+            // Sentence boundaries: cumulative character offsets for each sentence end.
+            // e.g. [50, 120, 200] means 3 sentences ending at chars 50, 120, 200.
+            private var sentenceEnds: IntArray = intArrayOf()
+
             override fun onStart() {
-                com.moyue.app.tts.SystemTTSProvider.appendDebugLog("VM:onStart idx=$idx sentences=${text.split(Regex("(?<=[.!?])\\s+")).filter { it.isNotBlank() }.size}")
                 _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx) }
                 log("[TTS.ch] ▶ P${idx + 1}/${paragraphs.size} ${text.take(30)}...")
 
-                // Split paragraph into sentences (by .!?...) and track advancement
-                // via estimated timing. No dependency on onRangeStart.
+                // Split paragraph into sentences for onRangeStart-driven tracking
                 val sentences = text.split(Regex("(?<=[.!?])\\s+")).filter { it.isNotBlank() }
                 if (sentences.size <= 1) {
+                    sentenceEnds = intArrayOf(text.length)
                     _uiState.update { it.copy(ttsSentenceIdx = 0, ttsSentenceCount = 1) }
-                    com.moyue.app.tts.SystemTTSProvider.appendDebugLog("VM:set ttsSentenceIdx=0 (single sentence)")
                 } else {
-                    _uiState.update { it.copy(ttsSentenceIdx = 0, ttsSentenceCount = sentences.size) }
-                    com.moyue.app.tts.SystemTTSProvider.appendDebugLog("VM:set ttsSentenceIdx=0 (${sentences.size} sentences, starting coroutine)")
-                    sentenceJob = viewModelScope.launch {
-                        val charsPerSec = (15f * speed).coerceAtLeast(8f)
-                        for (i in 1 until sentences.size) {
-                            val prevChars = sentences[i - 1].length
-                            val delayMs = (prevChars / charsPerSec * 1000).toLong().coerceIn(150, 8000)
-                            delay(delayMs)
-                            if (!playChainActive) break
-                            _uiState.update { it.copy(ttsSentenceIdx = i) }
-                            val charOffset = sentences.take(i).sumOf { it.length }
-                            log("[SENT] P${idx + 1} #$i/${sentences.size} @$charOffset")
-                        }
+                    // Build cumulative end offsets: [s0.end, s0+s1.end, ...]
+                    sentenceEnds = IntArray(sentences.size)
+                    var cum = 0
+                    for (i in sentences.indices) {
+                        cum += sentences[i].length
+                        // Account for the whitespace between sentences from split
+                        sentenceEnds[i] = cum
                     }
+                    _uiState.update { it.copy(ttsSentenceIdx = 0, ttsSentenceCount = sentences.size) }
                 }
             }
+
+            override fun onRange(start: Int, end: Int) {
+                if (sentenceEnds.isEmpty()) return
+                // Find which sentence contains 'start' by scanning cumulative ends
+                var sentIdx = 0
+                while (sentIdx < sentenceEnds.size - 1 && sentenceEnds[sentIdx] <= start) {
+                    sentIdx++
+                }
+                val cur = _uiState.value
+                if (sentIdx != cur.ttsSentenceIdx) {
+                    _uiState.update { it.copy(ttsSentenceIdx = sentIdx) }
+                    log("[SENT] P${idx + 1} #$sentIdx/${sentenceEnds.size} @$start")
+                }
+            }
+
             override fun onDone() {
-                sentenceJob?.cancel()
+                sentenceEnds = intArrayOf()
                 consecutiveErrors = 0
                 _uiState.update { it.copy(ttsSentenceIdx = -1, ttsSentenceCount = 0) }
                 log("[TTS.ch] ✓ P${idx + 1}")
                 playOne(idx + 1)
             }
+
             override fun onError(msg: String) {
-                sentenceJob?.cancel()
+                sentenceEnds = intArrayOf()
                 _uiState.update { it.copy(ttsSentenceIdx = -1, ttsSentenceCount = 0) }
                 log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg))
                 consecutiveErrors++
@@ -835,9 +847,6 @@ class ReaderViewModel(
                     playOne(idx + 1)
                 }
             }
-            // onRangeStart: keep as no-op — if Google TTS ever fires it
-            // we can override timing estimation with accurate data.
-            override fun onRange(start: Int, end: Int) {}
         }
 
         if (cached != null && cached.isNotEmpty()) {

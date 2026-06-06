@@ -39,10 +39,6 @@ class SystemTTSProvider(context: Context) : TTSProvider {
         fun getDebugLog(): String = debugLog.toString()
         fun clearDebugLog() { debugLog.clear() }
         // Public accessor for WebView JS console capture
-        fun appendDebugLog(msg: String) {
-            val ts = dateFmt.format(java.util.Date())
-            debugLog.append("[$ts] $msg\n")
-        }
         private fun dlog(msg: String) {
             val ts = dateFmt.format(java.util.Date())
             debugLog.append("[$ts] $msg\n")
@@ -209,7 +205,6 @@ class SystemTTSProvider(context: Context) : TTSProvider {
                 }
                 override fun onRangeStart(id: String?, start: Int, end: Int, frame: Int) {
                     val listener = id?.let { utteranceListeners[it] }
-                    dlog("onRangeStart: $id [$start-$end] f=$frame hasListener=${listener != null}")
                     listener?.onRange(start, end)
                 }
             })
