@@ -670,6 +670,11 @@ class BookRepository(private val context: Context) {
     
     suspend fun isWordExists(word: String): Boolean = db.vocabularyDao().isWordExists(word)
 
+    fun getVocabularyByPlan(plan: String): Flow<List<Vocabulary>> = db.vocabularyDao().getVocabularyByPlan(plan)
+    fun getPlanNames(): Flow<List<String>> = db.vocabularyDao().getPlanNames()
+    suspend fun renameVocabularyPlan(oldPlan: String, newPlan: String) = db.vocabularyDao().renamePlan(oldPlan, newPlan)
+    suspend fun deleteVocabularyByPlan(plan: String) = db.vocabularyDao().deleteByPlan(plan)
+
     private fun countDepth(node: org.w3c.dom.Node): Int {
         var depth = 0
         var parent = node.parentNode

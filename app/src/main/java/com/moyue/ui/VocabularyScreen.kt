@@ -3,6 +3,7 @@ package com.moyue.app.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.VolumeUp
@@ -44,6 +46,8 @@ fun VocabularyScreen(
 ) {
     val vocabulary by viewModel.vocabulary.collectAsStateWithLifecycle()
     val speakingWordId by viewModel.isSpeakingWord.collectAsStateWithLifecycle()
+    val currentPlan by viewModel.currentPlan.collectAsStateWithLifecycle()
+    val planNames by viewModel.planNames.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -61,6 +65,57 @@ fun VocabularyScreen(
     // Custom word add dialog
     var showAddDialog by remember { mutableStateOf(false) }
     var addWordText by remember { mutableStateOf("") }
+
+    // Vocab notebook plan dialogs
+    var showNewPlanDialog by remember { mutableStateOf(false) }
+    var showDeletePlanDialog by remember { mutableStateOf(false) }
+    var planNameInput by remember { mutableStateOf("") }
+
+    // Notebook PlanSelector
+    @Composable
+    fun VocabPlanSelector() {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(planNames) { plan ->
+                    val isSelected = plan == currentPlan
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { viewModel.switchPlan(plan) },
+                        label = {
+                            Text(
+                                if (plan == "默认") stringResource(R.string.flashcard_plan_default) else plan,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                            )
+                        },
+                        trailingIcon = if (isSelected && plan != "默认") {
+                            {
+                                IconButton(
+                                    onClick = { showDeletePlanDialog = true },
+                                    modifier = Modifier.size(14.dp),
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(10.dp))
+                                }
+                            }
+                        } else null,
+                    )
+                }
+            }
+            FilledTonalIconButton(
+                onClick = { planNameInput = ""; showNewPlanDialog = true },
+                modifier = Modifier.size(32.dp),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.flashcard_plan_new), modifier = Modifier.size(16.dp))
+            }
+        }
+    }
     
     // Load plan options when picker is about to show
     fun openPlanPicker(words: List<Vocabulary>) {
@@ -219,7 +274,7 @@ fun VocabularyScreen(
         },
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.vocabulary_title)) },
+                title = { Text(stringResource(R.string.vocabulary_title), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 18.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
@@ -301,11 +356,16 @@ fun VocabularyScreen(
             )
         }
     ) { padding ->
-        if (vocabulary.isEmpty()) {
+        Column(modifier = Modifier.padding(padding)) {
+            // Plan selector
+            VocabPlanSelector()
+            Spacer(Modifier.height(2.dp))
+
+            if (vocabulary.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .weight(1f),
                 contentAlignment = Alignment.Center
             ) {
                 Text(stringResource(R.string.vocabulary_empty), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -314,7 +374,7 @@ fun VocabularyScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
+                    .weight(1f)
             ) {
                 items(vocabulary, key = { it.id }) { item ->
                     val isSelected: Boolean = selectedIds.contains(item.id)
@@ -339,6 +399,7 @@ fun VocabularyScreen(
                     )
                 }
             }
+        }
         }
     }
 }

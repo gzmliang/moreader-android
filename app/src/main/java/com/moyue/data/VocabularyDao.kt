@@ -14,6 +14,18 @@ interface VocabularyDao {
     @Query("SELECT * FROM vocabulary ORDER BY createdAt DESC")
     fun getAllVocabulary(): Flow<List<Vocabulary>>
 
+    @Query("SELECT * FROM vocabulary WHERE plan = :plan ORDER BY createdAt DESC")
+    fun getVocabularyByPlan(plan: String): Flow<List<Vocabulary>>
+
+    @Query("SELECT DISTINCT plan FROM vocabulary ORDER BY plan")
+    fun getPlanNames(): Flow<List<String>>
+
+    @Query("UPDATE vocabulary SET plan = :newPlan WHERE plan = :oldPlan")
+    suspend fun renamePlan(oldPlan: String, newPlan: String)
+
+    @Query("DELETE FROM vocabulary WHERE plan = :plan")
+    suspend fun deleteByPlan(plan: String)
+
     @Query("SELECT * FROM vocabulary WHERE word = :word LIMIT 1")
     suspend fun getVocabularyByWord(word: String): Vocabulary?
 

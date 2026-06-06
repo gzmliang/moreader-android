@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -37,6 +38,8 @@ class VocabularyViewModel(
     private val repository: BookRepository
 ) : ViewModel() {
 
+    companion object { const val DEFAULT_PLAN = "默认" }
+
     private var audioPlayer: MediaPlayer? = null
     private var systemTts: TextToSpeech? = null
     private var systemTtsReady = false
@@ -45,12 +48,36 @@ class VocabularyViewModel(
     private val _isSpeakingWord = MutableStateFlow<Long?>(null)
     val isSpeakingWord: StateFlow<Long?> = _isSpeakingWord.asStateFlow()
 
-    val vocabulary: StateFlow<List<Vocabulary>> = repository.getAllVocabulary()
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+    // Plan management
+    private val _currentPlan = MutableStateFlow(DEFAULT_PLAN)
+    val currentPlan: StateFlow<String> = _currentPlan.asStateFlow()
+
+    val planNames: StateFlow<List<String>> = repository.getPlanNames()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf(DEFAULT_PLAN))
+
+    val vocabulary: StateFlow<List<Vocabulary>> = _currentPlan.flatMapLatest { plan ->
+        repository.getVocabularyByPlan(plan)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun switchPlan(plan: String) { _currentPlan.value = plan }
+
+    fun createPlan(name: String) {
+        viewModelScope.launch {
+            val trimmed = name.trim()
+            if (trimmed.isEmpty()) return@launch
+            // Create by inserting a dummy word then switching
+            // The plan will appear in getPlanNames() once any vocab exists with it
+            _currentPlan.value = trimmed
+        }
+    }
+
+    fun deletePlan(name: String) {
+        if (name == DEFAULT_PLAN) return
+        viewModelScope.launch {
+            repository.deleteVocabularyByPlan(name)
+            if (_currentPlan.value == name) _currentPlan.value = DEFAULT_PLAN
+        }
+    }
 
     fun deleteVocabulary(id: Long) {
         viewModelScope.launch {
@@ -71,6 +98,7 @@ class VocabularyViewModel(
             }
             val vocab = com.moyue.app.data.models.Vocabulary(
                 word = trimmed,
+                plan = _currentPlan.value,
                 createdAt = System.currentTimeMillis()
             )
             repository.insertVocabulary(vocab)

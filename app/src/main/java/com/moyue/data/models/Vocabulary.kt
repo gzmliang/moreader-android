@@ -24,6 +24,8 @@ data class Vocabulary(
     // --- Legacy fields (kept for migration) ---
     val definition: String? = null,
     val example: String? = null,
+    // Plan / notebook
+    val plan: String = "默认",
     // Metadata
     val bookId: Long? = null,
     val chapterIndex: Int? = null,
