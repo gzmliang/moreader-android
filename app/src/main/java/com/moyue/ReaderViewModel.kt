@@ -176,6 +176,8 @@ class ReaderViewModel(
     private var lastProviderType: TTSProviderType? = null
     // Preloaded audio bytes: index → ByteArray
     private val audioCache = mutableMapOf<Int, ByteArray>()
+    // Preloaded word boundaries for Edge TTS (parallel to audioCache)
+    private val boundariesCache = mutableMapOf<Int, List<WordBoundary>>()
     // Flag to stop the current play chain
     private var playChainActive = false
     // Consecutive error counter — if TTS engine is broken, stop retrying
@@ -729,7 +731,11 @@ class ReaderViewModel(
                 if (audioCache.containsKey(i)) continue
                 val text = paragraphs[i]; if (text.length < 2) { audioCache[i] = ByteArray(0); continue }
                 val bytes = when (val p = getProvider()) {
-                    is EdgeTTSProvider -> p.fetchAudio(text, ttsSpeed)
+                    is EdgeTTSProvider -> {
+                        val b = p.fetchAudio(text, ttsSpeed)
+                        if (b != null) boundariesCache[i] = p.getLastBoundaries()
+                        b
+                    }
                     is AIVoiceTTSProvider -> p.fetchAudio(text, ttsSpeed)
                     is CustomTTSProvider -> p.fetchAudio(text, ttsSpeed)
                     else -> null
@@ -754,6 +760,7 @@ class ReaderViewModel(
             if (s.currentChapterIndex < s.chapters.size - 1) {
                 log("[TTS] 📖 ${getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_tts_chapter_complete)}")
                 audioCache.clear()
+                boundariesCache.clear()
                 _uiState.update { it.copy(
                     currentChapterIndex = it.currentChapterIndex + 1,
                     isLoading = true, ttsParagraphs = emptyList(), ttsCurrentIdx = -1
@@ -930,7 +937,14 @@ class ReaderViewModel(
         if (cached != null && cached.isNotEmpty()) {
             // Play cached audio directly (zero network delay!)
             when (val p = getProvider()) {
-                is EdgeTTSProvider -> p.playRaw(cached, listener)
+                is EdgeTTSProvider -> {
+                    // Pass preloaded word boundaries for sentence tracking
+                    val cachedBoundaries = boundariesCache.remove(idx)
+                    if (cachedBoundaries != null && cachedBoundaries.isNotEmpty()) {
+                        listener.onWordBoundaries(cachedBoundaries)
+                    }
+                    p.playRaw(cached, listener)
+                }
                 is AIVoiceTTSProvider -> p.playRaw(cached, listener)
                 is CustomTTSProvider -> p.playRaw(cached, listener)
                 is SystemTTSProvider -> p.speak(text, speed, listener)
@@ -1047,7 +1061,7 @@ class ReaderViewModel(
         _uiState.update { it.copy(isTtsPaused = false, isTtsPlaying = true, ttsCurrentIdx = playIdx) }
         playOne(playIdx)
     }
-    private fun killPlayChain() { playChainActive = false; currentTTSProvider?.stop(); audioCache.clear() }
+    private fun killPlayChain() { playChainActive = false; currentTTSProvider?.stop(); audioCache.clear(); boundariesCache.clear() }
     fun ttsStop() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_stop)); killPlayChain(); _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1, ttsSentenceIdx = -1, ttsSentenceCount = 0) } }
     private var lastToggleTime = 0L
 

@@ -23,15 +23,19 @@ class EdgeTTSProvider(
 
     private var currentCall: Call? = null
     private var audioPlayer: android.media.MediaPlayer? = null
+    // Last fetched word boundaries (populated by fetchAudio for preload caching)
+    @Volatile private var lastBoundaries: List<WordBoundary> = emptyList()
 
     override val type: TTSProviderType get() = TTSProviderType.EDGE_TTS
     override val isSpeaking: Boolean get() = audioPlayer?.isPlaying ?: false
 
     /**
-     * Fetch audio bytes for a text segment (can be called for preloading)
+     * Fetch audio bytes + word boundaries for a text segment (preloading).
+     * After calling, use getLastBoundaries() to retrieve word timing data.
      */
     suspend fun fetchAudio(text: String, rate: Float = 1.0f): ByteArray? {
         return try {
+            lastBoundaries = emptyList()
             val ratePercent = if (rate >= 1.0f) "+${((rate - 1.0f) * 100).toInt()}%" else "-${((1.0f - rate) * 100).toInt()}%"
             val json = JSONObject().apply {
                 put("text", text)
@@ -41,17 +45,25 @@ class EdgeTTSProvider(
             }
             val body = json.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
-                .url("${endpoint.removeSuffix("/")}/tts")
+                .url("${endpoint.removeSuffix("/")}/tts_with_boundaries")
                 .post(body)
                 .apply { if (apiKey.isNotEmpty()) addHeader("X-API-Key", apiKey) }
                 .build()
 
             val response = client.newCall(request).execute()
-            if (!response.isSuccessful) null else response.body?.bytes()
+            if (!response.isSuccessful) null else {
+                // Parse word boundaries from response header
+                val wb = parseWordBoundaries(response.header("X-Word-Boundaries") ?: "")
+                if (wb.isNotEmpty()) lastBoundaries = wb
+                response.body?.bytes()
+            }
         } catch (e: Exception) {
             null
         }
     }
+
+    /** Get word boundaries from the last fetchAudio() call (for preload caching). */
+    fun getLastBoundaries(): List<WordBoundary> = lastBoundaries
 
     /**
      * Download audio + word boundaries and play via MediaPlayer.
