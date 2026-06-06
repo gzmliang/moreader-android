@@ -204,6 +204,7 @@ class SystemTTSProvider(context: Context) : TTSProvider {
                 }
                 override fun onRangeStart(id: String?, start: Int, end: Int, frame: Int) {
                     val listener = id?.let { utteranceListeners[it] }
+                    dlog("onRangeStart: $id [$start-$end] f=$frame hasListener=${listener != null}")
                     listener?.onRange(start, end)
                 }
             })

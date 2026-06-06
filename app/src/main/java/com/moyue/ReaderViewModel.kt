@@ -807,6 +807,7 @@ class ReaderViewModel(
                 val cur = _uiState.value
                 if (!cur.ttsSentenceEnabled) {
                     _uiState.update { it.copy(ttsSentenceEnabled = true, ttsSentenceDetecting = false) }
+                    log("[TTS.sentence] ✅ 引擎支持 onRangeStart (Google TTS)")
                 }
                 _uiState.update { it.copy(ttsSentenceStart = start, ttsSentenceEnd = end) }
             }
