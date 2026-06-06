@@ -48,9 +48,7 @@ fun EpubWebView(
     onParagraphClicked: ((Int) -> Unit)? = null,
     onScrollToParagraph: ((Int) -> Unit)? = null,
     ttsHighlightIndex: Int = -1,
-    ttsSentenceStart: Int = -1,
-    ttsSentenceEnd: Int = -1,
-    ttsSentenceEnabled: Boolean = false,
+    ttsSentenceIdx: Int = -1,
     scrollToParagraph: Int? = null,
     highlightsToRender: List<Triple<Int, Int, Int>> = emptyList(),  // (startParagraph, startOffset, endOffset)
     highlightToRemove: Pair<Int, Int>? = null,  // (startOffset, endOffset)
@@ -78,13 +76,22 @@ fun EpubWebView(
         }
     }
 
-    // TTS sentence highlight: call JS when sentence range changes
-    LaunchedEffect(ttsHighlightIndex, ttsSentenceStart, ttsSentenceEnd, ttsSentenceEnabled) {
+    // TTS sentence highlight: init sentences on paragraph start, advance by index
+    LaunchedEffect(ttsHighlightIndex, ttsSentenceIdx) {
         webView?.let { wv ->
-            if (ttsSentenceEnabled && ttsHighlightIndex >= 0 && ttsSentenceStart >= 0 && ttsSentenceEnd > ttsSentenceStart) {
-                wv.evaluateJavascript("window.ttsSentenceHL($ttsHighlightIndex, $ttsSentenceStart, $ttsSentenceEnd)", null)
-            } else {
-                wv.evaluateJavascript("window.ttsSentenceClear()", null)
+            when {
+                ttsHighlightIndex < 0 -> {
+                    wv.evaluateJavascript("window.ttsClear()", null)
+                    wv.evaluateJavascript("window.ttsSentenceClear()", null)
+                }
+                ttsSentenceIdx == 0 -> {
+                    // New paragraph: init sentences + highlight first
+                    wv.evaluateJavascript("window.initAndHighlight($ttsHighlightIndex, 0)", null)
+                }
+                ttsSentenceIdx > 0 -> {
+                    // Subsequent sentence in same paragraph
+                    wv.evaluateJavascript("window.ttsHLSentence($ttsSentenceIdx)", null)
+                }
             }
         }
     }
@@ -300,15 +307,40 @@ fun EpubWebView(
                                     if(idx>=0&&idx<all.length){all[idx].classList.add('tts-hl');all[idx].scrollIntoView({behavior:'smooth',block:'center'});}
                                 };
                                 window.ttsClear=function(){document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});};
-                                window.ttsSentenceHL=function(paraIdx,startOff,endOff){
-                                    window.ttsSentenceClear();
+                                // Sentence-level highlight
+                                window.ttsSentences=[];
+                                window.initAndHighlight=function(paraIdx,sentenceIdx){
+                                    window.ttsSentences=[];
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
                                     if(paraIdx<0||paraIdx>=all.length)return;
                                     var el=all[paraIdx];
                                     var text=el.textContent;
-                                    if(startOff<0||endOff>text.length||startOff>=endOff)return;
+                                    var matches=text.match(/[^.!?]+[.!?]+/g)||[text];
+                                    var pos=0;
+                                    for(var i=0;i<matches.length;i++){
+                                        var s=matches[i];
+                                        window.ttsSentences.push({start:pos,end:pos+s.length});
+                                        pos+=s.length;
+                                        if(pos<text.length&&text.charAt(pos)===' ')pos++;
+                                    }
+                                    if(window.ttsSentences.length===0){
+                                        window.ttsSentences.push({start:0,end:text.length});
+                                    }
+                                    if(sentenceIdx>=0&&sentenceIdx<window.ttsSentences.length){
+                                        window._ttsHLSentence(sentenceIdx);
+                                    }
+                                };
+                                window.ttsHLSentence=function(idx){
+                                    window.ttsSentenceClear();
+                                    window._ttsHLSentence(idx);
+                                };
+                                window._ttsHLSentence=function(idx){
+                                    if(!window.ttsSentences||idx<0||idx>=window.ttsSentences.length)return;
+                                    var sent=window.ttsSentences[idx];
+                                    var hl=document.querySelector('.tts-hl');
+                                    if(!hl)return;
                                     var textNodes=[];
-                                    var walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
+                                    var walker=document.createTreeWalker(hl,NodeFilter.SHOW_TEXT);
                                     var charCount=0;
                                     while(walker.nextNode()){
                                         textNodes.push({node:walker.currentNode,start:charCount,end:charCount+walker.currentNode.textContent.length});
@@ -317,8 +349,8 @@ fun EpubWebView(
                                     var sTN=null,sOff=0,eTN=null,eOff=0;
                                     for(var i=0;i<textNodes.length;i++){
                                         var tn=textNodes[i];
-                                        if(!sTN&&tn.start<=startOff&&tn.end>startOff){sTN=tn.node;sOff=startOff-tn.start;}
-                                        if(tn.start<endOff&&tn.end>=endOff){eTN=tn.node;eOff=endOff-tn.start;}
+                                        if(!sTN&&tn.start<=sent.start&&tn.end>sent.start){sTN=tn.node;sOff=sent.start-tn.start;}
+                                        if(tn.start<sent.end&&tn.end>=sent.end){eTN=tn.node;eOff=sent.end-tn.start;}
                                     }
                                     if(!sTN||!eTN)return;
                                     var range=document.createRange();
