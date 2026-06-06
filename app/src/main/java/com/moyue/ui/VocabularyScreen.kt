@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -85,30 +86,35 @@ fun VocabularyScreen(
             ) {
                 items(planNames) { plan ->
                     val isSelected = plan == currentPlan
-                    FilterChip(
-                        selected = isSelected,
+                    Surface(
                         onClick = { viewModel.switchPlan(plan) },
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        tonalElevation = if (isSelected) 2.dp else 0.dp,
                         modifier = Modifier.height(28.dp),
-                        label = {
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(start = 12.dp, end = if (isSelected && plan != "默认") 6.dp else 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             Text(
                                 if (plan == "默认") stringResource(R.string.flashcard_plan_default) else plan,
                                 fontSize = 11.sp,
                                 maxLines = 1,
                                 softWrap = false,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.widthIn(max = 120.dp),
                             )
-                        },
-                        trailingIcon = if (isSelected && plan != "默认") {
-                            {
+                            if (isSelected && plan != "默认") {
+                                Spacer(Modifier.width(2.dp))
                                 Icon(
                                     Icons.Default.Close,
                                     contentDescription = stringResource(R.string.flashcard_plan_delete),
-                                    modifier = Modifier.size(14.dp).clickable { showDeletePlanDialog = true }
+                                    modifier = Modifier.size(14.dp).clickable { showDeletePlanDialog = true },
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                 )
                             }
-                        } else null,
-                    )
+                        }
+                    }
                 }
             }
             FilledTonalIconButton(
