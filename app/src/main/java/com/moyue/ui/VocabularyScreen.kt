@@ -230,6 +230,50 @@ fun VocabularyScreen(
         )
     }
 
+    // New vocab plan dialog
+    if (showNewPlanDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewPlanDialog = false },
+            title = { Text(stringResource(R.string.flashcard_plan_create_title)) },
+            text = {
+                OutlinedTextField(
+                    value = planNameInput,
+                    onValueChange = { planNameInput = it },
+                    placeholder = { Text(stringResource(R.string.flashcard_plan_create_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (planNameInput.isNotBlank()) {
+                        viewModel.createPlan(planNameInput.trim())
+                        showNewPlanDialog = false
+                        planNameInput = ""
+                    }
+                }) { Text(stringResource(R.string.flashcard_plan_create_btn)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewPlanDialog = false; planNameInput = "" }) { Text(stringResource(android.R.string.cancel)) }
+            }
+        )
+    }
+
+    // Delete vocab plan dialog
+    if (showDeletePlanDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeletePlanDialog = false },
+            title = { Text(stringResource(R.string.flashcard_plan_delete_title)) },
+            text = { Text(stringResource(R.string.flashcard_plan_delete_confirm, currentPlan)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deletePlan(currentPlan); showDeletePlanDialog = false }) { Text(stringResource(android.R.string.ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeletePlanDialog = false }) { Text(stringResource(android.R.string.cancel)) }
+            }
+        )
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
