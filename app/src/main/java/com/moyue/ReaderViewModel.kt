@@ -450,7 +450,7 @@ class ReaderViewModel(
     fun copyTtsDebugLog() {
         val vmLog = _uiState.value.ttsDebugLog
         val sysLog = com.moyue.app.tts.SystemTTSProvider.getDebugLog()
-        val combined = if (sysLog.isNotEmpty()) "=== SystemTTS ===\n$sysLog\n=== ViewModel ===\n$vmLog" else vmLog
+        val combined = if (sysLog.isNotEmpty()) "=== ViewModel ===\n$vmLog\n=== SystemTTS ===\n$sysLog" else vmLog
         val safe = if (combined.length > 900_000) combined.take(900_000) + "\n... (truncated)" else combined
         val clipboard = getApplication<android.app.Application>()
             .getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
