@@ -181,9 +181,9 @@ class SystemTTSProvider(context: Context) : TTSProvider {
 
     private fun setupTts(tts: TextToSpeech) {
         try {
-            tts.setLanguage(Locale.CHINESE)
-            dlog("中文设置完成")
-
+            // CRITICAL: set listener BEFORE setLanguage.
+            // Some engines (Google TTS) lose onRangeStart support if
+            // language is changed after the listener is installed.
             tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(id: String?) {
                     val listener = id?.let { utteranceListeners[it] }
@@ -209,6 +209,10 @@ class SystemTTSProvider(context: Context) : TTSProvider {
                 }
             })
             dlog("Listener 设置完成")
+
+            // Set language AFTER listener to preserve onRangeStart support
+            tts.setLanguage(Locale.CHINESE)
+            dlog("中文设置完成")
         } catch (e: Exception) {
             dlog("setup 异常: ${e.message}")
         }
