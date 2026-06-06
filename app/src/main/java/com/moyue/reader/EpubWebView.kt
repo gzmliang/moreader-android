@@ -65,31 +65,20 @@ fun EpubWebView(
     LaunchedEffect(onParagraphClicked) { paragraphCallbackRef.value = { idx -> onParagraphClicked?.invoke(idx) ?: Unit } }
     LaunchedEffect(onScrollToParagraph) { scrollCallbackRef.value = { idx -> onScrollToParagraph?.invoke(idx) ?: Unit } }
 
-    // TTS highlight: call JS when index changes
-    LaunchedEffect(ttsHighlightIndex) {
-        webView?.let { wv ->
-            if (ttsHighlightIndex >= 0) {
-                wv.evaluateJavascript("window.ttsHL($ttsHighlightIndex)", null)
-            } else {
-                wv.evaluateJavascript("window.ttsClear()", null)
-            }
-        }
-    }
-
-    // TTS sentence highlight: init sentences on paragraph start, advance by index
+    // TTS paragraph + sentence highlight: merged into one effect
+    // (was two separate effects — async evaluateJavascript order was undefined,
+    //  causing initAndHighlight to run before ttsHL added .tts-hl class)
     LaunchedEffect(ttsHighlightIndex, ttsSentenceIdx) {
         webView?.let { wv ->
             when {
                 ttsHighlightIndex < 0 -> {
-                    wv.evaluateJavascript("window.ttsClear()", null)
-                    wv.evaluateJavascript("window.ttsSentenceClear()", null)
+                    wv.evaluateJavascript("window.ttsClear();window.ttsSentenceClear()", null)
                 }
                 ttsSentenceIdx == 0 -> {
-                    // New paragraph: init sentences + highlight first
-                    wv.evaluateJavascript("window.initAndHighlight($ttsHighlightIndex, 0)", null)
+                    // New paragraph: paragraph highlight + sentence init in ONE call
+                    wv.evaluateJavascript("window.initAndHighlight($ttsHighlightIndex,0)", null)
                 }
                 ttsSentenceIdx > 0 -> {
-                    // Subsequent sentence in same paragraph
                     wv.evaluateJavascript("window.ttsHLSentence($ttsSentenceIdx)", null)
                 }
             }
@@ -310,10 +299,16 @@ fun EpubWebView(
                                 // Sentence-level highlight
                                 window.ttsSentences=[];
                                 window.initAndHighlight=function(paraIdx,sentenceIdx){
-                                    window.ttsSentences=[];
+                                    // Apply paragraph highlight (self-contained, no race)
+                                    document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
                                     if(paraIdx<0||paraIdx>=all.length)return;
                                     var el=all[paraIdx];
+                                    el.classList.add('tts-hl');
+                                    el.scrollIntoView({behavior:'smooth',block:'center'});
+                                    // Initialize sentences
+                                    window.ttsSentences=[];
+                                    window._ttsSentencePara=el;
                                     var text=el.textContent;
                                     var matches=text.match(/[^.!?]+[.!?]+/g)||[text];
                                     var pos=0;
@@ -337,7 +332,7 @@ fun EpubWebView(
                                 window._ttsHLSentence=function(idx){
                                     if(!window.ttsSentences||idx<0||idx>=window.ttsSentences.length)return;
                                     var sent=window.ttsSentences[idx];
-                                    var hl=document.querySelector('.tts-hl');
+                                    var hl=window._ttsSentencePara;
                                     if(!hl)return;
                                     var textNodes=[];
                                     var walker=document.createTreeWalker(hl,NodeFilter.SHOW_TEXT);
