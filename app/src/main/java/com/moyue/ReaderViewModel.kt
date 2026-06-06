@@ -824,11 +824,18 @@ class ReaderViewModel(
                     sentenceEnds = intArrayOf(text.length)
                     _uiState.update { it.copy(ttsSentenceIdx = 0, ttsSentenceCount = 1) }
                 } else {
+                    // Build sentenceEnds from FULL text (not split sentences),
+                    // because word boundary char offsets reference the original text.
+                    // split() strips inter-sentence whitespace, so summing sentence
+                    // lengths gives wrong offsets for later sentences.
                     sentenceEnds = IntArray(sentences.size)
-                    var cum = 0
+                    var searchPos = 0
                     for (i in sentences.indices) {
-                        cum += sentences[i].length
-                        sentenceEnds[i] = cum
+                        val idx = text.indexOf(sentences[i], searchPos)
+                        if (idx < 0) { sentenceEnds[i] = searchPos; continue }
+                        val end = idx + sentences[i].length
+                        sentenceEnds[i] = end
+                        searchPos = end
                     }
                     _uiState.update { it.copy(ttsSentenceIdx = 0, ttsSentenceCount = sentences.size) }
 
