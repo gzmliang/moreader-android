@@ -163,7 +163,7 @@ Just change the Base URL and API Key</string>
     <string name="help_cloud_ai_bonus">🎁 DeepSeek gives 5 CNY free credits (~100,000 translations)</string>
     <string name="help_cloud_ai_default">Default config:
 • API: DeepSeek (api.deepseek.com)
-• Model: deepseek-chat
+• Model: DeepSeek-V4-Flash
 • Only need an API Key to use</string>
     <string name="help_cloud_ai_default_title">Default Config (DeepSeek)</string>
     <string name="help_cloud_ai_get_key_title">How to Get DeepSeek API Key</string>

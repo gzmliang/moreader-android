@@ -147,7 +147,7 @@
 
 默认配置：
 • API: DeepSeek (api.deepseek.com)
-• 模型: deepseek-chat
+• 模型: DeepSeek-V4-Flash
 • 只需填写 API Key 即可使用
 
 获取 DeepSeek API Key：
@@ -465,7 +465,7 @@ AI Voice（云端 TTS）：
     <string name="help_local_ai_model_title">推荐模型（.gguf 格式）</string>
     <string name="help_local_ai_speed_title">速度参考</string>
     <string name="help_cloud_ai_intro">云端翻译使用在线 API，速度快质量高。</string>
-    <string name="help_cloud_ai_default">默认配置：\n• API: DeepSeek (api.deepseek.com)\n• 模型: deepseek-chat\n• 只需填写 API Key 即可使用</string>
+    <string name="help_cloud_ai_default">默认配置：\n• API: DeepSeek (api.deepseek.com)\n• 模型: DeepSeek-V4-Flash\n• 只需填写 API Key 即可使用</string>
     <string name="help_cloud_ai_steps">获取 DeepSeek API Key：\n1. 访问 https://platform.deepseek.com\n2. 用手机号或邮箱注册账号\n3. 登录后点击右上角头像 → 「API Keys」\n4. 点击「创建 API Key」，复制保存\n5. 粘贴到下方「API Key」输入框</string>
     <string name="help_cloud_ai_bonus">🎁 注册即送 5 元额度，约可调用 10 万次翻译</string>
     <string name="help_cloud_ai_alternative">也可以使用其他兼容 OpenAI 的 API：\n• 通义千问: dashscope.aliyuncs.com（百炼平台）\n• Moonshot: api.moonshot.cn\n• SiliconFlow: api.siliconflow.cn\n只需修改 Base URL 和 API Key 即可</string>

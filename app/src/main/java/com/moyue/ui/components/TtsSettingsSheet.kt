@@ -542,7 +542,7 @@ fun TtsSettingsSheet(
                     Spacer(Modifier.height(6.dp))
 
                     val defaultEndpoint = "https://api.deepseek.com"
-                    val defaultModel = "deepseek-chat"
+                    val defaultModel = "DeepSeek-V4-Flash"
 
                     val llmEp = remember(llmConfig.endpoint) { mutableStateOf(llmConfig.endpoint.ifEmpty { defaultEndpoint }) }
                     val llmKey = remember(llmConfig.apiKey) { mutableStateOf(llmConfig.apiKey) }

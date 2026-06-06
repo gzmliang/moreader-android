@@ -187,24 +187,24 @@ class SystemTTSProvider(context: Context) : TTSProvider {
             tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(id: String?) {
                     val listener = id?.let { utteranceListeners[it] }
-                    dlog("onStart: $id")
                     listener?.onStart()
                 }
                 override fun onDone(id: String?) {
                     val listener = id?.let { utteranceListeners.remove(it) }
-                    dlog("onDone: $id")
                     listener?.onDone()
                 }
                 override fun onError(id: String?) {
                     val listener = id?.let { utteranceListeners.remove(it) }
-                    dlog("onError: $id")
                     listener?.onError("TTS错误")
                 }
                 @Deprecated("Deprecated in Java")
                 override fun onError(id: String?, code: Int) {
                     val listener = id?.let { utteranceListeners.remove(it) }
-                    dlog("onError: $id code=$code")
                     listener?.onError("TTS错误($code)")
+                }
+                override fun onRangeStart(id: String?, start: Int, end: Int, frame: Int) {
+                    val listener = id?.let { utteranceListeners[it] }
+                    listener?.onRange(start, end)
                 }
             })
             dlog("Listener 设置完成")

@@ -61,6 +61,11 @@ data class ReaderUiState(
     val ttsCurrentIdx: Int = -1,       // 当前高亮索引（考虑了偏移）
     val ttsPlayIdx: Int = -1,          // 当前实际朗读的段落索引（用于恢复）
     val ttsHighlightOffset: Int = 0,  // 高亮偏移量（负 = 高亮提前，正 = 高亮延迟），默认0
+    // Sentence-level highlight (Google TTS onRangeStart support)
+    val ttsSentenceStart: Int = -1,   // 当前句子在段落中的起始位置
+    val ttsSentenceEnd: Int = -1,     // 当前句子在段落中的结束位置
+    val ttsSentenceEnabled: Boolean = false,  // 引擎支持 onRangeStart（自动检测后设置）
+    val ttsSentenceDetecting: Boolean = false, // 正在自动检测引擎是否支持 onRangeStart
     val ttsDebugLog: String = "",
     val showTtsDebugLog: Boolean = false,
     // Fullscreen mode
@@ -783,15 +788,36 @@ class ReaderViewModel(
 
         val listener = object : TTSListener {
             override fun onStart() {
-                _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx) }
+                _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx, ttsSentenceStart = -1, ttsSentenceEnd = -1) }
                 log("[TTS.ch] ▶ P${idx + 1}/${paragraphs.size} ${text.take(30)}...")
+
+                // Auto-detect onRangeStart support for System TTS
+                // Set a 2.5s timer; if onRange fires before timeout → enabled.
+                // Otherwise silently degrade to paragraph-only highlight.
+                val cur = _uiState.value
+                if (cur.ttsProvider == TTSProviderType.SYSTEM && !cur.ttsSentenceEnabled && !cur.ttsSentenceDetecting) {
+                    _uiState.update { it.copy(ttsSentenceDetecting = true) }
+                    viewModelScope.launch {
+                        delay(2500L)
+                        _uiState.update { it.copy(ttsSentenceDetecting = false) }
+                    }
+                }
+            }
+            override fun onRange(start: Int, end: Int) {
+                val cur = _uiState.value
+                if (!cur.ttsSentenceEnabled) {
+                    _uiState.update { it.copy(ttsSentenceEnabled = true, ttsSentenceDetecting = false) }
+                }
+                _uiState.update { it.copy(ttsSentenceStart = start, ttsSentenceEnd = end) }
             }
             override fun onDone() {
                 consecutiveErrors = 0
+                _uiState.update { it.copy(ttsSentenceStart = -1, ttsSentenceEnd = -1) }
                 log("[TTS.ch] ✓ P${idx + 1}")
                 playOne(idx + 1)
             }
             override fun onError(msg: String) {
+                _uiState.update { it.copy(ttsSentenceStart = -1, ttsSentenceEnd = -1) }
                 log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg))
                 consecutiveErrors++
                 if (consecutiveErrors >= 3) {
@@ -847,7 +873,8 @@ class ReaderViewModel(
 
         killPlayChain(); audioCache.clear()
         currentTTSProvider?.destroy(); currentTTSProvider = null
-        _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = 0, ttsPlayIdx = 0) }
+        _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = 0, ttsPlayIdx = 0,
+            ttsSentenceEnabled = false, ttsSentenceDetecting = false, ttsSentenceStart = -1, ttsSentenceEnd = -1) }
         consecutiveErrors = 0
         playChainActive = true
 
@@ -884,7 +911,8 @@ class ReaderViewModel(
         val offset = s.ttsHighlightOffset
         val highlightIdx = (index - offset).coerceIn(0, maxOf(0, paragraphs.size - 1))
         
-        _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = highlightIdx, ttsPlayIdx = index) }
+        _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = highlightIdx, ttsPlayIdx = index,
+            ttsSentenceEnabled = false, ttsSentenceDetecting = false, ttsSentenceStart = -1, ttsSentenceEnd = -1) }
         consecutiveErrors = 0
         playChainActive = true
 
@@ -924,7 +952,7 @@ class ReaderViewModel(
         playOne(playIdx)
     }
     private fun killPlayChain() { playChainActive = false; currentTTSProvider?.stop(); audioCache.clear() }
-    fun ttsStop() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_stop)); killPlayChain(); _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) } }
+    fun ttsStop() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_stop)); killPlayChain(); _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1, ttsSentenceStart = -1, ttsSentenceEnd = -1) } }
     private var lastToggleTime = 0L
 
     fun togglePlayPause() {
