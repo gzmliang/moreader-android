@@ -102,6 +102,14 @@
     <string name="flashcard_plan_default">Default</string>
     <string name="flashcard_plan_delete">Delete Plan</string>
     <string name="flashcard_plan_delete_confirm">Are you sure you want to delete "%1$s"? All flashcards in this plan will be deleted.</string>
+\n    <!-- Vocabulary Notebook -->
+    <string name="vocab_notebook_pick_title">Choose Notebook</string>
+    <string name="vocab_notebook_create_title">New Notebook</string>
+    <string name="vocab_notebook_create_hint">e.g., Alice, Bob</string>
+    <string name="vocab_notebook_create_btn">Create</string>
+    <string name="vocab_notebook_delete_title">Delete Notebook</string>
+    <string name="vocab_notebook_delete_confirm">Delete notebook "%1$s"? All words will be removed.</string>
+
     <string name="flashcard_plan_delete_title">Delete Plan</string>
     <string name="flashcard_plan_label">Plan</string>
     <string name="flashcard_plan_new">+ New</string>

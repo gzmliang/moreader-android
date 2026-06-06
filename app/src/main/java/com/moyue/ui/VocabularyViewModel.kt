@@ -2,6 +2,7 @@ package com.moyue.app.ui
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.media.MediaPlayer
 import android.net.Uri
 import android.speech.tts.TextToSpeech
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -48,12 +50,29 @@ class VocabularyViewModel(
     private val _isSpeakingWord = MutableStateFlow<Long?>(null)
     val isSpeakingWord: StateFlow<Long?> = _isSpeakingWord.asStateFlow()
 
-    // Plan management
+    // Plan management — persisted via SharedPreferences so created plans survive restarts
+    private val prefsKey = "vocab_notebook_plans"
+    private lateinit var prefs: SharedPreferences
+    private fun initPrefs(context: Context) {
+        if (!::prefs.isInitialized) {
+            prefs = context.getSharedPreferences("moreader_vocab", Context.MODE_PRIVATE)
+            val saved = prefs.getStringSet(prefsKey, setOf(DEFAULT_PLAN)) ?: setOf(DEFAULT_PLAN)
+            _createdPlans.value = saved
+        }
+    }
+
     private val _currentPlan = MutableStateFlow(DEFAULT_PLAN)
     val currentPlan: StateFlow<String> = _currentPlan.asStateFlow()
 
-    val planNames: StateFlow<List<String>> = repository.getPlanNames()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf(DEFAULT_PLAN))
+    // Plans user has created (persisted), separate from DB query
+    private val _createdPlans = MutableStateFlow(setOf(DEFAULT_PLAN))
+
+    val planNames: StateFlow<List<String>> = combine(
+        repository.getPlanNames(),
+        _createdPlans
+    ) { dbPlans, created ->
+        (dbPlans.toSet() + created).sorted()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf(DEFAULT_PLAN))
 
     val vocabulary: StateFlow<List<Vocabulary>> = _currentPlan.flatMapLatest { plan ->
         repository.getVocabularyByPlan(plan)
@@ -61,20 +80,24 @@ class VocabularyViewModel(
 
     fun switchPlan(plan: String) { _currentPlan.value = plan }
 
-    fun createPlan(name: String) {
-        viewModelScope.launch {
-            val trimmed = name.trim()
-            if (trimmed.isEmpty()) return@launch
-            // Create by inserting a dummy word then switching
-            // The plan will appear in getPlanNames() once any vocab exists with it
-            _currentPlan.value = trimmed
-        }
+    fun createPlan(context: Context, name: String) {
+        initPrefs(context)
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        val newSet = _createdPlans.value + trimmed
+        _createdPlans.value = newSet
+        prefs.edit().putStringSet(prefsKey, newSet).apply()
+        _currentPlan.value = trimmed
     }
 
-    fun deletePlan(name: String) {
+    fun deletePlan(context: Context, name: String) {
         if (name == DEFAULT_PLAN) return
+        initPrefs(context)
         viewModelScope.launch {
             repository.deleteVocabularyByPlan(name)
+            val newSet = _createdPlans.value - name
+            _createdPlans.value = newSet
+            prefs.edit().putStringSet(prefsKey, newSet).apply()
             if (_currentPlan.value == name) _currentPlan.value = DEFAULT_PLAN
         }
     }

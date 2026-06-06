@@ -87,6 +87,9 @@ data class ReaderUiState(
     // Vocabulary quick-add from translation
     val showVocabToast: Boolean = false,
     val vocabToastMsg: String = "",
+    // Vocab plan picker (when adding word from book)
+    val showVocabPlanPicker: Boolean = false,
+    val vocabPlanOptions: List<String> = listOf("默认"),
     val showBookmarkPanel: Boolean = false,
     val showHighlightPanel: Boolean = false,
     val currentParagraphIndex: Int = 0,       // 当前阅读/朗读的段落
@@ -1201,25 +1204,42 @@ class ReaderViewModel(
     }
 
     // ===== Vocabulary =====
-    fun addVocabulary() {
+    /** Show plan picker before adding word to vocabulary */
+    fun showVocabPlanPicker() {
+        val s = _uiState.value
+        val text = s.selectedText?.trim() ?: return
+        if (text.isEmpty()) return
+        // Load available plan names from SharedPreferences
+        val vocabPrefs = getApplication<Application>().getSharedPreferences("moreader_vocab", Context.MODE_PRIVATE)
+        val plans = (vocabPrefs.getStringSet("vocab_notebook_plans", setOf("默认")) ?: setOf("默认")).toList().sorted()
+        _uiState.update { it.copy(showVocabPlanPicker = true, vocabPlanOptions = plans) }
+    }
+
+    fun dismissVocabPlanPicker() {
+        _uiState.update { it.copy(showVocabPlanPicker = false) }
+    }
+
+    fun addVocabulary(plan: String) {
         val s = _uiState.value
         val book = s.book ?: return
         val text = s.selectedText?.trim() ?: return
         if (text.isEmpty()) return
+        dismissVocabPlanPicker()
 
         viewModelScope.launch {
             val existing = repository.getVocabularyByWord(text)
             if (existing != null) {
-                _uiState.update { it.copy(showBookmarkToast = true, bookmarkToastMsg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.vocabulary_already_exists)) }
+                _uiState.update { it.copy(showBookmarkToast = true, bookmarkToastMsg = getApplication<Application>().getString(com.moyue.app.R.string.vocabulary_already_exists)) }
             } else {
                 val vocab = Vocabulary(
                     word = text,
+                    plan = plan,
                     bookId = book.id.toLongOrNull(),
                     chapterIndex = s.currentChapterIndex,
                     createdAt = System.currentTimeMillis()
                 )
                 repository.insertVocabulary(vocab)
-                _uiState.update { it.copy(showBookmarkToast = true, bookmarkToastMsg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.vocabulary_added)) }
+                _uiState.update { it.copy(showBookmarkToast = true, bookmarkToastMsg = getApplication<Application>().getString(com.moyue.app.R.string.vocabulary_added) + " → " + plan) }
             }
             delay(2000)
             _uiState.update { it.copy(showBookmarkToast = false) }

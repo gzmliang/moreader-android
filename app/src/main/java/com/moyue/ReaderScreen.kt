@@ -110,6 +110,32 @@ fun ReaderScreen(
     // TTS highlight index
     val ttsHighlightIdx = if (state.currentChapterIndex < state.chapters.size) state.ttsCurrentIdx else -1
 
+    // Vocab notebook plan picker (when adding word from book)
+    if (state.showVocabPlanPicker) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissVocabPlanPicker() },
+            title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocab_notebook_pick_title)) },
+            text = {
+                Column {
+                    state.vocabPlanOptions.forEach { plan ->
+                        val displayName = if (plan == "默认") androidx.compose.ui.res.stringResource(com.moyue.app.R.string.flashcard_plan_default) else plan
+                        TextButton(
+                            onClick = { viewModel.addVocabulary(plan) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(displayName, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissVocabPlanPicker() }) {
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel))
+                }
+            }
+        )
+    }
+
     // Translation result panel (kept as dialog, less frequent)
     if (state.showTranslationPanel) {
         AlertDialog(
@@ -327,7 +353,7 @@ fun ReaderScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             TextButton(
-                                onClick = { viewModel.addVocabulary() },
+                                onClick = { viewModel.showVocabPlanPicker() },
                                 colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF7C4DFF)),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                             ) {
