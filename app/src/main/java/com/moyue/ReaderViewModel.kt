@@ -180,9 +180,7 @@ class ReaderViewModel(
 
     private fun log(msg: String) {
         Log.d(TAG, msg)
-        // Also pull SystemTTSProvider's debug log
-        val sysLog = com.moyue.app.tts.SystemTTSProvider.getDebugLog()
-        _uiState.update { it.copy(ttsDebugLog = sysLog + it.ttsDebugLog + msg + "\n") }
+        _uiState.update { it.copy(ttsDebugLog = it.ttsDebugLog + msg + "\n") }
     }
 
     private fun extractParagraphsFromHtml(html: String): List<String> {
@@ -450,10 +448,13 @@ class ReaderViewModel(
     fun dismissSelectionMenu() { _uiState.update { it.copy(showSelectionMenu = false) } }
     fun toggleTtsDebugLog() { _uiState.update { it.copy(showTtsDebugLog = !it.showTtsDebugLog) } }
     fun copyTtsDebugLog() {
-        val log = _uiState.value.ttsDebugLog
+        val vmLog = _uiState.value.ttsDebugLog
+        val sysLog = com.moyue.app.tts.SystemTTSProvider.getDebugLog()
+        val combined = if (sysLog.isNotEmpty()) "=== SystemTTS ===\n$sysLog\n=== ViewModel ===\n$vmLog" else vmLog
+        val safe = if (combined.length > 900_000) combined.take(900_000) + "\n... (truncated)" else combined
         val clipboard = getApplication<android.app.Application>()
             .getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("TTS Log", log))
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("TTS Log", safe))
     }
     fun translate(mode: String = "translate") {
         val t = _uiState.value.selectedText ?: return
@@ -823,6 +824,9 @@ class ReaderViewModel(
     }
 
     fun readChapter() {
+        // Clear logs for fresh session
+        com.moyue.app.tts.SystemTTSProvider.clearDebugLog()
+        _uiState.update { it.copy(ttsDebugLog = "") }
         log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_full_read))
         playChainActive = true
         val s = _uiState.value
@@ -848,6 +852,8 @@ class ReaderViewModel(
 
     /** Read from a specific paragraph index */
     fun readFromParagraph(index: Int) {
+        com.moyue.app.tts.SystemTTSProvider.clearDebugLog()
+        _uiState.update { it.copy(ttsDebugLog = "") }
         log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_read_from_paragraph, index + 1))
         playChainActive = true
         val s = _uiState.value

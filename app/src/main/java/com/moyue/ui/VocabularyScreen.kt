@@ -318,7 +318,7 @@ fun VocabularyScreen(
         },
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.vocabulary_title), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 18.sp) },
+                title = { Text(stringResource(R.string.vocabulary_title), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 18.sp, softWrap = false, modifier = Modifier.fillMaxWidth()) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
