@@ -214,10 +214,17 @@ class SystemTTSProvider(context: Context) : TTSProvider {
         }
     }
 
+    // Cache last language to avoid unnecessary setLanguage() calls.
+    // Frequent language switching between utterances can suppress
+    // onRangeStart callbacks in Google TTS.
+    private var cachedLocale: Locale? = null
+
     private fun setLanguageForText(text: String) {
         val tts = globalTts ?: return
         val hasChinese = text.any { it.code in 0x4E00..0x9FFF }
         val target = if (hasChinese) Locale.CHINA else Locale.US
+        if (target == cachedLocale) return  // Skip if unchanged
+        cachedLocale = target
         val result = tts.setLanguage(target)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
             tts.language = Locale.getDefault()
