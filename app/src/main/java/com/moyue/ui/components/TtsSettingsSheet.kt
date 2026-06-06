@@ -127,10 +127,10 @@ fun TtsSettingsSheet(
         shadowElevation = 8.dp,
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Column(Modifier.fillMaxWidth().padding(12.dp).verticalScroll(rememberScrollState())) {
-            // === Header ===
+        Column(Modifier.fillMaxWidth()) {
+            // === Header (fixed, not scrollable) ===
             Row(
-                Modifier.fillMaxWidth(),
+                Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -148,7 +148,9 @@ fun TtsSettingsSheet(
             }
             Spacer(Modifier.height(8.dp))
 
-            // === Engine + Speed (compact) ===
+            // Scrollable content
+            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).verticalScroll(rememberScrollState())) {
+                // === Engine + Speed (compact) ===
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
@@ -828,6 +830,7 @@ fun TtsSettingsSheet(
                 }
             }
             Spacer(Modifier.height(12.dp))
+            }
         }
     }
 }

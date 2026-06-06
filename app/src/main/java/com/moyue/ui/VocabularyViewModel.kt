@@ -58,6 +58,26 @@ class VocabularyViewModel(
         }
     }
 
+    fun addCustomWord(word: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val trimmed = word.trim()
+            if (trimmed.isEmpty()) {
+                onResult(false, "单词不能为空 / Word cannot be empty")
+                return@launch
+            }
+            if (repository.isWordExists(trimmed)) {
+                onResult(false, "单词已在生词本中 / Word already in vocabulary")
+                return@launch
+            }
+            val vocab = com.moyue.app.data.models.Vocabulary(
+                word = trimmed,
+                createdAt = System.currentTimeMillis()
+            )
+            repository.insertVocabulary(vocab)
+            onResult(true, "已添加 / Added")
+        }
+    }
+
     private fun ensureSystemTts(context: Context): TextToSpeech? {
         systemTtsInitLock.lock()
         try {

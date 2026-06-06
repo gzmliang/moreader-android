@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
@@ -56,6 +57,10 @@ fun VocabularyScreen(
     var showPlanPicker by remember { mutableStateOf(false) }
     var pendingImportWords by remember { mutableStateOf<List<Vocabulary>>(emptyList()) }
     var importPlanOptions by remember { mutableStateOf<List<String>>(listOf(context.getString(com.moyue.app.R.string.flashcard_plan_default))) }
+
+    // Custom word add dialog
+    var showAddDialog by remember { mutableStateOf(false) }
+    var addWordText by remember { mutableStateOf("") }
     
     // Load plan options when picker is about to show
     fun openPlanPicker(words: List<Vocabulary>) {
@@ -127,6 +132,49 @@ fun VocabularyScreen(
         )
     }
 
+    // Add word dialog
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showAddDialog = false
+                addWordText = ""
+            },
+            title = { Text(stringResource(R.string.add_word)) },
+            text = {
+                OutlinedTextField(
+                    value = addWordText,
+                    onValueChange = { addWordText = it },
+                    label = { Text(stringResource(R.string.add_word)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.addCustomWord(addWordText) { success, message ->
+                            scope.launch {
+                                snackbarHostState.showSnackbar(message)
+                            }
+                        }
+                        showAddDialog = false
+                        addWordText = ""
+                    }
+                ) {
+                    Text(stringResource(R.string.action_add))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showAddDialog = false
+                    addWordText = ""
+                }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        )
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
@@ -180,7 +228,14 @@ fun VocabularyScreen(
                 actions = {
                     // Select mode toggle
                     if (!isSelectMode) {
-                        // Batch import ALL to flashcards
+                        // Add custom word
+                    IconButton(onClick = {
+                        addWordText = ""
+                        showAddDialog = true
+                    }) {
+                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_word))
+                    }
+                    // Batch import ALL to flashcards
                         IconButton(onClick = { openPlanPicker(vocabulary) }) {
                             Icon(Icons.Default.Bolt, contentDescription = stringResource(R.string.flashcard_batch_import))
                         }

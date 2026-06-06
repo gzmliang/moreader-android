@@ -632,13 +632,36 @@ class ReaderViewModel(
 
     /** Speak arbitrary text (used by translation panel speaker button) */
     fun speakTranslationText(text: String) {
-        val p = recreateProvider() ?: return
+        // Use flashcard TTS provider setting instead of reader TTS
+        val prefs = getApplication<android.app.Application>().getSharedPreferences("moreader_config", android.content.Context.MODE_PRIVATE)
+        val flashcardProvider = prefs.getString("flashcard_tts_provider", "edge_tts") ?: "edge_tts"
+        val ttsType = try { TTSProviderType.valueOf(flashcardProvider) } catch (e: IllegalArgumentException) { TTSProviderType.EDGE_TTS }
+
+        val provider = when (ttsType) {
+            TTSProviderType.SYSTEM -> {
+                val ctx = activityContext ?: getApplication()
+                SystemTTSProvider(ctx)
+            }
+            TTSProviderType.EDGE_TTS -> {
+                val endpoint = _uiState.value.edgeTtsEndpoint
+                val voice = _uiState.value.edgeTtsVoice
+                EdgeTTSProvider(endpoint, voice)
+            }
+            TTSProviderType.AI_VOICE -> {
+                val s = _uiState.value
+                AIVoiceTTSProvider(s.aiVoiceEndpoint, s.aiVoiceApiKey, s.aiVoiceModel, s.aiVoiceId)
+            }
+            TTSProviderType.CUSTOM_TTS -> {
+                val s = _uiState.value
+                CustomTTSProvider(s.customTtsEndpoint, s.customTtsApiKey, s.customTtsModel, s.customTtsVoice)
+            }
+        }
         viewModelScope.launch {
             withContext(kotlinx.coroutines.Dispatchers.IO) {
-                p.speak(text, _uiState.value.ttsSpeed, object : TTSListener {
+                provider.speak(text, _uiState.value.ttsSpeed, object : TTSListener {
                     override fun onStart() {}
-                    override fun onDone() {}
-                    override fun onError(msg: String) {}
+                    override fun onDone() { provider.destroy() }
+                    override fun onError(msg: String) { provider.destroy() }
                 })
             }
         }
