@@ -787,6 +787,7 @@ class ReaderViewModel(
         val listener = object : TTSListener {
             private var sentenceJob: Job? = null
             override fun onStart() {
+                com.moyue.app.tts.SystemTTSProvider.appendDebugLog("VM:onStart idx=$idx sentences=${text.split(Regex("(?<=[.!?])\\s+")).filter { it.isNotBlank() }.size}")
                 _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx) }
                 log("[TTS.ch] ▶ P${idx + 1}/${paragraphs.size} ${text.take(30)}...")
 
@@ -795,8 +796,10 @@ class ReaderViewModel(
                 val sentences = text.split(Regex("(?<=[.!?])\\s+")).filter { it.isNotBlank() }
                 if (sentences.size <= 1) {
                     _uiState.update { it.copy(ttsSentenceIdx = 0, ttsSentenceCount = 1) }
+                    com.moyue.app.tts.SystemTTSProvider.appendDebugLog("VM:set ttsSentenceIdx=0 (single sentence)")
                 } else {
                     _uiState.update { it.copy(ttsSentenceIdx = 0, ttsSentenceCount = sentences.size) }
+                    com.moyue.app.tts.SystemTTSProvider.appendDebugLog("VM:set ttsSentenceIdx=0 (${sentences.size} sentences, starting coroutine)")
                     sentenceJob = viewModelScope.launch {
                         val charsPerSec = (15f * speed).coerceAtLeast(8f)
                         for (i in 1 until sentences.size) {
