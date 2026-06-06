@@ -88,6 +88,7 @@ fun VocabularyScreen(
                     FilterChip(
                         selected = isSelected,
                         onClick = { viewModel.switchPlan(plan) },
+                        modifier = Modifier.height(28.dp),
                         label = {
                             Text(
                                 if (plan == "默认") stringResource(R.string.flashcard_plan_default) else plan,
@@ -99,12 +100,11 @@ fun VocabularyScreen(
                         },
                         trailingIcon = if (isSelected && plan != "默认") {
                             {
-                                IconButton(
-                                    onClick = { showDeletePlanDialog = true },
-                                    modifier = Modifier.size(14.dp),
-                                ) {
-                                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(10.dp))
-                                }
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = stringResource(R.string.flashcard_plan_delete),
+                                    modifier = Modifier.size(14.dp).clickable { showDeletePlanDialog = true }
+                                )
                             }
                         } else null,
                     )
