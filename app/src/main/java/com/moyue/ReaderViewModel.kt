@@ -788,32 +788,68 @@ class ReaderViewModel(
             // Sentence boundaries: cumulative character offsets for each sentence end.
             // e.g. [50, 120, 200] means 3 sentences ending at chars 50, 120, 200.
             private var sentenceEnds: IntArray = intArrayOf()
+            // onRangeStart auto-detection + estimation fallback
+            private var rangesReceived = false
+            private var estJob: Job? = null
+            private var detectJob: Job? = null
 
             override fun onStart() {
                 _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx) }
                 log("[TTS.ch] ▶ P${idx + 1}/${paragraphs.size} ${text.take(30)}...")
 
-                // Split paragraph into sentences for onRangeStart-driven tracking
+                // Clean up previous paragraph's jobs
+                estJob?.cancel(); detectJob?.cancel()
+                rangesReceived = false
+
                 val sentences = text.split(Regex("(?<=[.!?])\\s+")).filter { it.isNotBlank() }
                 if (sentences.size <= 1) {
                     sentenceEnds = intArrayOf(text.length)
                     _uiState.update { it.copy(ttsSentenceIdx = 0, ttsSentenceCount = 1) }
                 } else {
-                    // Build cumulative end offsets: [s0.end, s0+s1.end, ...]
                     sentenceEnds = IntArray(sentences.size)
                     var cum = 0
                     for (i in sentences.indices) {
                         cum += sentences[i].length
-                        // Account for the whitespace between sentences from split
                         sentenceEnds[i] = cum
                     }
                     _uiState.update { it.copy(ttsSentenceIdx = 0, ttsSentenceCount = sentences.size) }
+
+                    // Detect onRangeStart: wait 2.5s for first callback.
+                    // If none → fall back to character-count estimation.
+                    detectJob = viewModelScope.launch {
+                        delay(2500L)
+                        if (!rangesReceived) {
+                            log("[SENT] P${idx + 1} onRangeStart N/A — using estimation")
+                            startEstimation(sentences, idx, speed)
+                        }
+                    }
+                }
+            }
+
+            /** Character-count-based sentence advancement for engines
+             *  that don't support onRangeStart (Edge TTS, Oppo, etc.) */
+            private fun startEstimation(sentences: List<String>, paraIdx: Int, spd: Float) {
+                estJob = viewModelScope.launch {
+                    val charsPerSec = (15f * spd).coerceAtLeast(8f)
+                    for (i in 1 until sentences.size) {
+                        val prevChars = sentences[i - 1].length
+                        val delayMs = (prevChars / charsPerSec * 1000).toLong().coerceIn(200, 8000)
+                        delay(delayMs)
+                        if (!playChainActive) break
+                        _uiState.update { it.copy(ttsSentenceIdx = i) }
+                        log("[SENT:est] P${paraIdx + 1} #$i/${sentences.size}")
+                    }
                 }
             }
 
             override fun onRange(start: Int, end: Int) {
+                if (!rangesReceived) {
+                    rangesReceived = true
+                    detectJob?.cancel()  // onRangeStart works — cancel estimation detection
+                    estJob?.cancel()     // Cancel any running estimation
+                    estJob = null
+                }
                 if (sentenceEnds.isEmpty()) return
-                // Find which sentence contains 'start' by scanning cumulative ends
                 var sentIdx = 0
                 while (sentIdx < sentenceEnds.size - 1 && sentenceEnds[sentIdx] <= start) {
                     sentIdx++
@@ -826,6 +862,7 @@ class ReaderViewModel(
             }
 
             override fun onDone() {
+                estJob?.cancel(); detectJob?.cancel()
                 sentenceEnds = intArrayOf()
                 consecutiveErrors = 0
                 _uiState.update { it.copy(ttsSentenceIdx = -1, ttsSentenceCount = 0) }
@@ -834,6 +871,7 @@ class ReaderViewModel(
             }
 
             override fun onError(msg: String) {
+                estJob?.cancel(); detectJob?.cancel()
                 sentenceEnds = intArrayOf()
                 _uiState.update { it.copy(ttsSentenceIdx = -1, ttsSentenceCount = 0) }
                 log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg))
