@@ -792,6 +792,8 @@ class ReaderViewModel(
             private var rangesReceived = false
             private var estJob: Job? = null
             private var detectJob: Job? = null
+            // Word boundaries from Edge TTS server (received before onStart)
+            private var pendingBoundaries: List<WordBoundary>? = null
 
             override fun onStart() {
                 _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = idx) }
@@ -814,16 +816,26 @@ class ReaderViewModel(
                     }
                     _uiState.update { it.copy(ttsSentenceIdx = 0, ttsSentenceCount = sentences.size) }
 
-                    // Detect onRangeStart: wait 2.5s for first callback.
-                    // If none → fall back to character-count estimation.
-                    detectJob = viewModelScope.launch {
-                        delay(2500L)
-                        if (!rangesReceived) {
-                            log("[SENT] P${idx + 1} onRangeStart N/A — using estimation")
-                            startEstimation(sentences, idx, speed)
+                    // Check if we have pending word boundaries from Edge TTS
+                    val wb = pendingBoundaries
+                    if (wb != null && wb.isNotEmpty()) {
+                        pendingBoundaries = null
+                        rangesReceived = true
+                        log("[SENT] P${idx + 1} 🎯 ${wb.size} word boundaries (Edge TTS)")
+                        startWordBoundaryTracking(wb, idx)
+                    } else {
+                        // Detect onRangeStart: wait 2.5s for first callback.
+                        // If none → fall back to character-count estimation.
+                        detectJob = viewModelScope.launch {
+                            delay(2500L)
+                            if (!rangesReceived) {
+                                log("[SENT] P${idx + 1} onRangeStart N/A — using estimation")
+                                startEstimation(sentences, idx, speed)
+                            }
                         }
                     }
                 }
+                pendingBoundaries = null
             }
 
             /** Character-count-based sentence advancement for engines
@@ -840,6 +852,34 @@ class ReaderViewModel(
                         log("[SENT:est] P${paraIdx + 1} #$i/${sentences.size}")
                     }
                 }
+            }
+
+            /** Word-boundary-driven sentence advancement for Edge TTS.
+             *  Uses precise word-level timing from the server to schedule
+             *  sentence transitions — no estimation, no MediaPlayer polling. */
+            private fun startWordBoundaryTracking(boundaries: List<WordBoundary>, paraIdx: Int) {
+                if (sentenceEnds.size <= 1 || boundaries.isEmpty()) return
+                // For each sentence (1..N-1), find the first word in that sentence
+                // and schedule a transition at that word's offset_ms.
+                estJob = viewModelScope.launch {
+                    var prevMs = 0L
+                    for (sentIdx in 1 until sentenceEnds.size) {
+                        val sentStart = sentenceEnds[sentIdx - 1]  // char offset
+                        val firstWord = boundaries.find { it.charStart >= sentStart }
+                        val targetMs = firstWord?.offsetMs?.toLong() ?: break
+                        val waitMs = (targetMs - prevMs).coerceAtLeast(50)
+                        delay(waitMs)
+                        if (!playChainActive) break
+                        _uiState.update { it.copy(ttsSentenceIdx = sentIdx) }
+                        log("[SENT:wb] P${paraIdx + 1} #$sentIdx/${sentenceEnds.size} @${targetMs}ms")
+                        prevMs = targetMs
+                    }
+                }
+            }
+
+            override fun onWordBoundaries(boundaries: List<WordBoundary>) {
+                // Store for onStart to process after sentenceEnds is computed
+                pendingBoundaries = boundaries
             }
 
             override fun onRange(start: Int, end: Int) {

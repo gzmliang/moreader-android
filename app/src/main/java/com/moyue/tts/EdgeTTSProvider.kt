@@ -54,7 +54,7 @@ class EdgeTTSProvider(
     }
 
     /**
-     * Download audio and play via MediaPlayer
+     * Download audio + word boundaries and play via MediaPlayer.
      * rate: 0.5-2.0, mapped to Edge TTS rate format: -50% to +100%
      */
     override fun speak(text: String, rate: Float, listener: TTSListener) {
@@ -76,7 +76,7 @@ class EdgeTTSProvider(
 
         val body = json.toString().toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
-            .url("${endpoint.removeSuffix("/")}/tts")
+            .url("${endpoint.removeSuffix("/")}/tts_with_boundaries")
             .post(body)
             .apply { if (apiKey.isNotEmpty()) addHeader("X-API-Key", apiKey) }
             .build()
@@ -89,6 +89,14 @@ class EdgeTTSProvider(
             override fun onResponse(call: Call, response: Response) {
                 if (!response.isSuccessful) { listener.onError("Edge TTS HTTP ${response.code}"); return }
                 val blob = response.body?.bytes() ?: run { listener.onError("Empty response"); return }
+
+                // Parse word boundaries from response header
+                val wbHeader = response.header("X-Word-Boundaries") ?: ""
+                val boundaries = parseWordBoundaries(wbHeader)
+                if (boundaries.isNotEmpty()) {
+                    listener.onWordBoundaries(boundaries)
+                }
+
                 listener.onStart()
                 playAudio(blob, listener)
             }
