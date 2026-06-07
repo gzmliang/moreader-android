@@ -52,6 +52,28 @@ class VocabularyViewModel(
             initialValue = emptyList()
         )
 
+    /**
+     * Add a custom word (typed by user) to vocabulary without requiring a book.
+     * Returns true if added, false if already exists.
+     */
+    fun addCustomWord(word: String, callback: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val trimmed = word.trim()
+            if (trimmed.isEmpty()) { callback(false, "请输入单词"); return@launch }
+            val exists = repository.isWordExists(trimmed)
+            if (exists) {
+                callback(false, "单词已在生词本中")
+                return@launch
+            }
+            val vocab = Vocabulary(
+                word = trimmed,
+                createdAt = System.currentTimeMillis()
+            )
+            repository.insertVocabulary(vocab)
+            callback(true, "已添加：$trimmed")
+        }
+    }
+
     fun deleteVocabulary(id: Long) {
         viewModelScope.launch {
             repository.deleteVocabulary(id)

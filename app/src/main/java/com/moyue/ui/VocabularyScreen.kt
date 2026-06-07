@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
@@ -47,6 +48,10 @@ fun VocabularyScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var showExportMenu by remember { mutableStateOf(false) }
+    
+    // Custom add word dialog
+    var showAddCustomDialog by remember { mutableStateOf(false) }
+    var customWordInput by remember { mutableStateOf("") }
     
     // Multi-select mode for import
     var isSelectMode by remember { mutableStateOf(false) }
@@ -127,6 +132,39 @@ fun VocabularyScreen(
         )
     }
 
+    // Custom add word dialog
+    if (showAddCustomDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddCustomDialog = false; customWordInput = "" },
+            title = { Text(stringResource(R.string.vocabulary_add_custom_title)) },
+            text = {
+                OutlinedTextField(
+                    value = customWordInput,
+                    onValueChange = { customWordInput = it },
+                    placeholder = { Text(stringResource(R.string.vocabulary_add_custom_hint)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val word = customWordInput.trim()
+                    if (word.isEmpty()) {
+                        scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.vocabulary_add_custom_empty)) }
+                    } else {
+                        viewModel.addCustomWord(word) { success, msg ->
+                            scope.launch { snackbarHostState.showSnackbar(msg) }
+                            if (success) { showAddCustomDialog = false; customWordInput = "" }
+                        }
+                    }
+                }) { Text(stringResource(android.R.string.ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddCustomDialog = false; customWordInput = "" }) { Text(stringResource(android.R.string.cancel)) }
+            }
+        )
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
@@ -180,6 +218,10 @@ fun VocabularyScreen(
                 actions = {
                     // Select mode toggle
                     if (!isSelectMode) {
+                        // Custom add word
+                        IconButton(onClick = { customWordInput = ""; showAddCustomDialog = true }) {
+                            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.vocabulary_add_custom))
+                        }
                         // Batch import ALL to flashcards
                         IconButton(onClick = { openPlanPicker(vocabulary) }) {
                             Icon(Icons.Default.Bolt, contentDescription = stringResource(R.string.flashcard_batch_import))

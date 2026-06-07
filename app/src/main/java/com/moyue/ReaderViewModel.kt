@@ -632,14 +632,46 @@ class ReaderViewModel(
 
     /** Speak arbitrary text (used by translation panel speaker button) */
     fun speakTranslationText(text: String) {
-        val p = recreateProvider() ?: return
+        // Use the flashcard/vocabulary TTS setting for dictionary pronunciation,
+        // so the pronunciation engine is consistent with the word book settings.
+        val prefs = getApplication<android.app.Application>()
+            .getSharedPreferences("moreader_config", android.content.Context.MODE_PRIVATE)
+        val flashcardProviderStr = prefs.getString("flashcard_tts_provider", "edge_tts") ?: "edge_tts"
+        val ttsType = try { TTSProviderType.valueOf(flashcardProviderStr) }
+            catch (e: IllegalArgumentException) { TTSProviderType.EDGE_TTS }
+        val s = _uiState.value
+
+        // If flashcard TTS type matches the reader's current provider, reuse the cached provider
+        val p = if (ttsType == s.ttsProvider) {
+            recreateProvider()
+        } else {
+            // Create a one-off provider for dictionary pronunciation
+            currentTTSProvider?.let { if (it is com.moyue.app.tts.SystemTTSProvider) null else it }
+            ?: createDictProvider(ttsType)
+        }
+        if (p == null) return
+
         viewModelScope.launch {
             withContext(kotlinx.coroutines.Dispatchers.IO) {
-                p.speak(text, _uiState.value.ttsSpeed, object : TTSListener {
+                p.speak(text, s.ttsSpeed, object : TTSListener {
                     override fun onStart() {}
                     override fun onDone() {}
                     override fun onError(msg: String) {}
                 })
+            }
+        }
+    }
+
+    /** Create a lightweight one-off TTS provider for dictionary pronunciation */
+    private fun createDictProvider(ttsType: TTSProviderType): com.moyue.app.tts.TTSProvider? {
+        val s = _uiState.value
+        return when (ttsType) {
+            TTSProviderType.EDGE_TTS -> com.moyue.app.tts.EdgeTTSProvider(s.edgeTtsEndpoint, s.edgeTtsVoice)
+            TTSProviderType.AI_VOICE -> com.moyue.app.tts.AIVoiceTTSProvider(s.aiVoiceEndpoint, s.aiVoiceApiKey, s.aiVoiceModel, s.aiVoiceId)
+            TTSProviderType.CUSTOM_TTS -> com.moyue.app.tts.CustomTTSProvider(s.customTtsEndpoint, s.customTtsApiKey, s.customTtsModel, s.customTtsVoice)
+            TTSProviderType.SYSTEM -> {
+                val ctx = activityContext ?: getApplication()
+                com.moyue.app.tts.SystemTTSProvider(ctx)
             }
         }
     }

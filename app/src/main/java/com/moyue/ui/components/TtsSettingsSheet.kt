@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.background
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -127,26 +128,14 @@ fun TtsSettingsSheet(
         shadowElevation = 8.dp,
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Column(Modifier.fillMaxWidth().padding(12.dp).verticalScroll(rememberScrollState())) {
-            // === Header ===
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+        Box(Modifier.fillMaxWidth()) {
+            // ── Scrollable content (below the floating header) ──
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 12.dp, end = 12.dp, top = 52.dp, bottom = 12.dp)
             ) {
-                Text(
-                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_settings),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                )
-                IconButton(onClick = onClose) {
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close),
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
 
             // === Engine + Speed (compact) ===
             Row(
@@ -828,6 +817,28 @@ fun TtsSettingsSheet(
                 }
             }
             Spacer(Modifier.height(12.dp))
+        }
+        // ── Floating header (always visible, overlays content) ──
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_settings),
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+            )
+            IconButton(onClick = onClose) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close),
+                )
+            }
+        }
         }
     }
 }

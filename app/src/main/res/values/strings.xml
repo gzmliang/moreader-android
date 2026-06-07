@@ -270,6 +270,11 @@ AI Voice（云端 TTS）：
     <!-- Vocabulary -->
     <string name="vocabulary_title">生词本</string>
     <string name="vocabulary_empty">暂无单词</string>
+    <string name="vocabulary_add_custom">手动添加</string>
+    <string name="vocabulary_add_custom_title">添加单词</string>
+    <string name="vocabulary_add_custom_hint">输入要添加的单词</string>
+    <string name="vocabulary_add_custom_success">已添加：%1$s</string>
+    <string name="vocabulary_add_custom_empty">请输入单词</string>
     <string name="vocabulary_add">加入生词本</string>
     <string name="vocabulary_added">已添加到生词本</string>
     <string name="vocabulary_already_exists">单词已在生词本中</string>

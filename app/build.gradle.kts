@@ -13,8 +13,8 @@ android {
         applicationId = "com.moyue.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 41
-        versionName = "2.4.1"
+        versionCode = 77
+        versionName = "2.6.9"
 
         // Local AI NDK config
         externalNativeBuild {
@@ -27,14 +27,26 @@ android {
         }
     }
 
+    // Consistent signing key for all builds
+    signingConfigs {
+        create("moreader") {
+            storeFile = file("../moreader.keystore")
+            storePassword = "moreader"
+            keyAlias = "moreader"
+            keyPassword = "moreader"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("moreader")
         }
         debug {
             isDebuggable = true
+            signingConfig = signingConfigs.getByName("moreader")
         }
     }
 
