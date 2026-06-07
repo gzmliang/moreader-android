@@ -9,7 +9,7 @@ import com.moyue.app.data.models.Bookmark
 import com.moyue.app.data.models.Highlight
 import com.moyue.app.data.models.Vocabulary
 
-@Database(entities = [Book::class, Bookmark::class, Highlight::class, Vocabulary::class], version = 7, exportSchema = false)
+@Database(entities = [Book::class, Bookmark::class, Highlight::class, Vocabulary::class], version = 8, exportSchema = false)
 abstract class BookDatabase : RoomDatabase() {
     abstract fun bookDao(): BookDao
     abstract fun bookmarkDao(): BookmarkDao
@@ -27,7 +27,7 @@ abstract class BookDatabase : RoomDatabase() {
                     BookDatabase::class.java,
                     "moreader.db"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance

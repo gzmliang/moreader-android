@@ -137,3 +137,47 @@ cd /tmp/apk-server && python3 -m http.server 9999 --bind 0.0.0.0
 - `TTS-ARCHITECTURE.md` — 完整架构（技能系统: `moreader-tts-architecture`）
 - `android-tts-system` 技能 — System TTS onRangeStart 详细实现
 - `android-tts-debugging` 技能 — 50 个踩坑记录
+
+---
+
+## V20003 — 多生词本功能 (2026-06-07)
+
+基于 **tingshu 测试版** 已验证方案实现，共修改 11 个文件。
+
+### 功能
+
+| 功能 | 说明 |
+|:---|:---|
+| 阅读中加词选本 | 选中单词 → [+] 或 📖 → 弹出「选择生词本」→ 选本保存 |
+| 生词本页面切换 | 顶部横向 chips 显示所有生词本，点击切换过滤 |
+| 新建生词本 | chips 右侧 "+" → 输入名字 → 创建 |
+| 删除生词本 | 选中 chip 上的 × → 确认 → 删除该本及其中所有单词 |
+| 手动添加单词 | 生词本页面顶栏 Add 按钮 → 归入当前选中的本 |
+| 加词带翻译 | 翻译面板 [+] 加词时自动附带翻译结果 |
+
+### 数据层
+
+| 文件 | 改动 |
+|:---|:---|
+| `Vocabulary.kt` | 新增 `plan` 字段（默认"默认"） |
+| `VocabularyDao.kt` | 新增 5 个 plan 查询方法 |
+| `BookRepository.kt` | 新增 5 个 plan 委托方法 |
+| `BookDatabase.kt` | 版本 7→8，加 MIGRATION_7_8 |
+| `Migrations.kt` | 新增 MIGRATION_7_8：`ALTER TABLE vocabulary ADD COLUMN plan` |
+
+### UI 层
+
+| 文件 | 改动 |
+|:---|:---|
+| `VocabularyViewModel.kt` | plan 管理：currentPlan/planNames/switchPlan/createPlan/deletePlan |
+| `VocabularyScreen.kt` | plan 选择器 chips + 新建/删除生词本对话框 + 添加单词对话框 |
+| `ReaderUiState` | 新增 `showVocabPlanPicker` + `vocabPlanOptions` |
+| `ReaderViewModel.kt` | `showVocabPlanPicker`/`dismissVocabPlanPicker`/`addVocabulary(plan)`，加词时附带翻译 |
+| `ReaderScreen.kt` | 生词本选择 AlertDialog，两个加词按钮改为显式选本 |
+| `strings.xml` (中+英) | 新增 7 个 vocab_notebook 字符串 + `add_word` |
+
+### 技术细节
+
+- Plan 列表存入 SharedPreferences (`moreader_vocab`)，单词 plan 存入 Room DB
+- 向后兼容：MIGRATION_7_8 给旧数据自动设 `plan='默认'`
+- `vocabulary` 改为 `_currentPlan.flatMapLatest { repository.getVocabularyByPlan(it) }` 动态过滤

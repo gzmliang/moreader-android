@@ -94,3 +94,10 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         database.execSQL("ALTER TABLE books ADD COLUMN ttsSpeed REAL NOT NULL DEFAULT 1.0")
     }
 }
+
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        // Add plan/notebook column to vocabulary table
+        database.execSQL("ALTER TABLE vocabulary ADD COLUMN plan TEXT NOT NULL DEFAULT '默认'")
+    }
+}

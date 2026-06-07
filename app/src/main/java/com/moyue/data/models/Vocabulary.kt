@@ -21,6 +21,8 @@ data class Vocabulary(
     val wordForms: String? = null,
     // Example sentence: JSON {"text": "...", "translation": "..."}
     val exampleJson: String? = null,
+    // Plan / notebook (多生词本)
+    val plan: String = "默认",
     // --- Legacy fields (kept for migration) ---
     val definition: String? = null,
     val example: String? = null,

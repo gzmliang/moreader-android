@@ -3,7 +3,9 @@ package com.moyue.app.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -11,6 +13,7 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.VolumeUp
@@ -44,14 +47,12 @@ fun VocabularyScreen(
 ) {
     val vocabulary by viewModel.vocabulary.collectAsStateWithLifecycle()
     val speakingWordId by viewModel.isSpeakingWord.collectAsStateWithLifecycle()
+    val currentPlan by viewModel.currentPlan.collectAsStateWithLifecycle()
+    val planNames by viewModel.planNames.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var showExportMenu by remember { mutableStateOf(false) }
-    
-    // Custom add word dialog
-    var showAddCustomDialog by remember { mutableStateOf(false) }
-    var customWordInput by remember { mutableStateOf("") }
     
     // Multi-select mode for import
     var isSelectMode by remember { mutableStateOf(false) }
@@ -61,6 +62,69 @@ fun VocabularyScreen(
     var showPlanPicker by remember { mutableStateOf(false) }
     var pendingImportWords by remember { mutableStateOf<List<Vocabulary>>(emptyList()) }
     var importPlanOptions by remember { mutableStateOf<List<String>>(listOf(context.getString(com.moyue.app.R.string.flashcard_plan_default))) }
+
+    // Custom word add dialog
+    var showAddDialog by remember { mutableStateOf(false) }
+    var addWordText by remember { mutableStateOf("") }
+
+    // Vocab notebook plan dialogs
+    var showNewPlanDialog by remember { mutableStateOf(false) }
+    var showDeletePlanDialog by remember { mutableStateOf(false) }
+    var planNameInput by remember { mutableStateOf("") }
+
+    // Notebook PlanSelector
+    @Composable
+    fun VocabPlanSelector() {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(planNames) { plan ->
+                    val isSelected = plan == currentPlan
+                    Surface(
+                        onClick = { viewModel.switchPlan(plan) },
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        tonalElevation = if (isSelected) 2.dp else 0.dp,
+                        modifier = Modifier.height(28.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(start = 12.dp, end = if (isSelected && plan != "默认") 6.dp else 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                if (plan == "默认") stringResource(R.string.flashcard_plan_default) else plan,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (isSelected && plan != "默认") {
+                                Spacer(Modifier.width(2.dp))
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = stringResource(R.string.flashcard_plan_delete),
+                                    modifier = Modifier.size(14.dp).clickable { showDeletePlanDialog = true },
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            FilledTonalIconButton(
+                onClick = { planNameInput = ""; showNewPlanDialog = true },
+                modifier = Modifier.size(32.dp),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.flashcard_plan_new), modifier = Modifier.size(16.dp))
+            }
+        }
+    }
     
     // Load plan options when picker is about to show
     fun openPlanPicker(words: List<Vocabulary>) {
@@ -132,35 +196,89 @@ fun VocabularyScreen(
         )
     }
 
-    // Custom add word dialog
-    if (showAddCustomDialog) {
+    // Add word dialog
+    if (showAddDialog) {
         AlertDialog(
-            onDismissRequest = { showAddCustomDialog = false; customWordInput = "" },
-            title = { Text(stringResource(R.string.vocabulary_add_custom_title)) },
+            onDismissRequest = {
+                showAddDialog = false
+                addWordText = ""
+            },
+            title = { Text(stringResource(R.string.add_word)) },
             text = {
                 OutlinedTextField(
-                    value = customWordInput,
-                    onValueChange = { customWordInput = it },
-                    placeholder = { Text(stringResource(R.string.vocabulary_add_custom_hint)) },
+                    value = addWordText,
+                    onValueChange = { addWordText = it },
+                    label = { Text(stringResource(R.string.add_word)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.addCustomWord(addWordText) { success, message ->
+                            scope.launch {
+                                snackbarHostState.showSnackbar(message)
+                            }
+                        }
+                        showAddDialog = false
+                        addWordText = ""
+                    }
+                ) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showAddDialog = false
+                    addWordText = ""
+                }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        )
+    }
+
+    // New vocab notebook dialog
+    if (showNewPlanDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewPlanDialog = false },
+            title = { Text(stringResource(R.string.vocab_notebook_create_title)) },
+            text = {
+                OutlinedTextField(
+                    value = planNameInput,
+                    onValueChange = { planNameInput = it },
+                    placeholder = { Text(stringResource(R.string.vocab_notebook_create_hint)) },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    val word = customWordInput.trim()
-                    if (word.isEmpty()) {
-                        scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.vocabulary_add_custom_empty)) }
-                    } else {
-                        viewModel.addCustomWord(word) { success, msg ->
-                            scope.launch { snackbarHostState.showSnackbar(msg) }
-                            if (success) { showAddCustomDialog = false; customWordInput = "" }
-                        }
+                    if (planNameInput.isNotBlank()) {
+                        viewModel.createPlan(context, planNameInput.trim())
+                        showNewPlanDialog = false
+                        planNameInput = ""
                     }
-                }) { Text(stringResource(android.R.string.ok)) }
+                }) { Text(stringResource(R.string.vocab_notebook_create_btn)) }
             },
             dismissButton = {
-                TextButton(onClick = { showAddCustomDialog = false; customWordInput = "" }) { Text(stringResource(android.R.string.cancel)) }
+                TextButton(onClick = { showNewPlanDialog = false; planNameInput = "" }) { Text(stringResource(android.R.string.cancel)) }
+            }
+        )
+    }
+
+    // Delete vocab notebook dialog
+    if (showDeletePlanDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeletePlanDialog = false },
+            title = { Text(stringResource(R.string.vocab_notebook_delete_title)) },
+            text = { Text(stringResource(R.string.vocab_notebook_delete_confirm, currentPlan)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deletePlan(context, currentPlan); showDeletePlanDialog = false }) { Text(stringResource(android.R.string.ok)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeletePlanDialog = false }) { Text(stringResource(android.R.string.cancel)) }
             }
         )
     }
@@ -209,7 +327,7 @@ fun VocabularyScreen(
         },
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.vocabulary_title)) },
+                title = { Text(stringResource(R.string.vocabulary_title), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 18.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
@@ -218,11 +336,14 @@ fun VocabularyScreen(
                 actions = {
                     // Select mode toggle
                     if (!isSelectMode) {
-                        // Custom add word
-                        IconButton(onClick = { customWordInput = ""; showAddCustomDialog = true }) {
-                            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.vocabulary_add_custom))
-                        }
-                        // Batch import ALL to flashcards
+                        // Add custom word
+                    IconButton(onClick = {
+                        addWordText = ""
+                        showAddDialog = true
+                    }) {
+                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_word))
+                    }
+                    // Batch import ALL to flashcards
                         IconButton(onClick = { openPlanPicker(vocabulary) }) {
                             Icon(Icons.Default.Bolt, contentDescription = stringResource(R.string.flashcard_batch_import))
                         }
@@ -288,11 +409,16 @@ fun VocabularyScreen(
             )
         }
     ) { padding ->
-        if (vocabulary.isEmpty()) {
+        Column(modifier = Modifier.padding(padding)) {
+            // Plan selector
+            VocabPlanSelector()
+            Spacer(Modifier.height(2.dp))
+
+            if (vocabulary.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .weight(1f),
                 contentAlignment = Alignment.Center
             ) {
                 Text(stringResource(R.string.vocabulary_empty), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -301,7 +427,7 @@ fun VocabularyScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
+                    .weight(1f)
             ) {
                 items(vocabulary, key = { it.id }) { item ->
                     val isSelected: Boolean = selectedIds.contains(item.id)
@@ -326,6 +452,7 @@ fun VocabularyScreen(
                     )
                 }
             }
+        }
         }
     }
 }

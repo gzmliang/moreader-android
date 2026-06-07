@@ -655,6 +655,10 @@ class BookRepository(private val context: Context) {
 
     // === Vocabulary operations ===
     fun getAllVocabulary(): Flow<List<Vocabulary>> = db.vocabularyDao().getAllVocabulary()
+    fun getVocabularyByPlan(plan: String): Flow<List<Vocabulary>> = db.vocabularyDao().getVocabularyByPlan(plan)
+    fun getPlanNames(): Flow<List<String>> = db.vocabularyDao().getPlanNames()
+    suspend fun getPlanNamesOnce(): List<String> = db.vocabularyDao().getPlanNamesOnce()
+    suspend fun deleteVocabularyByPlan(plan: String) = db.vocabularyDao().deleteByPlan(plan)
     
     suspend fun getVocabularyByWord(word: String): Vocabulary? = db.vocabularyDao().getVocabularyByWord(word)
     
