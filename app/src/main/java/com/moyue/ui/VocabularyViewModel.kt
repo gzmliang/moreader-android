@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
 import android.net.Uri
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -12,6 +14,7 @@ import com.moyue.app.data.BookRepository
 import com.moyue.app.data.models.LLMConfig
 import com.moyue.app.data.models.TTSProviderType
 import com.moyue.app.data.models.Vocabulary
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +38,10 @@ class VocabularyViewModel(
 ) : ViewModel() {
 
     private var audioPlayer: MediaPlayer? = null
+    private var systemTts: TextToSpeech? = null
+    private var systemTtsReady = false
+    private var pendingSystemSpeak: String? = null
+    private var systemTtsInitLock = java.util.concurrent.locks.ReentrantLock()
     private val _isSpeakingWord = MutableStateFlow<Long?>(null)
     val isSpeakingWord: StateFlow<Long?> = _isSpeakingWord.asStateFlow()
 
@@ -45,92 +52,163 @@ class VocabularyViewModel(
             initialValue = emptyList()
         )
 
+    /**
+     * Add a custom word (typed by user) to vocabulary without requiring a book.
+     * Returns true if added, false if already exists.
+     */
+    fun addCustomWord(word: String, callback: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val trimmed = word.trim()
+            if (trimmed.isEmpty()) { callback(false, "请输入单词"); return@launch }
+            val exists = repository.isWordExists(trimmed)
+            if (exists) {
+                callback(false, "单词已在生词本中")
+                return@launch
+            }
+            val vocab = Vocabulary(
+                word = trimmed,
+                createdAt = System.currentTimeMillis()
+            )
+            repository.insertVocabulary(vocab)
+            callback(true, "已添加：$trimmed")
+        }
+    }
+
     fun deleteVocabulary(id: Long) {
         viewModelScope.launch {
             repository.deleteVocabulary(id)
         }
     }
 
-    /** Speak a word using the app's configured TTS provider (Edge TTS / Custom TTS) */
+    private fun ensureSystemTts(context: Context): TextToSpeech? {
+        systemTtsInitLock.lock()
+        try {
+            if (systemTts == null) {
+                systemTts = TextToSpeech(context) { status ->
+                    systemTtsReady = (status == TextToSpeech.SUCCESS)
+                    if (systemTtsReady) {
+                        pendingSystemSpeak?.let { text ->
+                            pendingSystemSpeak = null
+                            speakWithSystemTts(text)
+                        }
+                    }
+                }
+            }
+            return systemTts
+        } finally {
+            systemTtsInitLock.unlock()
+        }
+    }
+
+    private fun speakWithSystemTts(text: String) {
+        if (!systemTtsReady) {
+            pendingSystemSpeak = text
+            return
+        }
+        // Auto-detect language: Chinese chars -> Chinese TTS, else English TTS
+        val hasChinese = text.any { it in '一'..'鿿' }
+        systemTts?.language = if (hasChinese) java.util.Locale.CHINESE else java.util.Locale.US
+        systemTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onDone(utteranceId: String?) {}
+            override fun onError(utteranceId: String?) {}
+            override fun onStart(utteranceId: String?) {}
+        })
+        systemTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "vocab_tts")
+    }
+
+    /** Speak a word using the flashcard-specific TTS provider */
     fun speakWord(vocabId: Long, word: String, context: Context) {
         // Stop any current playback
         audioPlayer?.apply { if (isPlaying) stop(); release() }
         audioPlayer = null
+        // Stop any pending system TTS
+        systemTts?.stop()
         _isSpeakingWord.value = null
 
         viewModelScope.launch {
-            withContext(kotlinx.coroutines.Dispatchers.IO) {
+            withContext(Dispatchers.IO) {
                 try {
                     val prefs = context.getSharedPreferences("moreader_config", Context.MODE_PRIVATE)
-                    val providerType = prefs.getString("tts_provider", "edge_tts") ?: "edge_tts"
+                    val providerType = prefs.getString("flashcard_tts_provider", "edge_tts") ?: "edge_tts"
                     val ttsType = try { TTSProviderType.valueOf(providerType) } catch (e: IllegalArgumentException) { TTSProviderType.EDGE_TTS }
 
-                    val audioBytes = when (ttsType) {
+                    when (ttsType) {
+                        TTSProviderType.SYSTEM -> {
+                            withContext(Dispatchers.Main) {
+                                _isSpeakingWord.value = vocabId
+                                ensureSystemTts(context)
+                                speakWithSystemTts(word)
+                                // Clear after a short delay (System TTS doesn't notify completion easily)
+                                kotlinx.coroutines.delay(2000)
+                                _isSpeakingWord.value = null
+                            }
+                            return@withContext
+                        }
                         TTSProviderType.EDGE_TTS -> {
                             val endpoint = prefs.getString("edge_endpoint", "http://powerplus.blogsyte.com:5001") ?: "http://powerplus.blogsyte.com:5001"
                             var voice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural"
-                            // Auto-detect language for voice matching
-                            val isChinese = word.any { it in '\u4e00'..'\u9fff' }
+                            val isChinese = word.any { it in '一'..'鿿' }
                             if (isChinese && !voice.startsWith("zh-")) voice = "zh-CN-XiaoxiaoNeural"
                             else if (!isChinese && voice.startsWith("zh-")) voice = "en-US-GuyNeural"
                             val apiKey = prefs.getString("edge_apikey", "") ?: ""
-                            fetchEdgeTTS(endpoint, voice, apiKey, word)
+                            fetchAndPlay(vocabId, word, context, fetchEdgeTTS(endpoint, voice, apiKey, word))
                         }
                         TTSProviderType.CUSTOM_TTS -> {
                             val endpoint = prefs.getString("custom_endpoint", "http://192.168.199.101:18083") ?: "http://192.168.199.101:18083"
                             val apiKey = prefs.getString("custom_apikey", "dummy") ?: "dummy"
                             val model = prefs.getString("custom_model", "moss-tts-nano") ?: "moss-tts-nano"
                             val voice = prefs.getString("custom_voice", "Lingyu") ?: "Lingyu"
-                            fetchCustomTTS(endpoint, apiKey, model, voice, word)
+                            fetchAndPlay(vocabId, word, context, fetchCustomTTS(endpoint, apiKey, model, voice, word))
                         }
                         TTSProviderType.AI_VOICE -> {
                             val endpoint = prefs.getString("ai_endpoint", "https://api.siliconflow.cn/v1") ?: "https://api.siliconflow.cn/v1"
                             val apiKey = prefs.getString("ai_apikey", "") ?: ""
                             val model = prefs.getString("ai_model", "fnlp/MOSS-TTSD-v0.5") ?: "fnlp/MOSS-TTSD-v0.5"
                             val voice = prefs.getString("ai_voice_id", "fnlp/MOSS-TTSD-v0.5:anna") ?: "fnlp/MOSS-TTSD-v0.5:anna"
-                            fetchAITTS(endpoint, apiKey, model, voice, word)
-                        }
-                        else -> fetchEdgeTTS("http://powerplus.blogsyte.com:5001", "zh-CN-XiaoxiaoNeural", "", word)
-                    }
-
-                    if (audioBytes != null && audioBytes.isNotEmpty()) {
-                        withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            try {
-                                _isSpeakingWord.value = vocabId
-                                val tempFile = File.createTempFile("vocab_tts_", ".mp3", context.cacheDir)
-                                tempFile.writeBytes(audioBytes)
-                                audioPlayer = MediaPlayer().apply {
-                                    setDataSource(tempFile.absolutePath)
-                                    setOnCompletionListener {
-                                        audioPlayer?.release()
-                                        audioPlayer = null
-                                        _isSpeakingWord.value = null
-                                        tempFile.delete()
-                                    }
-                                    setOnErrorListener { _, _, _ ->
-                                        audioPlayer?.release()
-                                        audioPlayer = null
-                                        _isSpeakingWord.value = null
-                                        tempFile.delete()
-                                        true
-                                    }
-                                    prepare()
-                                    start()
-                                }
-                            } catch (e: Exception) {
-                                _isSpeakingWord.value = null
-                            }
-                        }
-                    } else {
-                        withContext(kotlinx.coroutines.Dispatchers.Main) {
-                            _isSpeakingWord.value = null
+                            fetchAndPlay(vocabId, word, context, fetchAITTS(endpoint, apiKey, model, voice, word))
                         }
                     }
                 } catch (e: Exception) {
-                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    withContext(Dispatchers.Main) {
                         _isSpeakingWord.value = null
                     }
                 }
+            }
+        }
+    }
+
+    private suspend fun fetchAndPlay(vocabId: Long, word: String, context: Context, audioBytes: ByteArray?) {
+        if (audioBytes != null && audioBytes.isNotEmpty()) {
+            withContext(Dispatchers.Main) {
+                try {
+                    _isSpeakingWord.value = vocabId
+                    val tempFile = File.createTempFile("vocab_tts_", ".mp3", context.cacheDir)
+                    tempFile.writeBytes(audioBytes)
+                    audioPlayer = MediaPlayer().apply {
+                        setDataSource(tempFile.absolutePath)
+                        setOnCompletionListener {
+                            audioPlayer?.release()
+                            audioPlayer = null
+                            _isSpeakingWord.value = null
+                            tempFile.delete()
+                        }
+                        setOnErrorListener { _, _, _ ->
+                            audioPlayer?.release()
+                            audioPlayer = null
+                            _isSpeakingWord.value = null
+                            tempFile.delete()
+                            true
+                        }
+                        prepare()
+                        start()
+                    }
+                } catch (e: Exception) {
+                    _isSpeakingWord.value = null
+                }
+            }
+        } else {
+            withContext(Dispatchers.Main) {
+                _isSpeakingWord.value = null
             }
         }
     }
@@ -199,16 +277,19 @@ class VocabularyViewModel(
         super.onCleared()
         audioPlayer?.apply { if (isPlaying) stop(); release() }
         audioPlayer = null
+        systemTts?.stop()
+        systemTts?.shutdown()
+        systemTts = null
     }
 
     /** Detect if word is primarily Chinese */
     private fun isChinese(text: String): Boolean {
-        return text.any { it in '\u4e00'..'\u9fff' }
+        return text.any { it in '一'..'鿿' }
     }
 
     /** Detect if word is a single Chinese character */
     private fun isSingleChar(text: String): Boolean {
-        return text.length == 1 && text[0] in '\u4e00'..'\u9fff'
+        return text.length == 1 && text[0] in '一'..'鿿'
     }
 
     /** Parse AI response JSON for English word */

@@ -270,6 +270,11 @@ AI Voice（云端 TTS）：
     <!-- Vocabulary -->
     <string name="vocabulary_title">生词本</string>
     <string name="vocabulary_empty">暂无单词</string>
+    <string name="vocabulary_add_custom">手动添加</string>
+    <string name="vocabulary_add_custom_title">添加单词</string>
+    <string name="vocabulary_add_custom_hint">输入要添加的单词</string>
+    <string name="vocabulary_add_custom_success">已添加：%1$s</string>
+    <string name="vocabulary_add_custom_empty">请输入单词</string>
     <string name="vocabulary_add">加入生词本</string>
     <string name="vocabulary_added">已添加到生词本</string>
     <string name="vocabulary_already_exists">单词已在生词本中</string>
@@ -360,6 +365,8 @@ AI Voice（云端 TTS）：
     <string name="flashcard_no_definition">暂无释义</string>
     <string name="flashcard_no_definition_hint">请检查 AI 词典 API 配置</string>
     <string name="flashcard_tap_back_front">点击返回正面</string>
+    <string name="flashcard_tts_engine">发音引擎</string>
+    <string name="flashcard_tts_engine_label">闪卡发音</string>
 
     <!-- Fonts -->
     <string name="font_label_sans_serif">无衬线</string>
@@ -527,5 +534,10 @@ AI Voice（云端 TTS）：
     <string name="recording_entry">🎙️ 录制TTS音频</string>
     <string name="recording_browse">📂 浏览录音</string>
     <string name="recording_share">分享文件</string>
+
+    <!-- System TTS -->
+    <string name="tts_system_engine">引擎</string>
+    <string name="tts_system_default_voice">引擎默认</string>
+    <string name="tts_system_voices_loading">正在加载语音列表…</string>
 
 </resources>

@@ -56,6 +56,7 @@ data class ReaderUiState(
     val isTtsPlaying: Boolean = false,
     val isTtsPaused: Boolean = false,
     val ttsSpeed: Float = 1.0f,
+    val systemTtsVoice: String = "",
     val ttsParagraphs: List<String> = emptyList(),
     val ttsCurrentIdx: Int = -1,       // 当前高亮索引（考虑了偏移）
     val ttsPlayIdx: Int = -1,          // 当前实际朗读的段落索引（用于恢复）
@@ -155,6 +156,7 @@ class ReaderViewModel(
                 model = prefs.getString("llm_model", "") ?: "",
             ),
             ttsSpeed = prefs.getFloat("tts_speed", 1.0f),
+            systemTtsVoice = prefs.getString("system_tts_voice", "") ?: "",
             ttsHighlightOffset = prefs.getInt("tts_highlight_offset", 0),
             translateEngine = TranslateEngine.valueOf(prefs.getString("translate_engine", "CLOUD") ?: "CLOUD"),
             localAiModelName = localAiEngine.getModelName(application),
@@ -182,16 +184,32 @@ class ReaderViewModel(
 
     private fun extractParagraphsFromHtml(html: String): List<String> {
         val doc = org.jsoup.Jsoup.parse(html)
-        // 去掉注释符和拼音再提取文本（只删子元素不删段落，不影响索引对应）
-        doc.select("sup").remove()
-        doc.select("rt, rp").remove()
-        val paragraphs = doc.select("p, h1, h2, h3, h4, h5, h6").map {
-            var text = it.text().trim()
-            // 文本级清理：方括号注释 [1] [2]、括号注释 ① ②、ruby 残留 /*/
-            text = text.replace(Regex("""\[\d+\]"""), "")
+        // 先移除不需要朗读的 HTML 标签（注音、注释、脚注标记等），保留汉字本身
+        doc.select("rt, rp, rtc, rb, sup, sub, .note, .footnote, .annotation, .tcy, .math-super, [class*=note], [class*=footnote]").remove()
+        // 注意：此处可以做文本级过滤但保留段落索引对齐
+        // WebView 中给所有 p,h1-h6 元素添加了点击监听，索引必须对应
+        val paragraphs = doc.select("p, h1, h2, h3, h4, h5, h6").map { para ->
+            var text = para.text().trim()
+            // 清除脚注标记 [1] [2] ...
+            text = text.replace(Regex("""\[\d+]"""), "")
+            // 清除圈号 ①②③...
             text = text.replace(Regex("""[①②③④⑤⑥⑦⑧⑨⑩]"""), "")
+            // 清理注释分隔符 /*/ ／＊／
             text = text.replace(Regex("""/\*+/\s*"""), "")
-            text.trim()
+            text = text.replace(Regex("""／\＊+／\s*"""), "")
+            // 清除纯装饰符号段落
+            text = text.replace(Regex("""[*＊·•●▶▷◀◁◆◇○◎●◉○□■△▲☆★❀✿❁🌸🌺]"""), "")
+            // 清除其他标记符号 ** ## __ ~~ ``
+            text = text.replace(Regex("""[*]{2,}"""), "")
+            text = text.replace(Regex("""[#]{2,}"""), "")
+            text = text.replace(Regex("""[_]{2,}"""), "")
+            text = text.replace(Regex("""[~]{2,}"""), "")
+            text = text.replace(Regex("""`{2,}"""), "")
+            text = text.trim()
+            // 删除汉字间的空格（Edge TTS 把空格当词边界）
+            text = text.replace(Regex("""([\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff])\s+(?=[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff])"""), "$1")
+            // 纯符号段落置空（保留索引不删行，playOne 自动跳过空段落）
+            if (text.isNotEmpty() && text.none { c -> (c in '\u4e00'..'\u9fff') || c.isLetter() }) "" else text
         }
         // 如果过滤后为空，返回整个 body 文本
         if (paragraphs.isEmpty() || paragraphs.all { it.isEmpty() }) { 
@@ -614,14 +632,46 @@ class ReaderViewModel(
 
     /** Speak arbitrary text (used by translation panel speaker button) */
     fun speakTranslationText(text: String) {
-        val p = recreateProvider() ?: return
+        // Use the flashcard/vocabulary TTS setting for dictionary pronunciation,
+        // so the pronunciation engine is consistent with the word book settings.
+        val prefs = getApplication<android.app.Application>()
+            .getSharedPreferences("moreader_config", android.content.Context.MODE_PRIVATE)
+        val flashcardProviderStr = prefs.getString("flashcard_tts_provider", "edge_tts") ?: "edge_tts"
+        val ttsType = try { TTSProviderType.valueOf(flashcardProviderStr) }
+            catch (e: IllegalArgumentException) { TTSProviderType.EDGE_TTS }
+        val s = _uiState.value
+
+        // If flashcard TTS type matches the reader's current provider, reuse the cached provider
+        val p = if (ttsType == s.ttsProvider) {
+            recreateProvider()
+        } else {
+            // Create a one-off provider for dictionary pronunciation
+            currentTTSProvider?.let { if (it is com.moyue.app.tts.SystemTTSProvider) null else it }
+            ?: createDictProvider(ttsType)
+        }
+        if (p == null) return
+
         viewModelScope.launch {
             withContext(kotlinx.coroutines.Dispatchers.IO) {
-                p.speak(text, _uiState.value.ttsSpeed, object : TTSListener {
+                p.speak(text, s.ttsSpeed, object : TTSListener {
                     override fun onStart() {}
                     override fun onDone() {}
                     override fun onError(msg: String) {}
                 })
+            }
+        }
+    }
+
+    /** Create a lightweight one-off TTS provider for dictionary pronunciation */
+    private fun createDictProvider(ttsType: TTSProviderType): com.moyue.app.tts.TTSProvider? {
+        val s = _uiState.value
+        return when (ttsType) {
+            TTSProviderType.EDGE_TTS -> com.moyue.app.tts.EdgeTTSProvider(s.edgeTtsEndpoint, s.edgeTtsVoice)
+            TTSProviderType.AI_VOICE -> com.moyue.app.tts.AIVoiceTTSProvider(s.aiVoiceEndpoint, s.aiVoiceApiKey, s.aiVoiceModel, s.aiVoiceId)
+            TTSProviderType.CUSTOM_TTS -> com.moyue.app.tts.CustomTTSProvider(s.customTtsEndpoint, s.customTtsApiKey, s.customTtsModel, s.customTtsVoice)
+            TTSProviderType.SYSTEM -> {
+                val ctx = activityContext ?: getApplication()
+                com.moyue.app.tts.SystemTTSProvider(ctx)
             }
         }
     }
@@ -646,7 +696,17 @@ class ReaderViewModel(
             TTSProviderType.SYSTEM -> {
                 // System TTS needs Activity context on some ROMs (e.g. ColorOS)
                 val ctx = activityContext ?: getApplication()
-                SystemTTSProvider(ctx).also { currentTTSProvider = it }
+                SystemTTSProvider(ctx).also { provider ->
+                    currentTTSProvider = provider
+                    // Apply saved voice preference after creation
+                    val savedVoice = s.systemTtsVoice
+                    if (savedVoice.isNotEmpty()) {
+                        // Defer setVoice slightly to let ensureInitialized() finish
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            if (!provider.isSpeaking) provider.setVoice(savedVoice)
+                        }, 100)
+                    }
+                }
             }
             TTSProviderType.EDGE_TTS -> { EdgeTTSProvider(s.edgeTtsEndpoint, s.edgeTtsVoice).also { currentTTSProvider = it } }
             TTSProviderType.AI_VOICE -> { AIVoiceTTSProvider(s.aiVoiceEndpoint, s.aiVoiceApiKey, s.aiVoiceModel, s.aiVoiceId).also { currentTTSProvider = it } }
@@ -875,6 +935,14 @@ class ReaderViewModel(
         if (book != null) {
             viewModelScope.launch { repository.updateBookTtsConfig(book.id, _uiState.value.ttsProvider.name, _uiState.value.edgeTtsVoice, s.coerceIn(0.5f, 2.0f)) }
         }
+    }
+    fun setSystemTTSVoice(voiceName: String) {
+        _uiState.update { it.copy(systemTtsVoice = voiceName) }
+        prefs.edit().putString("system_tts_voice", voiceName).apply()
+        // Recreate TTS provider to apply voice
+        currentTTSProvider?.destroy()
+        currentTTSProvider = null
+        killPlayChain()
     }
     fun increaseHighlightOffset() { _uiState.update { it.copy(ttsHighlightOffset = it.ttsHighlightOffset + 1) }; log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_offset_inc, _uiState.value.ttsHighlightOffset)); prefs.edit().putInt("tts_highlight_offset", _uiState.value.ttsHighlightOffset).apply() }
     fun decreaseHighlightOffset() { _uiState.update { it.copy(ttsHighlightOffset = it.ttsHighlightOffset - 1) }; log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_offset_dec, _uiState.value.ttsHighlightOffset)); prefs.edit().putInt("tts_highlight_offset", _uiState.value.ttsHighlightOffset).apply() }

@@ -598,6 +598,7 @@ fun ReaderScreen(
                     aiModel = state.aiVoiceModel, aiVoice = state.aiVoiceId,
                     customEndpoint = state.customTtsEndpoint, customApiKey = state.customTtsApiKey,
                     customModel = state.customTtsModel, customVoice = state.customTtsVoice,
+                    systemTtsVoice = state.systemTtsVoice,
                     llmConfig = state.llmConfig,
                     // Local AI
                     translateEngine = state.translateEngine,
@@ -609,6 +610,7 @@ fun ReaderScreen(
                     onEdgeConfigChange = { ep, v -> viewModel.updateEdgeTTSConfig(ep, v) },
                     onAIVoiceConfigChange = { ep, key, m, v -> viewModel.updateAIVoiceConfig(ep, key, m, v) },
                     onCustomTTSConfigChange = { ep, key, m, v -> viewModel.updateCustomTTSConfig(ep, key, m, v) },
+                    onSystemVoiceChange = { viewModel.setSystemTTSVoice(it) },
                     onLLMConfigChange = { viewModel.updateLLMConfig(it) },
                     onTranslateEngineChange = { viewModel.setTranslateEngine(it) },
                     onLocalAiModelSelect = { uri ->
