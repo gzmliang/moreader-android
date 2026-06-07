@@ -1,0 +1,543 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">墨阅测试版</string>
+
+    <!-- General -->
+    <string name="loading">正在加载...</string>
+    <string name="large_book_hint">大型书籍可能需要一些时间</string>
+    <string name="error_book_not_found">未找到书籍</string>
+    <string name="error_parse_failed">无法解析书籍章节，EPUB 格式可能不受支持</string>
+    <string name="error_chapter_out_of_range">章节索引超出范围</string>
+    <string name="error_read_failed">无法读取章节内容</string>
+    <string name="back">返回</string>
+    <string name="close">关闭</string>
+    <string name="save">保存</string>
+    <string name="delete">删除</string>
+    <string name="cancel">取消</string>
+    <string name="confirm">确定</string>
+    <string name="follow_system">跟随系统</string>
+    <string name="lang_zh">中文</string>
+    <string name="lang_en">English</string>
+
+    <!-- Library -->
+    <string name="library_title">墨阅</string>
+    <string name="search_hint">搜索书名…</string>
+    <string name="search_no_results">没有找到匹配的书</string>
+    <string name="import_book">导入书籍</string>
+    <string name="empty_library_hint">导入一本 EPUB 开始阅读吧</string>
+    <string name="delete_book_title">删除书籍</string>
+    <string name="delete_book_confirm">确定要删除「%1$s」吗？</string>
+
+    <!-- Reader -->
+    <string name="load_book">正在加载书籍...</string>
+    <string name="parse_chapters">正在解析章节结构...</string>
+    <string name="load_content">正在加载章节内容...</string>
+    <string name="table_of_contents">目录</string>
+    <string name="chapter_progress">%1$d/%2$d</string>
+
+    <!-- Selection menu -->
+    <string name="ai_translate">🤖 翻译</string>
+    <string name="dictionary">📖 词典</string>
+    <string name="grammar_analysis">🔍 语法</string>
+    <string name="read_aloud">🔊 朗读</string>
+
+    <!-- Translation -->
+    <string name="translating">翻译中...</string>
+    <string name="ai_translate_title">AI 翻译</string>
+    <string name="explain_title">词典</string>
+    <string name="grammar_title">语法分析</string>
+    <string name="translation_failed">翻译失败: %1$s</string>
+    <string name="configure_api_key_first">请先配置 API Key</string>
+
+    <!-- TTS -->
+    <string name="tts_settings">朗读设置</string>
+    <string name="tts_engine">语音引擎</string>
+    <string name="tts_speed">语速: %1$sx</string>
+    <string name="tts_speed_label">语速</string>
+    <string name="tts_server_url">服务器地址</string>
+    <string name="tts_voice">音色</string>
+    <string name="tts_voice_selection">音色选择</string>
+    <string name="tts_custom_voice">自定义音色 ID</string>
+    <string name="tts_model_selection">模型选择</string>
+    <string name="tts_model">TTS 模型</string>
+    <string name="tts_base_url">Base URL</string>
+    <string name="tts_api_key">API Key</string>
+    <string name="tts_custom_voice_hint">✏️ 输入自定义音色...</string>
+    <string name="play_chapter">朗读全文</string>
+    <string name="pause">暂停</string>
+    <string name="resume">继续</string>
+    <string name="stop">停止</string>
+    <string name="previous_chapter">上一章</string>
+    <string name="next_chapter">下一章</string>
+    <string name="font_decrease">A-</string>
+    <string name="font_increase">A+</string>
+
+    <!-- Debug -->
+    <string name="debug_log">调试日志</string>
+    <string name="debug_no_log">暂无日志，点击朗读后查看</string>
+    <string name="highlight_offset">高亮偏移</string>
+
+    <!-- Theme -->
+    <string name="theme">主题</string>
+    <string name="theme_light">默认白</string>
+    <string name="theme_parchment">羊皮纸</string>
+    <string name="theme_gray">墨水灰</string>
+    <string name="theme_dark">深夜黑</string>
+    <string name="theme_slate">石板灰</string>
+
+    <!-- Theme names (for code) -->
+    <string name="theme_name_light">默认白</string>
+    <string name="theme_name_parchment">羊皮纸</string>
+    <string name="theme_name_gray">墨水灰</string>
+    <string name="theme_name_dark">深夜黑</string>
+    <string name="theme_name_slate">石板灰</string>
+
+    <!-- AI Translation Settings -->
+    <string name="ai_translate_settings">AI 翻译设置</string>
+    <string name="endpoint_url">接口地址</string>
+    <string name="model_name">模型</string>
+
+    <!-- Help Dialogs -->
+    <string name="help_btn_local_ai">本地 AI 翻译说明</string>
+    <string name="help_btn_cloud_ai">云端翻译说明</string>
+    <string name="help_btn_tts">TTS 朗读引擎说明</string>
+    <string name="help_close">知道了</string>
+    <string name="local_ai_recommend">💡 推荐: Qwen2.5-1.5B-Instruct-Q4_K_M.gguf (~1GB) — 翻译质量更稳定</string>
+    <string name="local_ai_view_logs">📋 查看翻译日志</string>
+    <string name="local_ai_copy_logs">📋 复制日志</string>
+    <string name="local_ai_logs_copied">✅ 已复制</string>
+    <string name="local_ai_close">关闭</string>
+    <string name="local_ai_select_model">选择 .gguf 模型文件</string>
+    <string name="local_ai_change_model">更换模型</string>
+    <string name="local_ai_no_model">未加载模型</string>
+    <string name="local_ai_unload">卸载</string>
+    <string name="local_ai_engine_cloud">☁️ 云端API</string>
+    <string name="local_ai_engine_local">📱 本地模型</string>
+    <string name="local_ai_section">🤖 本地AI翻译</string>
+    <string name="local_ai_gpu_accel">⚡ GPU 加速</string>
+    <string name="local_ai_gpu_on">GPU 加速已开启 (Vulkan)</string>
+    <string name="local_ai_gpu_off">CPU 运行中</string>
+    <string name="local_ai_gpu_hint">开启后速度可提升 2-4 倍，部分手机可能不稳定</string>
+    <string name="help_title">帮助</string>
+
+    <!-- Help Dialog Content (multi-line) -->
+    <string name="help_local_ai_content">墨阅支持本地 AI 翻译，无需联网即可查词翻译。
+
+使用步骤：
+1. 切换为「本地模型」
+2. 点击下方按钮选择模型文件
+3. 阅读时长按选中文字，点「AI翻译」即可
+
+下载模型（.gguf 格式）：
+推荐: Qwen2.5-1.5B-Instruct-Q4_K_M.gguf（约 1GB，翻译质量稳定）
+  下载地址:
+  https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF
+  或国内镜像:
+  https://www.modelscope.cn/models/Qwen/Qwen2.5-1.5B-Instruct-GGUF
+
+轻量选择: Qwen2.5-0.5B-Instruct-Q4_K_M.gguf（约 354MB）
+  https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+
+速度参考（一加12 骁龙8 Gen3）：
+• 0.5B: 首字 0.7-1.3s，翻译 4-8s
+• 1.5B: 首字 1.3-2.1s，翻译 6-15s
+• 模型越大翻译越准确，建议用 1.5B 兜底</string>
+
+    <string name="help_cloud_ai_content">云端翻译使用在线 API，速度快质量高。
+
+默认配置：
+• API: DeepSeek (api.deepseek.com)
+• 模型: deepseek-chat
+• 只需填写 API Key 即可使用
+
+获取 DeepSeek API Key：
+1. 访问 https://platform.deepseek.com
+2. 用手机号或邮箱注册账号
+3. 登录后点击右上角头像 → 「API Keys」
+4. 点击「创建 API Key」，复制保存
+5. 粘贴到下方「API Key」输入框
+
+注意：DeepSeek 注册即送 5 元额度，翻译约可调用 10 万次。
+
+也可以使用其他兼容 OpenAI 的 API：
+• 通义千问: dashscope.aliyuncs.com（百炼平台）
+• Moonshot: api.moonshot.cn
+• SiliconFlow: api.siliconflow.cn
+只需修改 Base URL 和 API Key 即可</string>
+
+    <string name="help_tts_content">墨阅提供多种 TTS 朗读引擎。
+
+Edge TTS（免费推荐）：
+• 微软免费语音合成，音质好
+• 需联网，无需 API Key
+• 支持多种语言和音色
+
+AI Voice（云端 TTS）：
+• 使用云端 TTS 服务，如硅基流动 SiliconFlow
+• 支持 MOSS-TTSD、CosyVoice2 等模型
+• 需配置服务端地址和 API Key
+• 例如 SiliconFlow: https://api.siliconflow.cn
+
+自定义 TTS：
+• 兼容 OpenAI TTS 接口格式
+• 可对接任何 OpenAI 兼容的 TTS 服务
+
+语速调节：
+拖动滑块调整朗读速度
+0.5x = 慢速，1.0x = 正常，2.0x = 快速</string>
+
+    <!-- TTS Provider Names -->
+    <string name="tts_provider_system">系统语音</string>
+    <string name="tts_provider_edge">Edge TTS</string>
+    <string name="tts_provider_ai">AI 语音</string>
+    <string name="tts_provider_custom">自定义 TTS</string>
+
+    <!-- TTS voice group labels -->
+    <string name="voice_female">女声</string>
+    <string name="voice_male">男声</string>
+
+    <!-- Edge TTS Voices -->
+    <string name="voice_xiaoxiao">晓晓 (女)</string>
+    <string name="voice_yunxi">云希 (男)</string>
+    <string name="voice_yunjian">云健 (男)</string>
+    <string name="voice_xiaoyi">晓伊 (女)</string>
+    <string name="voice_hsiaochen">曉臻 (女)</string>
+    <string name="voice_yunjhe">雲哲 (男)</string>
+    <string name="voice_jenny">Jenny (女)</string>
+    <string name="voice_guy">Guy (男)</string>
+    <string name="voice_aria">Aria (女)</string>
+    <string name="voice_davis">Davis (男)</string>
+    <string name="voice_nanami">七海 (女)</string>
+    <string name="voice_keita">圭太 (男)</string>
+    <string name="voice_sunhi">선희 (女)</string>
+    <string name="voice_injun">인준 (男)</string>
+
+    <!-- AI Voice Models -->
+    <string name="model_moss">MOSS-TTSD v0.5 (中英双语)</string>
+    <string name="model_cosyvoice">CosyVoice2 0.5B (中英双语)</string>
+    <string name="model_tts1">OpenAI tts-1</string>
+    <string name="model_tts1_hd">OpenAI tts-1-hd</string>
+
+    <!-- TTS / AI voice gender labels -->
+    <string name="voice_gender_female">女</string>
+    <string name="voice_gender_male">男</string>
+    <string name="voice_gender_neutral">中性</string>
+
+    <!-- Errors -->
+    <string name="error_tts_init_failed">TTS 引擎初始化失败 (status=%1$d)</string>
+    <string name="error_tts_not_initialized">TTS 引擎未初始化</string>
+    <string name="error_tts_init_timeout">TTS 引擎初始化超时</string>
+    <string name="error_tts_no_engine">系统无可用 TTS 引擎，请使用 Edge TTS 或 AI 语音</string>
+    <string name="error_tts_init_engine_failed">引擎 %1$s 初始化失败: %2$s</string>
+    <string name="error_tts_speak_failed">TTS speak 返回错误</string>
+    <string name="error_ai_voice_request_failed">AI 语音请求失败: %1$s</string>
+    <string name="error_ai_voice_http">AI 语音 HTTP %1$d: %2$s</string>
+    <string name="error_ai_voice_empty">AI 语音返回空音频</string>
+    <string name="error_ai_voice_playback">播放错误: %1$s</string>
+    <string name="error_ai_voice_playback_code">播放错误: %1$d/%2$d</string>
+
+    <!-- TTS log messages -->
+    <string name="tts_log_full_read">========== 全文朗读 ==========</string>
+    <string name="tts_log_empty_html">[TTS] ❌ currentHtml 为空</string>
+    <string name="tts_log_no_paragraphs">[TTS] ❌ 无段落</string>
+    <string name="tts_log_pause">[TTS] ⏸ 暂停 idx=%1$d</string>
+    <string name="tts_log_invalid_restore">[TTS] ❌ 无可恢复状态（playIdx=%1$d）</string>
+    <string name="tts_log_resume">[TTS] ▶ 继续</string>
+    <string name="tts_log_stop">[TTS] ⏹ 停止</string>
+    <string name="tts_log_switch_engine">切换 TTS 引擎: %1$s</string>
+    <string name="tts_log_offset_inc">[设置] 高亮偏移 +1 = %1$d</string>
+    <string name="tts_log_offset_dec">[设置] 高亮偏移 -1 = %1$d</string>
+    <string name="tts_log_recording_started">🎙️ 开始录制：%s（%d 段）</string>
+    <string name="tts_log_recording_done">🎙️ 录制完成：%s（%d KB）</string>
+    <string name="tts_log_edge_config">[设置] Edge TTS: voice=%1$s</string>
+    <string name="tts_log_ai_config">[设置] AI Voice: voice=%1$s</string>
+    <string name="tts_log_engine_error">[TTS] ❌ onError idx=%1$d: %2$s</string>
+    <string name="tts_log_read_from_paragraph">========== 从第 %1$d 段开始朗读 ==========</string>
+    <string name="tts_log_invalid_paragraph_index">[TTS] ❌ 无效段落索引: %1$d</string>
+
+    <!-- Paragraph Menu -->
+    <string name="paragraph_menu_title">段落操作</string>
+    <string name="paragraph_menu_message">选择对该段落的操作</string>
+    <string name="read_from_here">从这里开始朗读</string>
+    <string name="bookmark_list_title">书签</string>
+    <string name="bookmark_empty">暂无书签</string>
+    <string name="bookmark_added">已添加书签</string>
+    <string name="bookmark_deleted">书签已删除</string>
+    <string name="bookmark_added_at">添加于 %1$s</string>
+    <string name="bookmark_delete_title">删除书签</string>
+    <string name="bookmark_delete_confirm">确定要删除这个书签吗？</string>
+
+    <!-- Vocabulary -->
+    <string name="vocabulary_title">生词本</string>
+    <string name="vocabulary_empty">暂无单词</string>
+    <string name="vocabulary_add_custom">手动添加</string>
+    <string name="vocabulary_add_custom_title">添加单词</string>
+    <string name="vocabulary_add_custom_hint">输入要添加的单词</string>
+    <string name="vocabulary_add_custom_success">已添加：%1$s</string>
+    <string name="vocabulary_add_custom_empty">请输入单词</string>
+    <string name="vocabulary_add">加入生词本</string>
+    <string name="vocabulary_added">已添加到生词本</string>
+    <string name="vocabulary_already_exists">单词已在生词本中</string>
+    <string name="vocabulary_show_definition">查看释义</string>
+    <string name="vocabulary_hide_definition">隐藏释义</string>
+    <string name="vocabulary_export_csv">导出 CSV</string>
+    <string name="vocabulary_export_md">导出 Markdown</string>
+
+    <!-- Highlight -->
+    <string name="highlight_add">高亮</string>
+    <string name="highlight_remove">取消高亮</string>
+    <string name="highlight_list_title">高亮</string>
+    <string name="highlight_empty">暂无高亮</string>
+    <string name="reader_fullscreen">全屏模式</string>
+    <string name="reader_exit_fullscreen">退出全屏</string>
+
+    <!-- TTS Settings Labels -->
+    <string name="tts_label_base_url">Base URL</string>
+    <string name="tts_label_api_key">API Key</string>
+    <string name="tts_label_model">模型</string>
+    <string name="tts_label_voice">音色</string>
+    <string name="tts_hint_base_url">http://192.168.199.101:18083</string>
+    <string name="tts_hint_api_key">dummy</string>
+    <string name="tts_hint_model">moss-tts-nano</string>
+    <string name="tts_hint_voice">Lingyu</string>
+    <string name="tts_api_key_only_hint">API Key (仅需填写此项)</string>
+    <string name="tts_custom_tts_hint">适用于 MOSS-TTS-Nano、CosyVoice 等本地部署</string>
+    <string name="tts_system_settings">系统语音设置</string>
+    <string name="tts_system_settings_desc">选择引擎、声音、语速等，设置后自动生效</string>
+    <string name="tts_custom_tts_title">OpenAI 兼容 TTS</string>
+
+    <!-- Navigation History -->
+    <string name="nav_back">返回上次阅读位置</string>
+    <string name="nav_back_label">返回</string>
+    <string name="nav_back_format">返回 %1$s</string>
+    <string name="nav_back_default">上次阅读位置</string>
+
+    <!-- Translation -->
+    <string name="original_text_label">原文</string>
+
+    <!-- Flashcard -->
+    <string name="flashcard_title">闪卡复习</string>
+    <string name="flashcard_empty">暂无闪卡，从生词本导入单词开始复习吧</string>
+    <string name="flashcard_review_overview">复习概览</string>
+    <string name="flashcard_total">总词数</string>
+    <string name="flashcard_due">待复习</string>
+    <string name="flashcard_due_now">到期</string>
+    <string name="flashcard_scheduled">未到期</string>
+    <string name="flashcard_start_review">开始复习</string>
+    <string name="flashcard_no_due_cards">暂时没有到期的卡片</string>
+    <string name="flashcard_tap_to_flip">点击翻转</string>
+    <string name="flashcard_remembered">记住了</string>
+    <string name="flashcard_forgot">忘了</string>
+    <string name="flashcard_review_complete">复习完成！</string>
+    <string name="flashcard_session_summary">本次复习 %1$d 张，记住 %2$d 张</string>
+    <string name="flashcard_back_to_list">返回卡片列表</string>
+    <string name="flashcard_remove_card">移除闪卡</string>
+    <string name="flashcard_reset_card">重置复习</string>
+    <string name="flashcard_import_success">已添加到闪卡</string>
+    <string name="flashcard_import_exists">该单词已在闪卡中</string>
+    <string name="flashcard_batch_import">批量加入闪卡</string>
+    <string name="vocab_select_mode">多选模式</string>
+    <string name="vocab_import_selected">导入闪卡</string>
+    <string name="vocab_selected_count">已选 %1$d 个</string>
+    <string name="vocab_select_all">全选</string>
+    <string name="flashcard_import_result">成功导入 %1$d 个，跳过 %2$d 个</string>
+    <string name="flashcard_plan_default">默认</string>
+    <string name="flashcard_plan_new">+ 新建</string>
+    <string name="flashcard_plan_create_title">新建复习计划</string>
+    <string name="flashcard_plan_create_hint">例如：A的计划</string>
+    <string name="flashcard_plan_create_btn">创建</string>
+    <string name="flashcard_plan_delete_title">删除计划</string>
+    <string name="flashcard_plan_delete_confirm">确定要删除「%1$s」吗？该计划下所有闪卡都会被删除。</string>
+    <string name="flashcard_reset_all_title">重置复习进度</string>
+    <string name="flashcard_reset_all_confirm">所有闪卡将回到新卡状态，可以重新复习。确定吗？</string>
+    <string name="flashcard_reset_all_btn">重置全部进度</string>
+    <string name="flashcard_tts_log_title">🔊 TTS发音日志</string>
+    <string name="flashcard_tts_log_empty">暂无TTS日志\n\n请先在闪卡列表中点击🔊按钮测试发音</string>
+    <string name="flashcard_tts_log_view">查看TTS日志</string>
+    <string name="flashcard_tts_close">关闭</string>
+    <string name="flashcard_plan_label">计划</string>
+    <string name="flashcard_plan_delete">删除计划</string>
+    <string name="flashcard_speak">发音</string>
+    <string name="flashcard_import_plan_title">选择导入目标计划</string>
+    <string name="flashcard_fetching_definition">正在获取释义…</string>
+    <string name="flashcard_chinese_def">中文释义</string>
+    <string name="flashcard_example_sentence">例句 Example</string>
+    <string name="flashcard_no_definition">暂无释义</string>
+    <string name="flashcard_no_definition_hint">请检查 AI 词典 API 配置</string>
+    <string name="flashcard_tap_back_front">点击返回正面</string>
+    <string name="flashcard_tts_engine">发音引擎</string>
+    <string name="flashcard_tts_engine_label">闪卡发音</string>
+
+    <!-- Fonts -->
+    <string name="font_label_sans_serif">无衬线</string>
+    <string name="font_label_serif">衬线</string>
+    <string name="font_label_mono">等宽</string>
+    <string name="font_label_casual">手写</string>
+    <string name="font_label_cursive">草书</string>
+    <string name="font_weight_normal">常规</string>
+    <string name="font_weight_semibold">半粗</string>
+    <string name="font_weight_bold">粗体</string>
+
+    <!-- Reader (missing) -->
+    <string name="reader_font_family_label">字</string>
+    <string name="reader_font_weight_label">粗</string>
+    <string name="reader_tts_speak">朗读</string>
+    <string name="bookmark_chapter_format">第 %1$d 章</string>
+    <string name="bookmark_paragraph_format">%1$s · 段落 %2$d</string>
+    <string name="highlight_chapter_format">第 %1$d 章</string>
+
+    <!-- Crash Dialog -->
+    <string name="crash_dialog_title">闪退报告</string>
+    <string name="crash_dialog_message">请长按复制下面的错误信息发给开发者：</string>
+    <string name="crash_dialog_copy">复制全部</string>
+    <string name="crash_dialog_copied">已复制 ✓</string>
+
+    <!-- Vocabulary (missing) -->
+    <string name="vocabulary_speak_word">朗读单词</string>
+    <string name="vocabulary_refresh_definition">🔄 重新拉取释义</string>
+    <string name="vocabulary_section_chinese_def">【中文释义】</string>
+    <string name="vocabulary_section_word_formation">【组词】Word Formation</string>
+    <string name="vocabulary_section_example">【例句】Example</string>
+
+    <!-- Bookmark (missing) -->
+    <string name="bookmark_deleted_toast">书签已删除</string>
+    <string name="bookmark_progress_format">%1$s · 进度 %2$d%%</string>
+
+    <!-- Error messages -->
+    <string name="error_edge_tts_connection">Edge TTS 连接失败: %1$s</string>
+    <string name="error_translation_empty_response">Empty response — 请检查 API Key 和模型名称是否正确</string>
+    <string name="error_tts_chapter_complete">[TTS] 章节读完，自动跳转下一章</string>
+    <string name="error_tts_all_complete">[TTS] 全部章节朗读完毕</string>
+    <string name="error_vocab_config_api_key">请先在设置中配置 AI API Key</string>
+    <string name="error_vocab_config_endpoint">请先配置 AI 服务端点 (Endpoint)</string>
+    <string name="error_vocab_fetch_fail_http">获取释义失败 (HTTP %1$d): %2$s</string>
+    <string name="error_vocab_fetch_fail_empty">获取释义失败：服务器返回空响应</string>
+    <string name="error_vocab_fetch_success">获取释义成功</string>
+    <string name="error_vocab_fetch_parse_fail">获取释义失败：AI 返回格式无法解析</string>
+    <string name="error_vocab_fetch_fail_generic">获取释义失败: %1$s</string>
+    <string name="error_vocab_empty_list">单词本为空</string>
+    <string name="error_vocab_export_fail">导出失败: %1$s</string>
+    <string name="vocab_export_subject">墨阅单词本导出</string>
+    <string name="vocab_export_body">共导出 %1$d 个单词</string>
+    <string name="vocab_export_chooser_title">分享单词本</string>
+    <string name="vocab_export_success">成功导出 %1$d 个单词</string>
+    <string name="vocab_export_csv_header">单词,音标,词性,释义,例句,添加时间</string>
+    <string name="vocab_export_md_title"># 墨阅单词本</string>
+    <string name="vocab_export_md_time">导出时间: %1$s</string>
+    <string name="vocab_export_md_count">单词数量: %1$d</string>
+    <string name="vocab_export_md_pronunciation">**音标**: %1$s</string>
+    <string name="vocab_export_md_pos">**词性**: %1$s</string>
+    <string name="vocab_export_md_def">**释义**: %1$s</string>
+    <string name="vocab_export_md_example">**例句**: %1$s</string>
+
+    <!-- TTS Help Dialog Content -->
+    <string name="help_tts_intro">墨阅提供多种 TTS 朗读引擎，按场景自由选择。</string>
+    <string name="help_tts_edge_title">☁️ Edge TTS（免费推荐）</string>
+    <string name="help_tts_edge_bullet1">微软免费语音合成，音质清晰自然</string>
+    <string name="help_tts_edge_bullet2">需联网，无需 API Key，即开即用</string>
+    <string name="help_tts_edge_bullet3">支持多国语言，男女声可选</string>
+    <string name="help_tts_ai_title">🤖 AI Voice（云端 TTS）</string>
+    <string name="help_tts_ai_bullet1">使用云端 TTS 服务，如硅基流动 SiliconFlow</string>
+    <string name="help_tts_ai_bullet2">支持 MOSS-TTSD、CosyVoice2 等高质模型</string>
+    <string name="help_tts_ai_bullet3">需配置服务端地址和 API Key</string>
+    <string name="help_tts_ai_example">例：SiliconFlow → https://api.siliconflow.cn</string>
+    <string name="help_tts_custom_title">🔧 自定义 TTS</string>
+    <string name="help_tts_custom_bullet1">兼容 OpenAI TTS 接口格式</string>
+    <string name="help_tts_custom_bullet2">可对接任意 OpenAI 兼容的 TTS 服务</string>
+    <string name="help_tts_speed_title">⚙️ 语速调节</string>
+    <string name="help_tts_speed_bullet1">拖动滑块调整朗读速度</string>
+    <string name="help_tts_speed_bullet2">0.5x = 慢速  ·  1.0x = 正常  ·  2.0x = 快速</string>
+
+    <!-- Cloud AI Help -->
+    <string name="help_cloud_ai_default_title">默认配置（DeepSeek）</string>
+    <string name="help_cloud_ai_get_key_title">如何获取 DeepSeek API Key</string>
+    <string name="help_cloud_ai_alternative_title">其他兼容 API</string>
+
+    <!-- Local AI Help -->
+    <string name="help_local_ai_steps_title">使用步骤</string>
+    <string name="help_local_ai_model_title">推荐模型（.gguf 格式）</string>
+    <string name="help_local_ai_speed_title">速度参考</string>
+    <string name="help_cloud_ai_intro">云端翻译使用在线 API，速度快质量高。</string>
+    <string name="help_cloud_ai_default">默认配置：\n• API: DeepSeek (api.deepseek.com)\n• 模型: deepseek-chat\n• 只需填写 API Key 即可使用</string>
+    <string name="help_cloud_ai_steps">获取 DeepSeek API Key：\n1. 访问 https://platform.deepseek.com\n2. 用手机号或邮箱注册账号\n3. 登录后点击右上角头像 → 「API Keys」\n4. 点击「创建 API Key」，复制保存\n5. 粘贴到下方「API Key」输入框</string>
+    <string name="help_cloud_ai_bonus">🎁 注册即送 5 元额度，约可调用 10 万次翻译</string>
+    <string name="help_cloud_ai_alternative">也可以使用其他兼容 OpenAI 的 API：\n• 通义千问: dashscope.aliyuncs.com（百炼平台）\n• Moonshot: api.moonshot.cn\n• SiliconFlow: api.siliconflow.cn\n只需修改 Base URL 和 API Key 即可</string>
+
+    <!-- Local AI Help -->
+    <string name="help_local_ai_intro">本地 AI 翻译无需联网即可查词翻译，数据完全在本地。</string>
+    <string name="help_local_ai_steps">使用步骤：\n1. 切换为「本地模型」\n2. 点击下方按钮选择模型文件\n3. 阅读时长按选中文本，点「AI翻译」即可</string>
+    <string name="help_local_ai_download">下载模型（.gguf 格式）：</string>
+    <string name="help_local_ai_recommended">推荐: Qwen2.5-1.5B-Instruct-Q4_K_M.gguf（约 1GB，翻译质量稳定）\n  下载地址:\n  https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF\n  或国内镜像:\n  https://www.modelscope.cn/models/Qwen/Qwen2.5-1.5B-Instruct-GGUF</string>
+    <string name="help_local_ai_light">轻量选择: Qwen2.5-0.5B-Instruct-Q4_K_M.gguf（约 354MB）\n  https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF</string>
+    <string name="help_local_ai_speed">速度参考（一加12 骁龙8 Gen3）：\n• 0.5B: 首字 0.7-1.3s，翻译 4-8s\n• 1.5B: 首字 1.3-2.1s，翻译 6-15s\n• 模型越大翻译越准确，建议用 1.5B 兜底</string>
+
+    <!-- Dictionary display strings -->
+    <string name="dict_radical">部首</string>
+    <string name="dict_strokes">笔画</string>
+    <string name="dict_def_placeholder">（释义待补充）</string>
+    <string name="dict_word_groups">📝 组词</string>
+    <string name="dict_word_forms">📝 词形变化</string>
+    <string name="dict_form_plural">复数</string>
+    <string name="dict_form_past">过去式</string>
+    <string name="dict_form_past_part">过去分词</string>
+    <string name="dict_form_pres_part">现在分词</string>
+    <string name="dict_form_3rd">三单</string>
+    <string name="dict_form_comparative">比较级</string>
+    <string name="dict_form_superlative">最高级</string>
+
+    <!-- Toast and status messages -->
+    <string name="dict_not_found_fallback">（词典未收录，以下使用 AI 翻译）</string>
+    <string name="local_model_not_loaded">本地模型未加载，请在设置中加载模型</string>
+    <string name="translation_failed_fmt">翻译失败: %1$s</string>
+    <string name="config_api_key_first">请先配置 API Key</string>
+    <string name="vocab_add_failed">添加失败: %1$s</string>
+    <string name="dict_log_copied">词典日志已复制到剪贴板</string>
+    <string name="copy_failed_fmt">复制失败: %1$s</string>
+    <string name="default_plan_name">默认</string>
+    <string name="tts_log_empty">暂无日志</string>
+    <string name="copy_log">📋 复制日志</string>
+    <string name="copied">✅ 已复制</string>
+
+    <!-- Settings labels -->
+    <string name="setting_local_ai">🤖 本地AI翻译</string>
+    <string name="setting_gpu_accel">⚡ GPU 加速</string>
+    <string name="setting_cloud_ai">☁️ 云端API翻译</string>
+    <string name="setting_gpu_on">GPU 加速已开启 (Vulkan)</string>
+    <string name="setting_gpu_off">CPU 运行中</string>
+    <string name="setting_gpu_hint">开启后速度可提升 2-4 倍，部分手机可能不稳定</string>
+    <string name="setting_local_model">本地模型</string>
+    <string name="setting_select_model">选择 .gguf 模型文件</string>
+    <string name="setting_change_model">更换模型</string>
+    <string name="setting_no_model">未加载模型</string>
+    <string name="setting_unload">卸载</string>
+    <string name="setting_view_logs">📋 查看翻译日志</string>
+
+    <!-- TTS Recording -->
+    <string name="recording_title">录制TTS音频</string>
+    <string name="recording_current_chapter">录制当前章节</string>
+    <string name="recording_full_book">录制整本书</string>
+    <string name="recording_chapters_count">共 %d 章</string>
+    <string name="recording_hint">使用当前TTS音色进行录制，音频将保存为MP3文件</string>
+    <string name="recording_in_progress">正在录制：%s</string>
+    <string name="recording_full_book_progress">整书录制中：%s</string>
+    <string name="recording_chapter_progress">章节录制中：%s</string>
+    <string name="recording_segment_info">%1$d / %2$d 段 (%3$d%%) · %4$.1f MB</string>
+    <string name="recording_cancel">取消录制</string>
+    <string name="recording_done">录制完成！</string>
+    <string name="recording_done_info">%d 个音频段落 · %d KB</string>
+    <string name="recording_play">播放</string>
+    <string name="recording_close">关闭</string>
+    <string name="recording_error">录制失败</string>
+    <string name="recording_manager_title">TTS录音管理</string>
+    <string name="recording_no_recordings">暂无录音文件</string>
+    <string name="recording_back">返回</string>
+    <string name="recording_entry">🎙️ 录制TTS音频</string>
+    <string name="recording_browse">📂 浏览录音</string>
+    <string name="recording_share">分享文件</string>
+
+    <!-- System TTS -->
+    <string name="tts_system_engine">引擎</string>
+    <string name="tts_system_default_voice">引擎默认</string>
+    <string name="tts_system_voices_loading">正在加载语音列表…</string>
+
+</resources>

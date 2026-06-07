@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Moon Body -->
+    <path
+        android:fillColor="#FFD700"
+        android:pathData="M54 14 A40 40 0 1 1 14 54 A40 40 0 1 1 54 14 Z" />
+    <!-- Crescent cutout (matches background) -->
+    <path
+        android:fillColor="#0B0C10"
+        android:pathData="M68 22 A30 30 0 1 1 38 52 A30 30 0 1 1 68 22 Z" />
+</vector>

@@ -1,0 +1,23 @@
+# Build outputs
+/build/
+/app/build/
+*.apk
+!app-v*.apk
+
+# IDE
+.idea/
+*.iml
+.kotlin/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Gradle
+.gradle/
+local.properties
+
+# Keystore - keep in repo for signing consistency
+# moreader.keystore — DO NOT DELETE
+# debug.keystore
+*.apk

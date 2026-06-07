@@ -1,0 +1,1 @@
+/root/.hermes/projects/moreader-android-local/llama.cpp
