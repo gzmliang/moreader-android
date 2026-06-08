@@ -931,13 +931,53 @@ private fun ReaderBottomBar(
                         }
                     }
 
-                    // Font Size: A- | size | A+
-                    EqualButton({ onFontSizeChange(fontSize - 2) }) {
-                        Text("A-", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = barTextColor)
+                    // Font Size: single button → slider popup
+                    var showFontSizeSlider by remember { mutableStateOf(false) }
+                    androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
+                        androidx.compose.material3.IconButton(
+                            onClick = { showFontSizeSlider = true },
+                            modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(32.dp)
+                        ) {
+                            androidx.compose.material3.Text(
+                                "${fontSize}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = barTextColor,
+                            )
+                        }
                     }
-                    Text("$fontSize", fontSize = 10.sp, color = barTextColor, modifier = Modifier.weight(1f).width(18.dp), textAlign = TextAlign.Center)
-                    EqualButton({ onFontSizeChange(fontSize + 2) }) {
-                        Text("A+", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = barTextColor)
+
+                    // Font Size Slider Dialog
+                    if (showFontSizeSlider) {
+                        AlertDialog(
+                            onDismissRequest = { showFontSizeSlider = false },
+                            title = { Text("字号") },
+                            text = {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("$fontSize", fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.height(12.dp))
+                                    Slider(
+                                        value = fontSize.toFloat(),
+                                        onValueChange = { onFontSizeChange(it.toInt()) },
+                                        valueRange = 14f..32f,
+                                        steps = 8,  // 9 discrete values: 14,16,18,20,22,24,26,28,30,32
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("14", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("32", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showFontSizeSlider = false }) {
+                                    Text(androidx.compose.ui.res.stringResource(android.R.string.ok))
+                                }
+                            }
+                        )
                     }
 
                     // Next chapter

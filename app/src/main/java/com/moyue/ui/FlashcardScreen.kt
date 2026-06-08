@@ -852,17 +852,6 @@ private fun FlashcardReviewScreen(
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
                             letterSpacing = 2.sp
                         )
-                        if (!currentCard.pronunciation.isNullOrBlank()) {
-                            Spacer(Modifier.height(10.dp))
-                            Text(
-                                currentCard.pronunciation,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Light,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                                textAlign = TextAlign.Center,
-                                letterSpacing = 1.sp
-                            )
-                        }
                         Spacer(Modifier.height(40.dp))
                         Surface(
                             shape = RoundedCornerShape(50),
