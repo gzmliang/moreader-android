@@ -39,6 +39,10 @@ class VocabularyViewModel(
     private val repository: BookRepository
 ) : ViewModel() {
 
+    init {
+        refreshPlanNames()
+    }
+
     private var audioPlayer: MediaPlayer? = null
     private var systemTts: TextToSpeech? = null
     private var systemTtsReady = false
@@ -58,6 +62,11 @@ class VocabularyViewModel(
             _createdPlans.value = saved
             refreshPlanNames()
         }
+    }
+
+    /** Load plan list from SharedPreferences — call once on screen init */
+    fun loadSharedPrefsPlans(context: Context) {
+        initPrefs(context)
     }
 
     private val _currentPlan = MutableStateFlow(DEFAULT_PLAN)

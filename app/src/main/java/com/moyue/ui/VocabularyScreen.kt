@@ -52,6 +52,11 @@ fun VocabularyScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Load saved plan list from SharedPreferences on first composition
+    LaunchedEffect(Unit) {
+        viewModel.loadSharedPrefsPlans(context)
+    }
     var showExportMenu by remember { mutableStateOf(false) }
     
     // Multi-select mode for import
