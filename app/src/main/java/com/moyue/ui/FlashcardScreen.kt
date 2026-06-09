@@ -333,6 +333,19 @@ private fun CompactFlashcardOverview(
 
             Spacer(Modifier.weight(1f))
 
+            // Reset all progress button
+            IconButton(
+                onClick = onRequestResetAll,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    Icons.Default.Replay,
+                    contentDescription = stringResource(R.string.flashcard_reset_all_title),
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                )
+            }
+
             // Start review button
             Button(
                 onClick = onStartReview,
@@ -353,9 +366,6 @@ private fun CompactFlashcardOverview(
                 )
             }
         }
-    }
-    if (total > 0 && false) { // keep the reset button accessible via ⋮ menu
-        // Reset available from the overflow menu in TopAppBar
     }
 }
 
