@@ -193,67 +193,36 @@ fun FlashcardScreen(
                 .padding(padding)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
         ) {
-            // ── Settings Card: Plan + TTS Engine ──
+            // ── Compact top bar: Plan + TTS engine dropdowns on same row ──
             Card(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                shape = RoundedCornerShape(14.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(10.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    // Section label
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "⚙",
-                            fontSize = 12.sp
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            stringResource(R.string.flashcard_plan_label),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    PlanSelector(
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Plan dropdown
+                    CompactPlanDropdown(
                         plans = uiState.plans,
                         currentPlan = uiState.currentPlan,
                         onSelectPlan = { viewModel.switchPlan(it) },
                         onCreatePlan = { planNameInput = ""; showNewPlanDialog = true },
-                        onDeletePlan = { showDeletePlanDialog = true }
+                        onDeletePlan = { showDeletePlanDialog = true },
+                        modifier = Modifier.weight(1f)
                     )
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 8.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
-                    )
-
-                    // Flashcard TTS engine selector
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "🔊",
-                            fontSize = 12.sp
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            stringResource(R.string.flashcard_tts_engine),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    FlashcardTtsEngineSelector(context = context)
+                    // TTS engine dropdown
+                    CompactTtsDropdown(context = context)
                 }
             }
 
-            // Overview
+            // ── Compact overview with start review ──
             if (uiState.allFlashcards.isNotEmpty() || uiState.dueCount > 0) {
-                FlashcardOverview(
+                CompactFlashcardOverview(
                     total = uiState.allFlashcards.size,
                     dueCount = uiState.dueCount,
                     onStartReview = { viewModel.startReview() },
@@ -292,7 +261,7 @@ fun FlashcardScreen(
 }
 
 @Composable
-private fun FlashcardOverview(
+private fun CompactFlashcardOverview(
     total: Int,
     dueCount: Int,
     onStartReview: () -> Unit,
@@ -300,226 +269,180 @@ private fun FlashcardOverview(
     enabled: Boolean
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(10.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                // Total words stat
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.size(60.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    total.toString(),
-                                    fontSize = 22.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        stringResource(R.string.flashcard_total),
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    )
-                }
-
-                // Due count stat
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (dueCount > 0) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.size(60.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                dueCount.toString(),
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (dueCount > 0) MaterialTheme.colorScheme.onTertiaryContainer
-                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        stringResource(R.string.flashcard_due),
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    )
-                }
-
-                // Progress
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier.size(60.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            val progress = if (total > 0) ((total - dueCount).toFloat() / total * 100).toInt() else 0
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    "$progress%",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                )
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        stringResource(R.string.flashcard_review_overview),
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            Button(
-                onClick = onStartReview,
-                enabled = enabled,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f),
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                contentPadding = PaddingValues(vertical = 14.dp)
-            ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Total words
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    stringResource(R.string.flashcard_start_review),
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp
+                    total.toString(),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                )
+                Text(
+                    stringResource(R.string.flashcard_total),
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
                 )
             }
 
-            if (total > 0) {
-                Spacer(Modifier.height(6.dp))
-                TextButton(
-                    onClick = onRequestResetAll,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.Replay, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        stringResource(R.string.flashcard_reset_all_btn),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    )
-                }
+            // Divider
+            Box(modifier = Modifier.width(1.dp).height(28.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)))
+
+            // Due count
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    dueCount.toString(),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (dueCount > 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                )
+                Text(
+                    stringResource(R.string.flashcard_due),
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                )
+            }
+
+            // Divider
+            Box(modifier = Modifier.width(1.dp).height(28.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)))
+
+            // Progress
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val progress = if (total > 0) ((total - dueCount).toFloat() / total * 100).toInt() else 0
+                Text(
+                    "$progress%",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Text(
+                    stringResource(R.string.flashcard_review_overview),
+                    fontSize = 9.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                )
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            // Start review button
+            Button(
+                onClick = onStartReview,
+                enabled = enabled,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF6C63FF),
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
+                ),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    stringResource(R.string.flashcard_start_review),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp
+                )
             }
         }
     }
+    if (total > 0 && false) { // keep the reset button accessible via ⋮ menu
+        // Reset available from the overflow menu in TopAppBar
+    }
 }
 
-/** Plan selector — horizontal scrollable tabs with + and ✕ buttons */
+/** Compact plan dropdown — shows current plan, expand to pick/create/delete */
 @Composable
-private fun PlanSelector(
+private fun CompactPlanDropdown(
     plans: List<String>,
     currentPlan: String,
     onSelectPlan: (String) -> Unit,
     onCreatePlan: () -> Unit,
-    onDeletePlan: () -> Unit
+    onDeletePlan: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        plans.forEach { plan ->
-            val isSelected = plan == currentPlan
-            Surface(
-                onClick = { onSelectPlan(plan) },
-                shape = RoundedCornerShape(8.dp),
-                color = if (isSelected) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                border = if (isSelected) BorderStroke(
-                    0.5.dp,
-                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f)
-                ) else null,
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        if (plan == DEFAULT_PLAN) stringResource(R.string.flashcard_plan_default) else plan,
-                        fontSize = 13.sp,
-                        fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                        color = if (isSelected) MaterialTheme.colorScheme.onTertiaryContainer
-                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
-                    if (isSelected && plan != DEFAULT_PLAN) {
-                        Spacer(Modifier.width(4.dp))
-                        IconButton(
-                            onClick = onDeletePlan,
-                            modifier = Modifier.size(16.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = stringResource(R.string.flashcard_plan_delete),
-                                modifier = Modifier.size(12.dp),
-                                tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.5f)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        // "+" button
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
         Surface(
-            onClick = onCreatePlan,
+            onClick = { expanded = true },
             shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-            border = BorderStroke(
-                0.5.dp,
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
-            ),
+            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    "+",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    stringResource(R.string.flashcard_plan_new),
+                    if (currentPlan == DEFAULT_PLAN) stringResource(R.string.flashcard_plan_default) else currentPlan,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    maxLines = 1
+                )
+                Icon(
+                    Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                 )
             }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            plans.forEach { plan ->
+                val isSelected = plan == currentPlan
+                DropdownMenuItem(
+                    onClick = { onSelectPlan(plan); expanded = false },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                if (plan == DEFAULT_PLAN) stringResource(R.string.flashcard_plan_default) else plan,
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isSelected) Color(0xFF6C63FF) else MaterialTheme.colorScheme.onSurface
+                            )
+                            if (isSelected) {
+                                Spacer(Modifier.width(8.dp))
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF6C63FF))
+                            }
+                        }
+                    },
+                    trailingIcon = if (isSelected && plan != DEFAULT_PLAN) {
+                        {
+                            IconButton(onClick = { onDeletePlan(); expanded = false }, modifier = Modifier.size(20.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.flashcard_plan_delete), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    } else null
+                )
+            }
+            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+            DropdownMenuItem(
+                onClick = { onCreatePlan(); expanded = false },
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("+", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6C63FF))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.flashcard_plan_new), fontSize = 13.sp, color = Color(0xFF6C63FF))
+                    }
+                }
+            )
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** Compact TTS engine dropdown */
 @Composable
-private fun FlashcardTtsEngineSelector(context: Context) {
+private fun CompactTtsDropdown(context: Context) {
     val prefs = context.getSharedPreferences("moreader_config", Context.MODE_PRIVATE)
     var selectedProvider by remember { mutableStateOf(
         try { TTSProviderType.valueOf(prefs.getString("flashcard_tts_provider", "edge_tts") ?: "edge_tts") }
@@ -530,17 +453,14 @@ private fun FlashcardTtsEngineSelector(context: Context) {
     Box {
         Surface(
             onClick = { expanded = true },
-            shape = RoundedCornerShape(10.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-            border = androidx.compose.foundation.BorderStroke(
-                0.5.dp,
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-            )
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
                     stringResource(
@@ -551,23 +471,20 @@ private fun FlashcardTtsEngineSelector(context: Context) {
                             TTSProviderType.SYSTEM -> R.string.tts_provider_system
                         }
                     ),
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurface
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    maxLines = 1
                 )
                 Icon(
                     Icons.Default.KeyboardArrowDown,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                 )
             }
         }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.width(200.dp)
-        ) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             TTSProviderType.entries.forEach { provider ->
                 val isSelected = provider == selectedProvider
                 DropdownMenuItem(
@@ -589,17 +506,11 @@ private fun FlashcardTtsEngineSelector(context: Context) {
                                 ),
                                 fontSize = 13.sp,
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (isSelected) MaterialTheme.colorScheme.tertiary
-                                        else MaterialTheme.colorScheme.onSurface
+                                color = if (isSelected) Color(0xFF6C63FF) else MaterialTheme.colorScheme.onSurface
                             )
                             if (isSelected) {
                                 Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "✓",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.tertiary
-                                )
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF6C63FF))
                             }
                         }
                     }
