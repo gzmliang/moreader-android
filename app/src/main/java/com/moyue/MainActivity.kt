@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
@@ -135,17 +136,28 @@ fun MoreaderApp(
     previousCrash: String? = null,
     onSharedUrisConsumed: () -> Unit = {},
 ) {
-    var currentScreen by remember { mutableStateOf<Screen>(Screen.Library) }
+    // Navigation stack: push screens, pop on back
+    var navStack by remember { mutableStateOf(listOf<Screen>(Screen.Library)) }
+    val currentScreen = navStack.lastOrNull() ?: Screen.Library
     var showCrashDialog by remember { mutableStateOf(previousCrash != null) }
     var crashText by remember { mutableStateOf(previousCrash ?: "") }
 
-    when (val screen = currentScreen) {
+    fun navigateTo(screen: Screen) {
+        navStack = navStack + screen
+    }
+
+    // Intercept system back gesture / back button — pop stack, only exit at root
+    BackHandler(enabled = navStack.size > 1) {
+        navStack = navStack.dropLast(1)
+    }
+
+    when (currentScreen) {
         is Screen.Library -> {
             LibraryScreen(
-                onOpenBook = { bookId -> currentScreen = Screen.Reader(bookId) },
-                onOpenBookmarks = { currentScreen = Screen.Bookmarks },
-                onOpenVocabulary = { currentScreen = Screen.Vocabulary },
-                onOpenFlashcards = { currentScreen = Screen.Flashcards },
+                onOpenBook = { bookId -> navigateTo(Screen.Reader(bookId)) },
+                onOpenBookmarks = { navigateTo(Screen.Bookmarks) },
+                onOpenVocabulary = { navigateTo(Screen.Vocabulary) },
+                onOpenFlashcards = { navigateTo(Screen.Flashcards) },
                 repository = repository,
                 sharedUris = sharedUris,
                 onSharedUrisConsumed = onSharedUrisConsumed,
@@ -156,30 +168,30 @@ fun MoreaderApp(
         }
         is Screen.Reader -> {
             ReaderScreen(
-                bookId = screen.bookId,
+                bookId = currentScreen.bookId,
                 repository = repository,
-                onBack = { currentScreen = Screen.Library }
+                onBack = { navStack = navStack.dropLast(1) }
             )
         }
         is Screen.Bookmarks -> {
             BookmarksScreen(
                 repository = repository,
-                onBack = { currentScreen = Screen.Library },
+                onBack = { navStack = navStack.dropLast(1) },
                 onNavigateToBookmark = { bookId, chapterIndex, progress ->
-                    currentScreen = Screen.Reader(bookId)
+                    navigateTo(Screen.Reader(bookId))
                 }
             )
         }
         is Screen.Vocabulary -> {
             VocabularyScreen(
                 repository = repository,
-                onBack = { currentScreen = Screen.Library }
+                onBack = { navStack = navStack.dropLast(1) }
             )
         }
         is Screen.Flashcards -> {
             FlashcardScreen(
                 repository = repository,
-                onBack = { currentScreen = Screen.Library }
+                onBack = { navStack = navStack.dropLast(1) }
             )
         }
     }
