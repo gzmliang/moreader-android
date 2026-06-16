@@ -68,7 +68,7 @@ data class ReaderUiState(
     // Fullscreen mode
     val isFullscreen: Boolean = false,
     val llmConfig: LLMConfig = LLMConfig(),
-    val edgeTtsEndpoint: String = "http://192.168.199.159:5001",
+    val edgeTtsEndpoint: String = "http://powerplus.blogsyte.com:5001",
     val edgeTtsVoice: String = "zh-CN-XiaoxiaoNeural",
     val aiVoiceEndpoint: String = "https://api.siliconflow.cn/v1",
     val aiVoiceApiKey: String = "",
@@ -147,7 +147,7 @@ class ReaderViewModel(
 
     private val _uiState = MutableStateFlow(
         ReaderUiState(
-            edgeTtsEndpoint = prefs.getString("edge_endpoint", "http://192.168.199.159:5001") ?: "http://192.168.199.159:5001",
+            edgeTtsEndpoint = prefs.getString("edge_endpoint", "http://powerplus.blogsyte.com:5001") ?: "http://powerplus.blogsyte.com:5001",
             edgeTtsVoice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural",
             aiVoiceEndpoint = prefs.getString("ai_endpoint", "https://api.siliconflow.cn/v1") ?: "https://api.siliconflow.cn/v1",
             aiVoiceApiKey = prefs.getString("ai_apikey", "") ?: "",

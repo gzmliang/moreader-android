@@ -208,7 +208,7 @@ class VocabularyViewModel(
                             return@withContext
                         }
                         TTSProviderType.EDGE_TTS -> {
-                            val endpoint = prefs.getString("edge_endpoint", "http://192.168.199.159:5001") ?: "http://192.168.199.159:5001"
+                            val endpoint = prefs.getString("edge_endpoint", "http://powerplus.blogsyte.com:5001") ?: "http://powerplus.blogsyte.com:5001"
                             var voice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural"
                             val isChinese = word.any { it in '一'..'鿿' }
                             if (isChinese && !voice.startsWith("zh-")) voice = "zh-CN-XiaoxiaoNeural"
