@@ -24,8 +24,9 @@ class EdgeTTSProvider(
     }
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)   // LAN 服务器 <1s，代理也够
+        .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
+        .proxy(java.net.Proxy.NO_PROXY)  // Edge TTS 是局域网服务，不走代理
         .build()
 
     private var currentCall: Call? = null

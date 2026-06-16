@@ -21,3 +21,4 @@ local.properties
 # moreader.keystore — DO NOT DELETE
 # debug.keystore
 *.apk
+app/.cxx/
