@@ -180,4 +180,32 @@ cd /tmp/apk-server && python3 -m http.server 9999 --bind 0.0.0.0
 
 - Plan 列表存入 SharedPreferences (`moreader_vocab`)，单词 plan 存入 Room DB
 - 向后兼容：MIGRATION_7_8 给旧数据自动设 `plan='默认'`
+
+---
+
+## v2.8.0 (V20009) — TTS 句子高亮大修
+
+**日期：** 2026-06-16
+
+### 修复
+
+| 问题 | 原因 | 修复 |
+|------|------|------|
+| 每段最后一句绿色高亮消失 | JS 句子拆分 regex `text.match()` 与 Kotlin `split()` 不一致，最后一句无标点则被省略 | 改为逐标点切分 + 兜住末尾残留文本，与 Kotlin 逻辑完全对齐 |
+| 引号结尾的句子高亮悬停在引号上 | `."` 结尾时引号被拆成独立1字符"句子" | Kotlin `SENTENCE_REGEX` 和 JS 拆分均跳过闭合引号（`" ' » « "" '' 「」『』`） |
+| 上一段绿色高亮残留 | `initAndHighlight` 未清旧绿色 span | 加 `ttsSentenceClear()` 再建新高亮 |
+| 句子高亮不在屏幕中央 | 只有段落级 `scrollIntoView`，句子级无滚动 | `_ttsHLSentence` 末尾加 `span.scrollIntoView({block:'center'})` |
+
+### 改进
+
+- 新增 `MoreaderBridge.jsLog()` 日志桥，JS 内部执行可写回 Android logcat
+- 所有关键节点（段落开始/结束、句子高亮设置、JS 调用）加毫秒时间戳日志 `[TIME]`
+
+### 文件改动
+
+| 文件 | 改动 |
+|------|------|
+| `ReaderViewModel.kt` | `SENTENCE_REGEX` 加引号消费；`onDone` 移除50ms延迟（不再需要）；加 `[TIME]` 日志 |
+| `EpubWebView.kt` | 重写 JS 句子拆分（逐标点切分+引号跳过+末段兜底）；`_ttsHLSentence` 加 `scrollIntoView`；`initAndHighlight` 加 `ttsSentenceClear`；加 `MoreaderBridge.jsLog` 桥 |
+| `build.gradle.kts` | versionCode 20008→20009, versionName 2.7.0→2.8.0 |
 - `vocabulary` 改为 `_currentPlan.flatMapLatest { repository.getVocabularyByPlan(it) }` 动态过滤

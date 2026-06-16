@@ -75,12 +75,15 @@ fun EpubWebView(
         webView?.let { wv ->
             when {
                 ttsHighlightIndex < 0 -> {
+                    android.util.Log.d("EpubWV", "[TIME] ⏱ CLEAR ALL @${System.currentTimeMillis()}")
                     wv.evaluateJavascript("window.ttsClear();window.ttsSentenceClear()", null)
                 }
                 ttsSentenceIdx == 0 || paraChanged -> {
+                    android.util.Log.d("EpubWV", "[TIME] ⏱ initHL($ttsHighlightIndex,0) paraChanged=$paraChanged @${System.currentTimeMillis()}")
                     wv.evaluateJavascript("window.initAndHighlight($ttsHighlightIndex,0)", null)
                 }
                 ttsSentenceIdx > 0 -> {
+                    android.util.Log.d("EpubWV", "[TIME] ⏱ ttsHLSentence($ttsSentenceIdx) @${System.currentTimeMillis()}")
                     wv.evaluateJavascript("window.ttsHLSentence($ttsSentenceIdx)", null)
                 }
                 else -> {
@@ -306,16 +309,34 @@ fun EpubWebView(
                                 window._ttsSentencePara=null;
                                 window.initAndHighlight=function(paraIdx,sentenceIdx){
                                     console.log('[initHL] para='+paraIdx+' sent='+sentenceIdx);
+                                    MoreaderBridge.jsLog('[JS] initAndHighlight('+paraIdx+','+sentenceIdx+')');
                                     document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
-                                    if(paraIdx<0||paraIdx>=all.length)return;
+                                    if(paraIdx<0||paraIdx>=all.length){MoreaderBridge.jsLog('[JS] initHL bad paraIdx');return;}
                                     var el=all[paraIdx];
                                     el.classList.add('tts-hl');
                                     el.scrollIntoView({behavior:'smooth',block:'center'});
                                     window.ttsSentences=[];
                                     window._ttsSentencePara=el;
                                     var text=el.textContent;
-                                    var matches=text.match(/[^.!?。！？；;]+[.!?。！？；;]+/g)||[text];
+                                    // 与 Kotlin SENTENCE_REGEX 保持一致：在 (.!?。！？；;) 之后拆分，包括末尾无标点的残留文本
+                                    var matches=[];
+                                    var splitPos=0;
+                                    var re=/[.!?。！？；;]/g;
+                                    var m;
+                                    while((m=re.exec(text))!==null){
+                                        var end=m.index+1;
+                                        matches.push(text.substring(splitPos,end));
+                                        splitPos=end;
+                                        // 跳过标点后的空格
+                                        while(splitPos<text.length&&text.charAt(splitPos)===' ')splitPos++;
+                                        // 跳过闭合引号（避免 ." 或 !' 把引号当成独立句子）
+                                        while(splitPos<text.length&&/["'\u00BB\u00AB\u201C\u201D\u2018\u2019\u300C\u300D\u300E\u300F]/.test(text.charAt(splitPos)))splitPos++;
+                                    }
+                                    // 兜住末尾没有标点的残留文本
+                                    if(splitPos<text.length)matches.push(text.substring(splitPos));
+                                    if(matches.length===0)matches=[text];
+                                    MoreaderBridge.jsLog('[JS] sentSplit: newMatches='+matches.length+' textLen='+text.length);
                                     var pos=0;
                                     for(var i=0;i<matches.length;i++){
                                         var s=matches[i];
@@ -327,6 +348,8 @@ fun EpubWebView(
                                         window.ttsSentences.push({start:0,end:text.length});
                                     }
                                     if(sentenceIdx>=0&&sentenceIdx<window.ttsSentences.length){
+                                        // 清除上一段残留的绿色高亮，再设新句子的
+                                        window.ttsSentenceClear();
                                         window._ttsHLSentence(sentenceIdx);
                                     }
                                 };
@@ -337,10 +360,15 @@ fun EpubWebView(
                                 };
                                 window._ttsHLSentence=function(idx){
                                     console.log('[_ttsHL] idx='+idx+' sent='+JSON.stringify(window.ttsSentences&&window.ttsSentences[idx]));
-                                    if(!window.ttsSentences||idx<0||idx>=window.ttsSentences.length){console.log('[_ttsHL] BOUNDS FAIL');return;}
+                                    MoreaderBridge.jsLog('[JS] _ttsHLSentence('+idx+') start, sentences='+(window.ttsSentences?window.ttsSentences.length:'null')+' para='+(window._ttsSentencePara?window._ttsSentencePara.tagName:'null'));
+                                    if(!window.ttsSentences||idx<0||idx>=window.ttsSentences.length){
+                                        MoreaderBridge.jsLog('[JS] _ttsHL BOUNDS FAIL: idx='+idx+' len='+(window.ttsSentences?window.ttsSentences.length:'null'));
+                                        return;
+                                    }
                                     var sent=window.ttsSentences[idx];
+                                    MoreaderBridge.jsLog('[JS] sent['+idx+']={start:'+sent.start+',end:'+sent.end+'}');
                                     var hl=window._ttsSentencePara;
-                                    if(!hl)return;
+                                    if(!hl){MoreaderBridge.jsLog('[JS] _ttsHL no para');return;}
                                     var textNodes=[];
                                     var walker=document.createTreeWalker(hl,NodeFilter.SHOW_TEXT);
                                     var charCount=0;
@@ -348,20 +376,30 @@ fun EpubWebView(
                                         textNodes.push({node:walker.currentNode,start:charCount,end:charCount+walker.currentNode.textContent.length});
                                         charCount+=walker.currentNode.textContent.length;
                                     }
+                                    MoreaderBridge.jsLog('[JS] textNodes='+textNodes.length+' totalChars='+charCount);
                                     var sTN=null,sOff=0,eTN=null,eOff=0;
                                     for(var i=0;i<textNodes.length;i++){
                                         var tn=textNodes[i];
                                         if(!sTN&&tn.start<=sent.start&&tn.end>sent.start){sTN=tn.node;sOff=sent.start-tn.start;}
                                         if(tn.start<sent.end&&tn.end>=sent.end){eTN=tn.node;eOff=sent.end-tn.start;}
                                     }
-                                    if(!sTN||!eTN)return;
+                                    if(!sTN||!eTN){MoreaderBridge.jsLog('[JS] _ttsHL no nodes: sTN='+(sTN?'ok':'null')+' eTN='+(eTN?'ok':'null'));return;}
+                                    MoreaderBridge.jsLog('[JS] _ttsHL sTN ok sOff='+sOff+' eTN ok eOff='+eOff);
                                     var range=document.createRange();
                                     range.setStart(sTN,sOff);
                                     range.setEnd(eTN,eOff);
                                     var span=document.createElement('span');
                                     span.className='tts-sentence-hl';
                                     span.setAttribute('data-tts-sentence','1');
-                                    try{range.surroundContents(span);}catch(e){range.insertNode(span);}
+                                    try{
+                                        range.surroundContents(span);
+                                        MoreaderBridge.jsLog('[JS] surroundContents OK');
+                                    }catch(e){
+                                        MoreaderBridge.jsLog('[JS] surroundContents EXCEPTION: '+e.message);
+                                        range.insertNode(span);
+                                    }
+                                    // 滚动到屏幕中央
+                                    span.scrollIntoView({behavior:'smooth',block:'center'});
                                 };
                                 window.ttsSentenceClear=function(){
                                     document.querySelectorAll('span[data-tts-sentence=\"1\"]').forEach(function(s){
@@ -551,6 +589,8 @@ fun EpubWebView(
                         fun onParagraphClicked(index: Int) { paragraphCallbackRef.value(index) }
                         @JavascriptInterface
                         fun onScrollToParagraph(index: Int) { scrollCallbackRef.value(index) }
+                        @JavascriptInterface
+                        fun jsLog(msg: String) { android.util.Log.d("TTS-JS", msg) }
                     }, "MoreaderBridge")
                 }
             },

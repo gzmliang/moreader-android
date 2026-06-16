@@ -183,7 +183,7 @@ class ReaderViewModel(
     private var pendingBoundaries: List<com.moyue.app.tts.WordBoundary>? = null  // onWordBoundaries 在 onStart 之前
     private val boundariesCache = mutableMapOf<Int, List<com.moyue.app.tts.WordBoundary>>()  // 预加载词边界
     private var estJob: kotlinx.coroutines.Job? = null  // 句子跟踪协程
-    private val SENTENCE_REGEX = Regex("(?<=[.!?。！？；;])\\s*")
+    private val SENTENCE_REGEX = Regex("(?<=[.!?。！？；;])\\s*['\"\\u00BB\\u00AB\\u201C\\u201D\\u2018\\u2019\\u300C\\u300D\\u300E\\u300F]*")
 
     private fun log(msg: String) {
         Log.d(TAG, msg)
@@ -805,8 +805,11 @@ class ReaderViewModel(
         val listener = object : TTSListener {
             private var rangesReceived = false
             private var detectJob: kotlinx.coroutines.Job? = null
+            private var paraStartMs = 0L
 
             override fun onStart() {
+                paraStartMs = System.currentTimeMillis()
+                log("[TIME] ⏱ Para${idx + 1} START @${paraStartMs}ms")
                 // 重置每个段落的检测状态
                 rangesReceived = false
                 detectJob?.cancel(); detectJob = null
@@ -832,7 +835,7 @@ class ReaderViewModel(
                 val wb = pendingBoundaries
                 if (wb != null && wb.isNotEmpty() && sentenceEnds.size > 1) {
                     log("[SENT] word-boundary tracking → ${wb.size} words")
-                    startWordBoundaryTracking(wb, idx)
+                    startWordBoundaryTracking(wb, text, idx)
                 }
                 pendingBoundaries = null
                 // 4. System TTS onRangeStart 会自己驱动
@@ -866,6 +869,9 @@ class ReaderViewModel(
                 }
             }
             override fun onDone() {
+                val now = System.currentTimeMillis()
+                val elapsed = now - paraStartMs
+                log("[TIME] ⏱ Para${idx + 1} DONE @${now}ms (+${elapsed}ms)")
                 estJob?.cancel()
                 consecutiveErrors = 0
                 // ✅ 不清 ttsSentenceIdx — 下段的 initAndHighlight 会清除旧高亮
@@ -1044,17 +1050,27 @@ class ReaderViewModel(
 
     // ======== 句子追踪 ========
     /** Edge TTS 词边界驱动 — 每个句子定位第一个词的时间偏移精确调度 */
-    private fun startWordBoundaryTracking(boundaries: List<com.moyue.app.tts.WordBoundary>, paraIdx: Int) {
+    private fun startWordBoundaryTracking(boundaries: List<com.moyue.app.tts.WordBoundary>, text: String, paraIdx: Int) {
         estJob?.cancel()
         estJob = viewModelScope.launch {
             var prevMs = 0L
+            val spd = _uiState.value.ttsSpeed
+            val hasChinese = text.any { it in '\u4e00'..'\u9fff' }
+            val charsPerSec = if (hasChinese) (6f * spd).coerceAtLeast(4f) else (15f * spd).coerceAtLeast(8f)
             log("[SENT:wb] START P${paraIdx + 1} — boundaries=${boundaries.size} ends=${sentenceEnds.size} range=[${sentenceEnds.firstOrNull() ?: 0}..${sentenceEnds.lastOrNull() ?: 0}] bRange=[${boundaries.firstOrNull()?.charStart ?: 0}..${boundaries.lastOrNull()?.charEnd ?: 0}]")
             for (sentIdx in 1 until sentenceEnds.size) {
                 val sentStart = sentenceEnds[sentIdx - 1]
+                val sentChars = sentenceEnds[sentIdx] - sentStart
                 val firstWord = boundaries.find { it.charStart >= sentStart }
                 if (firstWord == null) {
-                    log("[SENT:wb] ⛔ no word at sentStart=$sentStart")
-                    break
+                    // 降级：找不到词边界就用字符比例估算时间
+                    val waitMs = (sentChars.toFloat() / charsPerSec * 1000f).toLong().coerceAtLeast(80L)
+                    log("[SENT:wb] ⛔️ no word at sentStart=$sentStart — fallback est ${waitMs}ms ($sentChars chars)")
+                    delay(waitMs)
+                    if (!playChainActive) break
+                    _uiState.update { it.copy(ttsSentenceIdx = sentIdx) }
+                    log("[TIME] ⏱ ${paraIdx + 1}.#$sentIdx HL-SET @${System.currentTimeMillis()}")
+                    continue
                 }
                 val targetMs = firstWord.offsetMs.toLong()
                 val waitMs = (targetMs - prevMs).coerceAtLeast(50)
@@ -1062,6 +1078,7 @@ class ReaderViewModel(
                 if (!playChainActive) break
                 _uiState.update { it.copy(ttsSentenceIdx = sentIdx) }
                 log("[SENT:wb] P${paraIdx + 1} #$sentIdx/${sentenceEnds.size} @${targetMs}ms")
+                log("[TIME] ⏱ ${paraIdx + 1}.#$sentIdx HL-SET @${System.currentTimeMillis()}")
                 prevMs = targetMs
             }
         }
