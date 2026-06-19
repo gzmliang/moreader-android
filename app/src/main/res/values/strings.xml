@@ -38,7 +38,7 @@
     <!-- Selection menu -->
     <string name="ai_translate">🤖 翻译</string>
     <string name="dictionary">📖 词典</string>
-    <string name="grammar_analysis">🔍 语法</string>
+    <string name="transcribe">🎙️ 转录</string>
     <string name="read_aloud">🔊 朗读</string>
 
     <!-- Translation -->

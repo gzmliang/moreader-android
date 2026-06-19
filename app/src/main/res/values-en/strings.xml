@@ -147,7 +147,7 @@ Tap the 🔊 button in vocabulary list to test pronunciation first</string>
     <string name="font_weight_bold">Bold</string>
     <string name="font_weight_normal">Regular</string>
     <string name="font_weight_semibold">SemiBold</string>
-    <string name="grammar_analysis">🔍 Grammar</string>
+    <string name="transcribe">🎙️ Transcribe</string>
     <string name="grammar_title">Grammar Analysis</string>
     <string name="help_btn_cloud_ai">Cloud Translation Help</string>
     <string name="help_btn_local_ai">Local AI Translation Help</string>

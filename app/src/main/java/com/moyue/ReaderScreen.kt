@@ -377,7 +377,7 @@ fun ReaderScreen(
                             TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.readSelection(state.selectedText!!) }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF059669)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_aloud), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
                             TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("translate") }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF3B82F6)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate), fontSize = 11.sp, maxLines = 1) }
                             TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("dictionary") }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF8B5CF6)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.dictionary), fontSize = 11.sp, maxLines = 1) }
-                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("analyze") }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF59E0B)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_analysis), fontSize = 11.sp, maxLines = 1) }
+                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.transcribeSelection() }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF59E0B)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.transcribe), fontSize = 11.sp, maxLines = 1) }
                         }
                     }
                 }
@@ -514,35 +514,70 @@ fun ReaderScreen(
                     }
                 }
                 
-                // Paragraph click menu
-                if (showParagraphMenu) {
-                    AlertDialog(
-                        onDismissRequest = { showParagraphMenu = false },
-                        title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.paragraph_menu_title)) },
-                        text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.paragraph_menu_message)) },
-                        confirmButton = {
-                            Row {
-                                TextButton(
-                                    onClick = {
-                                        viewModel.setCurrentParagraph(clickedParagraphIndex)
-                                        showParagraphMenu = false
-                                        viewModel.addBookmark()
-                                    }
-                                ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title)) }
-                                TextButton(
-                                    onClick = {
-                                        showParagraphMenu = false
-                                        viewModel.readFromParagraph(clickedParagraphIndex)
-                                    }
-                                ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_from_here)) }
-                            }
-                        },
-                        dismissButton = {
+                // Paragraph click floating chip — non-blocking, auto-dismiss 3s
+                AnimatedVisibility(
+                    visible = showParagraphMenu && clickedParagraphIndex >= 0,
+                    enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+                    exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp),
+                ) {
+                    LaunchedEffect(clickedParagraphIndex) {
+                        kotlinx.coroutines.delay(3000)
+                        showParagraphMenu = false
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        shadowElevation = 6.dp,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(start = 4.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // Main: read from this paragraph
                             TextButton(
-                                onClick = { showParagraphMenu = false }
-                            ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel)) }
+                                onClick = {
+                                    showParagraphMenu = false
+                                    viewModel.readFromParagraph(clickedParagraphIndex)
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            ) {
+                                Icon(Icons.Default.PlayArrow, null, Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_from_here),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
+                            // Bookmark
+                            IconButton(
+                                onClick = {
+                                    viewModel.setCurrentParagraph(clickedParagraphIndex)
+                                    viewModel.addBookmark()
+                                    showParagraphMenu = false
+                                },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(Icons.Outlined.BookmarkBorder,
+                                    contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title),
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                            // Close
+                            IconButton(
+                                onClick = { showParagraphMenu = false },
+                                modifier = Modifier.size(28.dp),
+                            ) {
+                                Icon(Icons.Default.Close,
+                                    contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close),
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f))
+                            }
                         }
-                    )
+                    }
                 }
                 }
 

@@ -1,8 +1,13 @@
 package com.moyue.app.ui
 
 import android.app.Application
+import android.content.ContentValues
 import android.content.Context
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.moyue.app.data.BookRepository
@@ -14,7 +19,11 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.io.File
 import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
 data class SelectionInfo(
@@ -1019,14 +1028,163 @@ class ReaderViewModel(
     }
 
     fun readSelection(text: String) {
+        // 优先从已清洗的 ttsParagraphs 取文本（用户选中了段落中的文字）
+        val s = _uiState.value
+        val cleanText = s.selectionInfo?.let { info ->
+            val paras = s.ttsParagraphs
+            if (paras.isNotEmpty() && info.paraIdx in paras.indices) {
+                if (info.endParaIdx > info.paraIdx) {
+                    // 跨段：从 paraIdx 到 endParaIdx 连起来
+                    (info.paraIdx..info.endParaIdx.coerceAtMost(paras.lastIndex))
+                        .map { paras.getOrElse(it) { "" } }
+                        .filter { it.isNotBlank() }
+                        .joinToString("\n")
+                } else {
+                    paras[info.paraIdx]
+                }
+            } else null
+        }?.takeIf { it.isNotBlank() } ?: text  // fallback 到原始选中文本
         killPlayChain()
         _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = -1) }
         val p = recreateProvider() ?: run { _uiState.update { it.copy(isTtsPlaying = false) }; return }
-        p.speak(text, _uiState.value.ttsSpeed, object : TTSListener {
+        p.speak(cleanText, s.ttsSpeed, object : TTSListener {
             override fun onStart() {}
             override fun onDone() { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) } }
             override fun onError(msg: String) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) } }
         })
+    }
+
+    // ===== Transcribe: selected paragraph → TTS → save MP3 to Downloads =====
+
+    fun transcribeSelection() {
+        val s = _uiState.value
+        val info = s.selectionInfo ?: return
+        val paragraphs = s.ttsParagraphs
+        if (paragraphs.isEmpty()) {
+            log("转录失败：ttsParagraphs 为空")
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // 1. 从已清洗的 ttsParagraphs 取文本（跟全文朗读走同一路径，已去拼音/脚注/装饰）
+                val cleanText = if (info.endParaIdx > info.paraIdx) {
+                    // 跨多段：从 paraIdx 到 endParaIdx 取全部
+                    (info.paraIdx..info.endParaIdx.coerceAtMost(paragraphs.lastIndex))
+                        .map { paragraphs.getOrElse(it) { "" } }
+                        .filter { it.isNotBlank() }
+                        .joinToString("\n")
+                } else {
+                    // 单段：直接用整段清洗文本（偏移量不匹配，不尝试子截取）
+                    paragraphs.getOrElse(info.paraIdx) { "" }
+                }
+                if (cleanText.isBlank()) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(getApplication(), "清洗后无有效内容", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                log("转录: 段落${info.paraIdx} \"${cleanText.take(80)}\"")
+
+                // 2. Call Edge TTS
+                val voice = s.edgeTtsVoice.ifEmpty { "zh-CN-XiaoxiaoNeural" }
+                val endpoint = s.edgeTtsEndpoint
+                val json = JSONObject().apply {
+                    put("text", cleanText)
+                    put("voice", voice)
+                    put("rate", "+0%")
+                }
+                val body = json.toString().toRequestBody("application/json".toMediaType())
+                val request = Request.Builder()
+                    .url("${endpoint.trimEnd('/')}/tts")
+                    .post(body)
+                    .build()
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                val response = client.newCall(request).execute()
+                val mp3Bytes = response.body?.bytes()
+                if (mp3Bytes == null || mp3Bytes.size < 100) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(getApplication(), "TTS 生成失败", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                // 3. Save to Downloads/MoreaderVoice/
+                val prefix = cleanText.take(15).replace(Regex("""[\\/:*?"<>|]"""), "").trim()
+                val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                val filename = "转录-$prefix-$date.mp3"
+                val saved = saveMp3ToDownloads(filename, mp3Bytes)
+
+                // 4. Notify user
+                withContext(Dispatchers.Main) {
+                    if (saved) {
+                        Toast.makeText(getApplication(),
+                            "✅ 已转录 → Downloads/MoreaderVoice/$filename",
+                            Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(getApplication(), "转录失败：无法保存文件", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                log("转录失败: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(getApplication(), "转录失败: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun cleanSelectedText(text: String): String {
+        // 用普通字符串（非 raw string），让 \uXXXX 在编译期转为实际汉字
+        val cjk = "[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]"
+        var cleaned = text
+        // 移除注音（括号包裹的拼音）
+        cleaned = cleaned.replace(Regex("[（(][a-zA-Zāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜü\\s]+[)）]"), "")
+        // 移除汉字间或汉字前后的拼音音节
+        cleaned = cleaned.replace(Regex("(?<=${cjk})\\s*[a-zāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜü]{1,6}\\s*(?=${cjk})"), "")
+        // 也移除行首/行尾的孤立拼音（选中文本可能每行一条拼音）
+        cleaned = cleaned.replace(Regex("\\s*[a-zāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜü]{1,6}\\s*"), " ")
+        // 清除脚注标记 [1] [2] ...
+        cleaned = cleaned.replace(Regex("\\[\\d+]"), "")
+        // 清除装饰符号
+        cleaned = cleaned.replace(Regex("[*＊·•●▶▷◀◁◆◇○◎●◉○□■△▲☆★❀✿❁🌸🌺]"), "")
+        // 清除汉字间空格（避免 Edge TTS 逐字朗读）
+        cleaned = cleaned.replace(Regex("(${cjk})\\s+(?=${cjk})"), "$1")
+        // 合并多余空白
+        cleaned = cleaned.replace(Regex("\\s+"), " ")
+        return cleaned.trim()
+    }
+
+    private fun saveMp3ToDownloads(filename: String, data: ByteArray): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, filename)
+                    put(MediaStore.Downloads.MIME_TYPE, "audio/mpeg")
+                    put(MediaStore.Downloads.RELATIVE_PATH, "Download/MoreaderVoice")
+                }
+                val ctx = getApplication<Application>()
+                val uri = ctx.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                uri?.let {
+                    ctx.contentResolver.openOutputStream(it)?.use { output ->
+                        output.write(data)
+                    }
+                }
+                uri != null
+            } else {
+                @Suppress("DEPRECATION")
+                val dir = getApplication<Application>().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                val moreaderDir = File(dir, "MoreaderVoice")
+                moreaderDir.mkdirs()
+                File(moreaderDir, filename).writeBytes(data)
+                true
+            }
+        } catch (e: Exception) {
+            log("保存 MP3 失败: ${e.message}")
+            false
+        }
     }
 
     fun ttsPause() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_pause, _uiState.value.ttsPlayIdx)); playChainActive = false; currentTTSProvider?.stop(); _uiState.update { it.copy(isTtsPaused = true, isTtsPlaying = false) } }
