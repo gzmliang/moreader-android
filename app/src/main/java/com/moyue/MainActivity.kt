@@ -1,5 +1,6 @@
 package com.moyue.app
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -8,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -18,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -139,57 +142,75 @@ fun MoreaderApp(
     var showCrashDialog by remember { mutableStateOf(previousCrash != null) }
     var crashText by remember { mutableStateOf(previousCrash ?: "") }
 
-    when (val screen = currentScreen) {
-        is Screen.Library -> {
-            LibraryScreen(
-                onOpenBook = { bookId -> currentScreen = Screen.Reader(bookId) },
-                onOpenBookmarks = { currentScreen = Screen.Bookmarks },
-                onOpenVocabulary = { currentScreen = Screen.Vocabulary },
-                onOpenFlashcards = { currentScreen = Screen.Flashcards },
-                repository = repository,
-                sharedUris = sharedUris,
-                onSharedUrisConsumed = onSharedUrisConsumed,
-                onLanguageSwitch = {
-                    activity.recreate()
-                },
-            )
-        }
-        is Screen.Reader -> {
-            ReaderScreen(
-                bookId = screen.bookId,
-                repository = repository,
-                onBack = { currentScreen = Screen.Library }
-            )
-        }
-        is Screen.Bookmarks -> {
-            BookmarksScreen(
-                repository = repository,
-                onBack = { currentScreen = Screen.Library },
-                onNavigateToBookmark = { bookId, chapterIndex, progress ->
-                    currentScreen = Screen.Reader(bookId)
-                }
-            )
-        }
-        is Screen.Vocabulary -> {
-            VocabularyScreen(
-                repository = repository,
-                onBack = { currentScreen = Screen.Library }
-            )
-        }
-        is Screen.Flashcards -> {
-            FlashcardScreen(
-                repository = repository,
-                onBack = { currentScreen = Screen.Library }
-            )
-        }
-    }
+    // Bookshelf independent dark/light theme (separate from reader settings)
+    val context = LocalContext.current
+    val bookshelfPrefs = remember { context.getSharedPreferences("moreader_prefs", Context.MODE_PRIVATE) }
+    var bookshelfDark by remember { mutableStateOf(bookshelfPrefs.getBoolean("bookshelf_dark", false)) }
 
-    // Show crash dialog from previous session
-    if (showCrashDialog && crashText.isNotEmpty()) {
-        CrashDialog(
-            errorText = crashText,
-            onDismiss = { showCrashDialog = false }
-        )
+    MoreaderTheme(
+        darkTheme = when (currentScreen) {
+            is Screen.Library -> bookshelfDark
+            else -> isSystemInDarkTheme()
+        }
+    ) {
+        when (val screen = currentScreen) {
+            is Screen.Library -> {
+                LibraryScreen(
+                    onOpenBook = { bookId -> currentScreen = Screen.Reader(bookId) },
+                    onOpenBookmarks = { currentScreen = Screen.Bookmarks },
+                    onOpenVocabulary = { currentScreen = Screen.Vocabulary },
+                    onOpenFlashcards = { currentScreen = Screen.Flashcards },
+                    repository = repository,
+                    sharedUris = sharedUris,
+                    onSharedUrisConsumed = onSharedUrisConsumed,
+                    onLanguageSwitch = {
+                        activity.recreate()
+                    },
+                    bookshelfDark = bookshelfDark,
+                    onToggleBookshelfDark = {
+                        val newVal = !bookshelfDark
+                        bookshelfDark = newVal
+                        bookshelfPrefs.edit().putBoolean("bookshelf_dark", newVal).apply()
+                    },
+                )
+            }
+            is Screen.Reader -> {
+                ReaderScreen(
+                    bookId = screen.bookId,
+                    repository = repository,
+                    onBack = { currentScreen = Screen.Library }
+                )
+            }
+            is Screen.Bookmarks -> {
+                BookmarksScreen(
+                    repository = repository,
+                    onBack = { currentScreen = Screen.Library },
+                    onNavigateToBookmark = { bookId, chapterIndex, progress ->
+                        currentScreen = Screen.Reader(bookId)
+                    }
+                )
+            }
+            is Screen.Vocabulary -> {
+                VocabularyScreen(
+                    repository = repository,
+                    onBack = { currentScreen = Screen.Library }
+                )
+            }
+            is Screen.Flashcards -> {
+                FlashcardScreen(
+                    repository = repository,
+                    onBack = { currentScreen = Screen.Library }
+                )
+            }
+        }
+
+        // Show crash dialog from previous session
+        if (showCrashDialog && crashText.isNotEmpty()) {
+            CrashDialog(
+                errorText = crashText,
+                onDismiss = { showCrashDialog = false }
+            )
+        }
     }
 }
 

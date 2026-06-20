@@ -49,6 +49,8 @@ fun LibraryScreen(
     onLanguageSwitch: () -> Unit = {},
     sharedUris: List<Uri> = emptyList(),
     onSharedUrisConsumed: () -> Unit = {},
+    bookshelfDark: Boolean = false,
+    onToggleBookshelfDark: () -> Unit = {},
     viewModel: LibraryViewModel = viewModel(
         factory = LibraryViewModelFactory(repository)
     ),
@@ -112,24 +114,53 @@ fun LibraryScreen(
                     }
                 },
                 actions = {
-                    if (!isSearchActive) {
-                        IconButton(onClick = { isSearchActive = true }) {
-                            Icon(Icons.Default.Search, contentDescription = null)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(0.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Bookshelf dark/light toggle
+                        IconButton(
+                            onClick = onToggleBookshelfDark,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                if (bookshelfDark) Icons.Default.WbSunny else Icons.Default.DarkMode,
+                                contentDescription = if (bookshelfDark) "切换白天模式" else "切换黑夜模式",
+                                modifier = Modifier.size(20.dp),
+                            )
                         }
-                    }
-                    IconButton(onClick = onOpenBookmarks) {
-                        Icon(Icons.Default.Bookmark, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title))
-                    }
-                    IconButton(onClick = onOpenVocabulary) {
-                        Icon(Icons.Default.MenuBook, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_title))
-                    }
-                    IconButton(onClick = onOpenFlashcards) {
-                        Icon(Icons.Default.Bolt, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.flashcard_title))
-                    }
-                    IconButton(onClick = {
-                        importLauncher.launch(arrayOf("application/epub+zip"))
-                    }) {
-                        Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.import_book))
+                        if (!isSearchActive) {
+                            IconButton(
+                                onClick = { isSearchActive = true },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        IconButton(
+                            onClick = onOpenBookmarks,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(Icons.Default.Bookmark, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title), modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(
+                            onClick = onOpenVocabulary,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(Icons.Default.MenuBook, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_title), modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(
+                            onClick = onOpenFlashcards,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(Icons.Default.Bolt, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.flashcard_title), modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(
+                            onClick = { importLauncher.launch(arrayOf("application/epub+zip")) },
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.import_book), modifier = Modifier.size(20.dp))
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
