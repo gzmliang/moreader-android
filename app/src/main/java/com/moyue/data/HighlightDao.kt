@@ -17,8 +17,14 @@ interface HighlightDao {
     @Query("SELECT * FROM highlights WHERE bookId = :bookId ORDER BY chapterIndex ASC, startParagraph ASC, startOffset ASC")
     fun getHighlightsForBook(bookId: String): Flow<List<Highlight>>
 
+    @Query("SELECT * FROM highlights WHERE bookId = :bookId ORDER BY chapterIndex ASC, startParagraph ASC, startOffset ASC")
+    suspend fun getHighlightsOnce(bookId: String): List<Highlight>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addHighlight(highlight: Highlight): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun addHighlights(highlights: List<Highlight>)
 
     @Update
     suspend fun updateHighlight(highlight: Highlight)

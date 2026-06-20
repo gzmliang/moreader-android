@@ -467,7 +467,7 @@ val chinese = word.any { it in '一'..'鿿' }
         viewModelScope.launch {
             val dueCards = dataStore.getAllFlashcards()
                 .filter { it.plan == _uiState.value.currentPlan && it.dueDate <= System.currentTimeMillis() }
-                .sortedBy { it.dueDate }
+                .shuffled()
             _uiState.update {
                 it.copy(
                     isReviewMode = true,

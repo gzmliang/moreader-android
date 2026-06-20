@@ -17,8 +17,14 @@ interface BookmarkDao {
     @Query("SELECT * FROM bookmarks WHERE bookId = :bookId ORDER BY chapterIndex ASC, progress ASC")
     fun getBookmarksForBook(bookId: String): Flow<List<Bookmark>>
 
+    @Query("SELECT * FROM bookmarks WHERE bookId = :bookId ORDER BY chapterIndex ASC, progress ASC")
+    suspend fun getBookmarksOnce(bookId: String): List<Bookmark>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addBookmark(bookmark: Bookmark): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun addBookmarks(bookmarks: List<Bookmark>)
 
     @Update
     suspend fun updateBookmark(bookmark: Bookmark)

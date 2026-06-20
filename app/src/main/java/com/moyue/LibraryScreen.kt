@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -34,7 +35,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.moyue.app.data.BookRepository
-import com.moyue.app.data.models.Book
+import com.moyue.app.data.models.*
+import com.moyue.app.sync.SyncClient
+import com.moyue.app.ui.components.SyncSettingsDialog
 import com.moyue.app.util.LocaleHelper
 import java.io.File
 
@@ -54,9 +57,13 @@ fun LibraryScreen(
     ),
 ) {
     val books by viewModel.books.collectAsStateWithLifecycle()
-    val filteredBooks by viewModel.filteredBooks.collectAsStateWithLifecycle()
+    val mergedItems by viewModel.mergedItems.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     var isSearchActive by remember { mutableStateOf(false) }
+    // Upload progress state
+    val isUploading by viewModel.isUploading.collectAsStateWithLifecycle()
+    val uploadProgress by viewModel.uploadProgress.collectAsStateWithLifecycle()
+    val uploadTotal by viewModel.uploadTotal.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // Handle shared files from other apps
@@ -77,6 +84,9 @@ fun LibraryScreen(
             viewModel.importBook(context, uri)
         }
     }
+
+    // App dark mode toggle for UI screens (independent of reader theme)
+    var isAppDark by remember { mutableStateOf(com.moyue.app.ui.theme.getDarkModePreference(context) ?: false) }
 
     Scaffold(
         topBar = {
@@ -112,24 +122,89 @@ fun LibraryScreen(
                     }
                 },
                 actions = {
-                    if (!isSearchActive) {
-                        IconButton(onClick = { isSearchActive = true }) {
-                            Icon(Icons.Default.Search, contentDescription = null)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(0.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (!isSearchActive) {
+                            IconButton(onClick = { isSearchActive = true }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
+                            }
                         }
-                    }
-                    IconButton(onClick = onOpenBookmarks) {
-                        Icon(Icons.Default.Bookmark, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title))
-                    }
-                    IconButton(onClick = onOpenVocabulary) {
-                        Icon(Icons.Default.MenuBook, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_title))
-                    }
-                    IconButton(onClick = onOpenFlashcards) {
-                        Icon(Icons.Default.Bolt, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.flashcard_title))
-                    }
-                    IconButton(onClick = {
-                        importLauncher.launch(arrayOf("application/epub+zip"))
-                    }) {
-                        Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.import_book))
+                        // Dark/Light mode toggle for app UI
+                        IconButton(onClick = {
+                            val newDark = !isAppDark
+                            isAppDark = newDark
+                            com.moyue.app.ui.theme.saveDarkModePreference(context, newDark)
+                            (context as? androidx.activity.ComponentActivity)?.recreate()
+                        }, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                if (isAppDark) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                contentDescription = "切换暗亮模式",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        IconButton(onClick = onOpenBookmarks, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Bookmark, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title), modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(onClick = onOpenVocabulary, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.MenuBook, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_title), modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(onClick = onOpenFlashcards, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Bolt, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.flashcard_title), modifier = Modifier.size(20.dp))
+                        }
+                        // Upload all to cloud button (only when logged in)
+                        val uploadScope = rememberCoroutineScope()
+                        val syncClientForUpload = remember { SyncClient(context) }
+                        if (syncClientForUpload.isLoggedIn()) {
+                            var showUploadAllConfirm by remember { mutableStateOf(false) }
+                            IconButton(onClick = { showUploadAllConfirm = true }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.CloudUpload, contentDescription = "上传全部到云端",
+                                    modifier = Modifier.size(20.dp))
+                            }
+                            if (showUploadAllConfirm) {
+                                AlertDialog(
+                                    onDismissRequest = { if (!isUploading) showUploadAllConfirm = false },
+                                    title = { Text(if (isUploading) "正在上传" else "上传全部书籍") },
+                                    text = {
+                                        if (isUploading) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text("$uploadProgress / $uploadTotal")
+                                                Spacer(Modifier.height(8.dp))
+                                                LinearProgressIndicator(
+                                                    progress = { if (uploadTotal > 0) uploadProgress.toFloat() / uploadTotal else 0f },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                            }
+                                        } else {
+                                            Text("将所有本地书籍上传至云端书库？")
+                                        }
+                                    },
+                                    confirmButton = {
+                                        if (!isUploading) {
+                                            TextButton(onClick = {
+                                                val client = SyncClient(context)
+                                                uploadScope.launch {
+                                                    viewModel.uploadAllToCloud(context, client)
+                                                }
+                                            }) { Text("上传", color = MaterialTheme.colorScheme.primary) }
+                                        }
+                                    },
+                                    dismissButton = {
+                                        if (!isUploading) {
+                                            TextButton(onClick = { showUploadAllConfirm = false }) { Text("取消") }
+                                        } else {
+                                            TextButton(onClick = { showUploadAllConfirm = false }) { Text("后台运行") }
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        IconButton(onClick = {
+                            importLauncher.launch(arrayOf("application/epub+zip"))
+                        }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.import_book), modifier = Modifier.size(20.dp))
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -196,11 +271,37 @@ fun LibraryScreen(
                             )
                         }
                     }
+
+                    // Sync settings
+                    var showSyncSettings by remember { mutableStateOf(false) }
+                    IconButton(onClick = { showSyncSettings = true }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Cloud, contentDescription = "云同步",
+                            modifier = Modifier.size(18.dp))
+                    }
+                    if (showSyncSettings) {
+                        val syncClientForSync = remember { SyncClient(context) }
+                        SyncSettingsDialog(
+                            syncClient = syncClientForSync,
+                            onDismiss = { showSyncSettings = false },
+                            onManualSync = { onResult ->
+                                viewModel.syncAllMetadata(context,
+                                    syncClientForSync, onResult)
+                            },
+                        )
+                    }
                 }
             }
         }
     ) { padding ->
-        if (books.isEmpty()) {
+        // Load cloud books when logged in
+        val syncClient = remember { SyncClient(context) }
+        LaunchedEffect(syncClient.isLoggedIn()) {
+            if (syncClient.isLoggedIn()) {
+                viewModel.loadCloudBooks(syncClient)
+            }
+        }
+
+        if (books.isEmpty() && mergedItems.isEmpty()) {
             // Empty state
             Box(
                 modifier = Modifier
@@ -232,7 +333,7 @@ fun LibraryScreen(
                     }
                 }
             }
-        } else if (filteredBooks.isEmpty()) {
+        } else if (mergedItems.isEmpty()) {
             // No search results
             Box(
                 modifier = Modifier
@@ -265,12 +366,31 @@ fun LibraryScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                items(filteredBooks, key = { it.id }) { book ->
-                    BookCard(
-                        book = book,
-                        onClick = { onOpenBook(book.id) },
-                        onDelete = { viewModel.deleteBook(context, book) },
-                    )
+                items(mergedItems, key = {
+                    it.localBook?.id ?: "cloud_${it.cloudInfo?.id}"
+                }) { item ->
+                    if (item.isCloudOnly) {
+                        CloudOnlyBookCard(
+                            title = item.title,
+                            author = item.author,
+                            onDownload = {
+                                item.cloudInfo?.let { info ->
+                                    viewModel.downloadCloudBook(context, syncClient, info)
+                                }
+                            },
+                        )
+                    } else {
+                        val book = item.localBook!!
+                        BookCard(
+                            book = book,
+                            onClick = { onOpenBook(book.id) },
+                            onDelete = { viewModel.deleteBook(context, book) },
+                            onUploadToCloud = {
+                                val client = SyncClient(context)
+                                viewModel.uploadSingleBook(context, client, book.id)
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -283,22 +403,30 @@ private fun BookCard(
     book: Book,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onUploadToCloud: () -> Unit = {},
 ) {
-    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
 
-    if (showDeleteConfirm) {
+    if (showMenu) {
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete_book_title)) },
-            text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete_book_confirm, book.title)) },
+            onDismissRequest = { showMenu = false },
+            title = { Text(book.title) },
+            text = { Text("选择操作：") },
             confirmButton = {
-                TextButton(onClick = {
-                    showDeleteConfirm = false
-                    onDelete()
-                }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete), color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = { showMenu = false; onUploadToCloud() }) {
+                    Icon(Icons.Default.CloudUpload, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("上传至云端")
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel)) }
+                Row {
+                    TextButton(onClick = { showMenu = false }) { Text("取消") }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = { showMenu = false; onDelete() }) {
+                        Text("删除", color = MaterialTheme.colorScheme.error)
+                    }
+                }
             },
         )
     }
@@ -308,7 +436,7 @@ private fun BookCard(
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
-                onLongClick = { showDeleteConfirm = true }
+                onLongClick = { showMenu = true }
             ),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -355,6 +483,82 @@ private fun BookCard(
                     book.author,
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/** 云端独有书籍卡片（浅色/半透明） */
+@Composable
+private fun CloudOnlyBookCard(
+    title: String,
+    author: String,
+    onDownload: () -> Unit,
+) {
+    var isDownloading by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !isDownloading) {
+                isDownloading = true
+                onDownload()
+            },
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
+        ),
+        border = CardDefaults.outlinedCardBorder().copy(
+            width = 1.dp,
+            brush = androidx.compose.ui.graphics.SolidColor(
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            )
+        ),
+    ) {
+        Column {
+            // Cover placeholder — 云朵图标表示未下载
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(3f / 4f)
+                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (isDownloading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.CloudDownload,
+                        contentDescription = "下载",
+                        modifier = Modifier.size(32.dp),
+                        tint = Color.Gray.copy(alpha = 0.5f),
+                    )
+                }
+            }
+
+            // Info
+            Column(modifier = Modifier.padding(8.dp)) {
+                Text(
+                    title,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Normal,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                )
+                Text(
+                    author,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

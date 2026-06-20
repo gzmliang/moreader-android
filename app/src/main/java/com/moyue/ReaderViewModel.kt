@@ -1031,18 +1031,37 @@ class ReaderViewModel(
         // 优先从已清洗的 ttsParagraphs 取文本（用户选中了段落中的文字）
         val s = _uiState.value
         val cleanText = s.selectionInfo?.let { info ->
-            val paras = s.ttsParagraphs
-            if (paras.isNotEmpty() && info.paraIdx in paras.indices) {
-                if (info.endParaIdx > info.paraIdx) {
-                    // 跨段：从 paraIdx 到 endParaIdx 连起来
-                    (info.paraIdx..info.endParaIdx.coerceAtMost(paras.lastIndex))
-                        .map { paras.getOrElse(it) { "" } }
-                        .filter { it.isNotBlank() }
-                        .joinToString("\n")
-                } else {
-                    paras[info.paraIdx]
-                }
-            } else null
+            if (info.startOffset >= 0 && info.text.isNotBlank()) {
+                // 有精确选中范围 → 用 JS 返回的选中文本，清除 CJK 空格
+                var t = info.text.trim()
+                t = t.replace(Regex("""\[\d+]"""), "")
+                t = t.replace(Regex("""[①②③④⑤⑥⑦⑧⑨⑩]"""), "")
+                t = t.replace(Regex("""[/][*]+/"""), "")
+                t = t.replace(Regex("""／[＊]+／"""), "")
+                t = t.replace(Regex("""[*＊·•●▶▷◀◁◆◇○◎●◉○□■△▲☆★❀✿❁🌸🌺]"""), "")
+                t = t.replace(Regex("""[*]{2,}"""), "")
+                t = t.replace(Regex("""[#]{2,}"""), "")
+                t = t.replace(Regex("""[_]{2,}"""), "")
+                t = t.replace(Regex("""[~]{2,}"""), "")
+                t = t.replace(Regex("""`{2,}"""), "")
+                // 删除汉字间的空格（Edge TTS 把空格当词边界）
+                t = t.replace(Regex("""([\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff])\s+(?=[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff])"""), "$1")
+                t.trim().ifBlank { null }
+            } else {
+                // 无精确偏移 → 取整个段落（保持向后兼容）
+                val paras = s.ttsParagraphs
+                if (paras.isNotEmpty() && info.paraIdx in paras.indices) {
+                    if (info.endParaIdx > info.paraIdx) {
+                        // 跨段：从 paraIdx 到 endParaIdx 连起来
+                        (info.paraIdx..info.endParaIdx.coerceAtMost(paras.lastIndex))
+                            .map { paras.getOrElse(it) { "" } }
+                            .filter { it.isNotBlank() }
+                            .joinToString("\n")
+                    } else {
+                        paras[info.paraIdx]
+                    }
+                } else null
+            }
         }?.takeIf { it.isNotBlank() } ?: text  // fallback 到原始选中文本
         killPlayChain()
         _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = -1) }
@@ -1066,15 +1085,30 @@ class ReaderViewModel(
         }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // 1. 从已清洗的 ttsParagraphs 取文本（跟全文朗读走同一路径，已去拼音/脚注/装饰）
-                val cleanText = if (info.endParaIdx > info.paraIdx) {
+                // 1. 取清洗后的文本
+                val cleanText = if (info.startOffset >= 0 && info.text.isNotBlank()) {
+                    // 有精确选中范围 → 用 JS 返回的选中文本，清洗后朗读
+                    var t = info.text.trim()
+                    t = t.replace(Regex("""\[\d+]"""), "")
+                    t = t.replace(Regex("""[①②③④⑤⑥⑦⑧⑨⑩]"""), "")
+                    t = t.replace(Regex("""[/][*]+/"""), "")
+                    t = t.replace(Regex("""／[＊]+／"""), "")
+                    t = t.replace(Regex("""[*＊·•●▶▷◀◁◆◇○◎●◉○□■△▲☆★❀✿❁🌸🌺]"""), "")
+                    t = t.replace(Regex("""[*]{2,}"""), "")
+                    t = t.replace(Regex("""[#]{2,}"""), "")
+                    t = t.replace(Regex("""[_]{2,}"""), "")
+                    t = t.replace(Regex("""[~]{2,}"""), "")
+                    t = t.replace(Regex("""`{2,}"""), "")
+                    t = t.replace(Regex("""([\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff])\s+(?=[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff])"""), "$1")
+                    t.trim()
+                } else if (info.endParaIdx > info.paraIdx) {
                     // 跨多段：从 paraIdx 到 endParaIdx 取全部
                     (info.paraIdx..info.endParaIdx.coerceAtMost(paragraphs.lastIndex))
                         .map { paragraphs.getOrElse(it) { "" } }
                         .filter { it.isNotBlank() }
                         .joinToString("\n")
                 } else {
-                    // 单段：直接用整段清洗文本（偏移量不匹配，不尝试子截取）
+                    // 单段无偏移：用整段清洗文本
                     paragraphs.getOrElse(info.paraIdx) { "" }
                 }
                 if (cleanText.isBlank()) {
@@ -1512,9 +1546,9 @@ class ReaderViewModel(
                 color = 0xFFFFFF00.toInt(),
                 createdAt = System.currentTimeMillis()
             )
-            repository.addHighlight(highlight)
-            // Add to in-memory list so EpubWebView renders it
-            _highlights.update { it + highlight }
+            val newId = repository.addHighlight(highlight)
+            // Add to in-memory list with correct DB-assigned ID
+            _highlights.update { it + highlight.copy(id = newId) }
             _uiState.update { it.copy(selectedText = null, selectionInfo = null, showSelectionMenu = false) }
         }
     }

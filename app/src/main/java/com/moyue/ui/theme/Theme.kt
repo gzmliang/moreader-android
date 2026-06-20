@@ -1,9 +1,11 @@
 package com.moyue.app.ui.theme
 
+import android.content.Context
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 
 // Color scheme
 private val LightColors = lightColorScheme(
@@ -36,12 +38,31 @@ private val DarkColors = darkColorScheme(
     error = Color(0xFFEF4444),
 )
 
+private const val PREF_NAME = "moreader_theme"
+private const val KEY_DARK_MODE = "app_dark_mode"
+
+/** Save the app-wide dark mode preference */
+fun saveDarkModePreference(context: Context, isDark: Boolean) {
+    context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean(KEY_DARK_MODE, isDark)
+        .apply()
+}
+
+/** Read the app-wide dark mode preference (default: follow system) */
+fun getDarkModePreference(context: Context): Boolean? {
+    val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+    return if (prefs.contains(KEY_DARK_MODE)) prefs.getBoolean(KEY_DARK_MODE, false) else null
+}
+
 @Composable
 fun MoreaderTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean? = null,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = if (darkTheme) DarkColors else LightColors
+    val context = LocalContext.current
+    val isDark = darkTheme ?: getDarkModePreference(context) ?: isSystemInDarkTheme()
+    val colorScheme = if (isDark) DarkColors else LightColors
 
     MaterialTheme(
         colorScheme = colorScheme,

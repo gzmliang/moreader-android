@@ -32,6 +32,10 @@ class BookRepository(private val context: Context) {
 
     fun getAllBooks(): Flow<List<Book>> = dao.getAllBooks()
 
+    suspend fun getAllBooksOnce(): List<Book> = withContext(Dispatchers.IO) {
+        dao.getAllBooksOnce()
+    }
+
     suspend fun getBook(id: String): Book? = dao.getBook(id)
 
     suspend fun importBook(uri: Uri): Book = withContext(Dispatchers.IO) {
@@ -62,6 +66,28 @@ class BookRepository(private val context: Context) {
             filePath = file.absolutePath,
         )
 
+        dao.upsert(book)
+        book
+    }
+
+    /** 从已下载的 EPUB 文件直接导入本地书库 */
+    suspend fun importEpubFile(epubFile: File): Book = withContext(Dispatchers.IO) {
+        val id = UUID.randomUUID().toString()
+        val fileName = "book_$id.epub"
+        val destFile = File(bookDir, fileName)
+        epubFile.inputStream().use { input ->
+            FileOutputStream(destFile).use { output ->
+                input.copyTo(output)
+            }
+        }
+        Log.d(TAG, "File imported: ${destFile.absolutePath} (${destFile.length()} bytes)")
+        val (title, author) = parseEpubMetadata(destFile)
+        val book = Book(
+            id = id,
+            title = title,
+            author = author,
+            filePath = destFile.absolutePath,
+        )
         dao.upsert(book)
         book
     }
@@ -634,7 +660,11 @@ class BookRepository(private val context: Context) {
     
     fun getBookmarksForBook(bookId: String): Flow<List<Bookmark>> = db.bookmarkDao().getBookmarksForBook(bookId)
     
+    suspend fun getBookmarksOnce(bookId: String): List<Bookmark> = db.bookmarkDao().getBookmarksOnce(bookId)
+
     suspend fun addBookmark(bookmark: Bookmark): Long = db.bookmarkDao().addBookmark(bookmark)
+    
+    suspend fun importBookmarks(bookmarks: List<Bookmark>) = db.bookmarkDao().addBookmarks(bookmarks)
     
     suspend fun deleteBookmark(id: Long) = db.bookmarkDao().deleteBookmarkById(id)
     
@@ -645,7 +675,11 @@ class BookRepository(private val context: Context) {
     
     fun getHighlightsForBook(bookId: String): Flow<List<Highlight>> = db.highlightDao().getHighlightsForBook(bookId)
     
+    suspend fun getHighlightsOnce(bookId: String): List<Highlight> = db.highlightDao().getHighlightsOnce(bookId)
+
     suspend fun addHighlight(highlight: Highlight): Long = db.highlightDao().addHighlight(highlight)
+    
+    suspend fun importHighlights(highlights: List<Highlight>) = db.highlightDao().addHighlights(highlights)
     
     suspend fun updateHighlightNote(id: Long, note: String?) = db.highlightDao().updateHighlightNote(id, note)
     
