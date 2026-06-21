@@ -470,4 +470,11 @@ Just change the Base URL and API Key</string>
     <string name="select_action">Select action:</string>
     <string name="unknown">Unknown</string>
     <string name="sync_upload_all_confirm">Upload all local books to the cloud library?</string>
+    <string name="sync_upload_btn">Upload to Cloud</string>
+    <string name="sync_uploading_status">Uploading…</string>
+    <string name="sync_download_btn">Download from Cloud</string>
+    <string name="sync_downloading_status">Downloading…</string>
+    <string name="sync_download_confirm_btn">Confirm Download</string>
+    <string name="sync_download_confirm_msg">Local data will be overwritten by cloud data. Confirm download?</string>
+    <string name="sync_download_empty">Download complete: no cloud data</string>
 </resources>

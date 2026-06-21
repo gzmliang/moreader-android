@@ -324,6 +324,8 @@ class ReaderViewModel(
             loadingMessage = ""
         ) }
         loadChapterContent()
+        // 首次打开书本时，批量修复跨平台高亮的章节/偏移量
+        repairAllCrossPlatformHighlights(book.id)
     } }
     private suspend fun loadChapterContent(forceStart: Boolean = false) {
         val s = _uiState.value; val b = s.book ?: return; if (s.chapters.isEmpty()) return
@@ -1425,38 +1427,124 @@ class ReaderViewModel(
         _uiState.update { it.copy(showBookmarkPanel = false) }
         val s = _uiState.value
         val chapters = s.chapters
-        
-        // 如果书签不在当前章节，先跳转章节
+
+        // ── 跨平台书签：来自浏览器同步，chapterIndex==0, paragraphIndex==0，
+        //     但有 paragraphText。通过在 EPUB 中搜索文字找到真实位置 ──
+        if (bookmark.chapterIndex == 0 && bookmark.paragraphIndex == 0
+            && !bookmark.paragraphText.isNullOrBlank()) {
+
+            viewModelScope.launch {
+                val found = findTextPosition(bookmark.paragraphText!!)
+                if (found != null) {
+                    val (chIdx, paraIdx) = found
+                    // 更新书签的章节/段落索引到数据库
+                    val updated = bookmark.copy(chapterIndex = chIdx, paragraphIndex = paraIdx)
+                    repository.updateBookmark(updated)
+
+                    // 用找到的真实位置跳转
+                    navigateToChapterAndParagraph(chIdx, paraIdx)
+                } else {
+                    // 搜不到文字，至少打开书
+                    Log.w("ReaderVM", "跨平台书签：未找到匹配文字 '${bookmark.paragraphText}'")
+                }
+            }
+            return
+        }
+
+        // ── 正常书签跳转 ──
         if (bookmark.chapterIndex != s.currentChapterIndex) {
             val targetChapter = chapters.getOrNull(bookmark.chapterIndex)
             if (targetChapter != null) {
                 killPlayChain()
-                // Reset scrollToParagraph first to ensure the LaunchedEffect triggers
-                _uiState.update { 
+                _uiState.update {
                     it.copy(
-                        currentChapterIndex = bookmark.chapterIndex, 
-                        isLoading = true, 
-                        currentHtml = null, 
-                        ttsParagraphs = emptyList(), 
-                        ttsCurrentIdx = -1, 
+                        currentChapterIndex = bookmark.chapterIndex,
+                        isLoading = true,
+                        currentHtml = null,
+                        ttsParagraphs = emptyList(),
+                        ttsCurrentIdx = -1,
                         isTtsPaused = false,
                         scrollToParagraph = -1,
-                    ) 
+                    )
                 }
                 viewModelScope.launch {
                     loadChapterContent()
-                    // Force a fresh scroll after content is fully loaded
                     kotlinx.coroutines.delay(200)
                     _uiState.update { it.copy(scrollToParagraph = bookmark.paragraphIndex) }
                 }
             }
         } else {
-            // 同一章节，直接滚动到段落 — 先重置再设置，确保 LaunchedEffect 触发
             _uiState.update { it.copy(scrollToParagraph = -1) }
             viewModelScope.launch {
                 kotlinx.coroutines.delay(100)
                 _uiState.update { it.copy(scrollToParagraph = bookmark.paragraphIndex) }
             }
+        }
+    }
+
+    /**
+     * 在整本书中搜索文字，返回 (chapterIndex, paragraphIndex)。
+     * 先搜当前章节（已有 ttsParagraphs），再遍历所有章节。
+     * 支持多行文字（换行符分隔）：逐行匹配，找到任一行即定位成功。
+     */
+    private suspend fun findTextPosition(text: String): Pair<Int, Int>? {
+        val s = _uiState.value
+        val book = s.book ?: return null
+        val chapters = s.chapters
+        if (chapters.isEmpty()) return null
+
+        // 拆分多行文字（浏览器选中跨段落时会产生 \n）
+        val lines = text.split("\n").map { it.trim() }.filter { it.length >= 2 }
+
+        // 搜索函数：在段落列表中查找匹配
+        fun searchIn(paras: List<String>, chIdx: Int): Pair<Int, Int>? {
+            // 优先精确匹配全文（去除换行后的单行文本）
+            for (line in lines) {
+                val match = paras.indexOfFirst { it.contains(line) }
+                if (match >= 0) return Pair(chIdx, match)
+            }
+            // 回退：用原文模糊匹配（忽略首尾空白）
+            val trimmed = text.trim()
+            val match = paras.indexOfFirst { it.contains(trimmed) }
+            if (match >= 0) return Pair(chIdx, match)
+            return null
+        }
+
+        // 1) 先搜当前章节的段落列表（已加载，速度最快）
+        searchIn(s.ttsParagraphs, s.currentChapterIndex)?.let { return it }
+
+        // 2) 遍历所有章节，加载内容搜索
+        for (i in chapters.indices) {
+            if (i == s.currentChapterIndex) continue  // 已搜过
+            val ch = chapters[i]
+            val html = repository.getChapterContent(book.id, ch.href) ?: continue
+            val paras = extractParagraphsFromHtml(html)
+            searchIn(paras, i)?.let { return it }
+        }
+        return null
+    }
+
+    /** 跳转到指定章节和段落的公共方法 */
+    private fun navigateToChapterAndParagraph(chIdx: Int, paraIdx: Int) {
+        val s = _uiState.value
+        val chapters = s.chapters
+        val targetChapter = chapters.getOrNull(chIdx) ?: return
+        killPlayChain()
+        _uiState.update {
+            it.copy(
+                currentChapterIndex = chIdx,
+                isLoading = true,
+                currentHtml = null,
+                ttsParagraphs = emptyList(),
+                ttsCurrentIdx = -1,
+                isTtsPaused = false,
+                scrollToParagraph = -1,
+            )
+        }
+        viewModelScope.launch {
+            loadChapterContent()
+            kotlinx.coroutines.delay(200)
+            _uiState.update { it.copy(scrollToParagraph = paraIdx) }
         }
     }
 
@@ -1476,15 +1564,41 @@ class ReaderViewModel(
     fun toggleHighlightPanel() { _uiState.update { it.copy(showHighlightPanel = !it.showHighlightPanel) } }
 
     fun navigateToHighlight(highlight: Highlight) {
+        pushToHistory()
         _uiState.update { it.copy(showHighlightPanel = false) }
         val s = _uiState.value
         val chapters = s.chapters
-        
-        // If highlight is in a different chapter, navigate there first
+
+        // ── 跨平台高亮：来自浏览器同步，chapterIndex==0, startParagraph==0，
+        //     但有 text。通过在 EPUB 中搜索文字找到真实位置 ──
+        if (highlight.chapterIndex == 0 && highlight.startParagraph == 0
+            && highlight.text.isNotBlank()) {
+
+            viewModelScope.launch {
+                val found = findTextPosition(highlight.text)
+                if (found != null) {
+                    val (chIdx, paraIdx) = found
+                    // 更新高亮的章节/段落索引到数据库
+                    val updated = highlight.copy(
+                        chapterIndex = chIdx,
+                        startParagraph = paraIdx,
+                        endParagraph = paraIdx
+                    )
+                    repository.updateHighlight(updated)
+
+                    // 用找到的真实位置跳转
+                    navigateToChapterAndParagraph(chIdx, paraIdx)
+                } else {
+                    Log.w("ReaderVM", "跨平台高亮：未找到匹配文字 '${highlight.text.take(60)}'")
+                }
+            }
+            return
+        }
+
+        // ── 正常高亮跳转 ──
         if (highlight.chapterIndex != s.currentChapterIndex) {
             val targetChapter = chapters.getOrNull(highlight.chapterIndex)
             if (targetChapter != null) {
-                pushToHistory()
                 killPlayChain()
                 _uiState.update { 
                     it.copy(
@@ -1498,14 +1612,15 @@ class ReaderViewModel(
                 }
                 viewModelScope.launch {
                     loadChapterContent()
-                    // Scroll to the highlight paragraph
                     _uiState.update { it.copy(scrollToParagraph = highlight.startParagraph) }
                 }
             }
         } else {
-            // Same chapter, just scroll to paragraph
-            pushToHistory()
-            _uiState.update { it.copy(scrollToParagraph = highlight.startParagraph) }
+            _uiState.update { it.copy(scrollToParagraph = -1) }
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(100)
+                _uiState.update { it.copy(scrollToParagraph = highlight.startParagraph) }
+            }
         }
     }
 
@@ -1578,13 +1693,152 @@ class ReaderViewModel(
         }
     }
 
+    /**
+     * 首次打开书本时调用：扫描所有跨平台高亮（offset=0），
+     * 遍历全部章节找到文字位置，更新 chapterIndex + 偏移量到数据库。
+     * 只执行一次（修复后 offset≠0 不会被重复处理）。
+     */
+    private fun repairAllCrossPlatformHighlights(bookId: String) {
+        viewModelScope.launch {
+            val all = repository.getHighlightsForBook(bookId).first()
+            val needsRepair = all.filter {
+                it.startOffset == 0 && it.endOffset == 0 && it.text.isNotBlank()
+            }
+            if (needsRepair.isEmpty()) return@launch
+
+            val s = _uiState.value
+            val chapters = s.chapters
+            if (chapters.isEmpty()) return@launch
+
+            var repaired = 0
+            for (hl in needsRepair) {
+                // 在全部章节中搜索
+                val found = findTextPosition(hl.text)
+                if (found != null) {
+                    val (chIdx, paraIdx) = found
+                    // 在段落内精确定位偏移量
+                    val ch = chapters[chIdx]
+                    val html = repository.getChapterContent(bookId, ch.href) ?: continue
+                    val rawParas = getRawParagraphTexts(html)
+                    val offsetMatch = findTextInParagraphs(rawParas, hl.text)
+                    val (startOff, endOff) = if (offsetMatch != null) {
+                        Pair(offsetMatch.second, offsetMatch.third)
+                    } else {
+                        Pair(0, hl.text.length)
+                    }
+                    val updated = hl.copy(
+                        chapterIndex = chIdx,
+                        startParagraph = paraIdx, startOffset = startOff,
+                        endParagraph = paraIdx, endOffset = endOff
+                    )
+                    repository.updateHighlight(updated)
+                    repaired++
+                    Log.d("ReaderVM", "全局修复高亮: '${hl.text.take(30)}' → ch$chIdx p$paraIdx o$startOff-$endOff")
+                } else {
+                    Log.w("ReaderVM", "全局修复失败: '${hl.text.take(50)}'")
+                }
+            }
+            if (repaired > 0) {
+                // 重新加载当前章节的高亮以反映修复
+                val currentHighlights = repository.getHighlightsForBook(bookId).first()
+                    .filter { it.chapterIndex == s.currentChapterIndex }
+                _highlights.value = currentHighlights
+            }
+        }
+    }
+
     fun loadHighlightsForChapter() {
         val s = _uiState.value
         val book = s.book ?: return
         viewModelScope.launch {
             val all = repository.getHighlightsForBook(book.id).first()
-            _highlights.value = all.filter { it.chapterIndex == s.currentChapterIndex }
+            val chapterHighlights = all.filter { it.chapterIndex == s.currentChapterIndex }
+            
+            // ── 修复跨平台高亮偏移量（浏览器同步的高亮 offset=0）──
+            val repaired = repairHighlightOffsets(chapterHighlights)
+            _highlights.value = repaired
         }
+    }
+
+    /**
+     * 检测偏移量为 0 的高亮（来自浏览器同步），在原始 HTML 中搜索文字，
+     * 计算准确的 startOffset/endOffset，更新数据库后返回修正后的列表。
+     */
+    private suspend fun repairHighlightOffsets(highlights: List<Highlight>): List<Highlight> {
+        val needsRepair = highlights.filter {
+            it.startOffset == 0 && it.endOffset == 0 && it.text.isNotBlank()
+        }
+        if (needsRepair.isEmpty()) return highlights
+
+        val s = _uiState.value
+        val html = if (s.currentHtml != null) {
+            s.currentHtml!!
+        } else {
+            val book = s.book ?: return highlights
+            val ch = s.chapters.getOrNull(s.currentChapterIndex) ?: return highlights
+            repository.getChapterContent(book.id, ch.href) ?: return highlights
+        }
+
+        // 用 Jsoup 提取原始段落文本（含拼音/脚注，与 WebView DOM textContent 一致）
+        val rawParas = getRawParagraphTexts(html)
+        if (rawParas.isEmpty()) return highlights
+
+        val result = highlights.toMutableList()
+        for (hl in needsRepair) {
+            val match = findTextInParagraphs(rawParas, hl.text)
+            if (match != null) {
+                val (paraIdx, startOff, endOff) = match
+                val updated = hl.copy(startParagraph = paraIdx, startOffset = startOff,
+                    endParagraph = paraIdx, endOffset = endOff)
+                repository.updateHighlight(updated)
+                val idx = result.indexOfFirst { it.id == hl.id }
+                if (idx >= 0) result[idx] = updated
+                Log.d("ReaderVM", "修补高亮偏移: '${hl.text.take(30)}' → p=$paraIdx o=$startOff-$endOff")
+            } else {
+                Log.w("ReaderVM", "未找到高亮文字: '${hl.text.take(50)}'")
+            }
+        }
+        return result
+    }
+
+    /** 从 HTML 提取段落原始文本（与 WebView DOM textContent 一致） */
+    private fun getRawParagraphTexts(html: String): List<String> {
+        return try {
+            val doc = org.jsoup.Jsoup.parse(html)
+            doc.select("p, h1, h2, h3, h4, h5, h6").map { el -> el.text() }
+        } catch (e: Exception) {
+            Log.e("ReaderVM", "getRawParagraphTexts error: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
+     * 在段落文本列表中搜索目标文字，返回 (paraIdx, startOffset, endOffset)。
+     * 偏移量基于原始 textContent（含拼音/脚注），与 WebView DOM 一致。
+     */
+    private fun findTextInParagraphs(
+        paras: List<String>, target: String
+    ): Triple<Int, Int, Int>? {
+        val search = target.trim()
+        if (search.length < 2) return null
+
+        for (i in paras.indices) {
+            val idx = paras[i].indexOf(search)
+            if (idx >= 0) {
+                return Triple(i, idx, idx + search.length)
+            }
+        }
+        // 回退：多行拆分逐行尝试
+        val lines = search.split("\n").map { it.trim() }.filter { it.length >= 2 }
+        for (i in paras.indices) {
+            for (line in lines) {
+                val idx = paras[i].indexOf(line)
+                if (idx >= 0) {
+                    return Triple(i, idx, idx + line.length)
+                }
+            }
+        }
+        return null
     }
 
     // ===== Vocabulary =====

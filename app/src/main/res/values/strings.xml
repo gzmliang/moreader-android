@@ -593,4 +593,11 @@ AI Voice（云端 TTS）：
     <string name="select_action">选择操作：</string>
     <string name="unknown">未知</string>
     <string name="sync_upload_all_confirm">将所有本地书籍上传至云端书库？</string>
+    <string name="sync_upload_btn">上传到云端</string>
+    <string name="sync_uploading_status">上传中…</string>
+    <string name="sync_download_btn">从云端下载</string>
+    <string name="sync_downloading_status">下载中…</string>
+    <string name="sync_download_confirm_btn">确认下载</string>
+    <string name="sync_download_confirm_msg">本地数据将被云端数据覆盖，确认下载？</string>
+    <string name="sync_download_empty">下载完成：云端无数据</string>
 </resources>

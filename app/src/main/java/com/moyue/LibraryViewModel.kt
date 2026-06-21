@@ -222,17 +222,34 @@ class LibraryViewModel(
         }
     }
 
-    /** 合并同步：拉取云端 → 与本地合并（取最新） → 推回云端 */
-    fun syncAllMetadata(context: Context, syncClient: SyncClient, onResult: (String) -> Unit) {
+    /** 上传到云端：本地数据覆盖云端 */
+    fun uploadToCloud(context: Context, syncClient: SyncClient, onResult: (String) -> Unit) {
         viewModelScope.launch {
             val repo = BookRepository(context)
-            syncClient.mergeSync(repo).fold(
+            syncClient.uploadToCloud(repo).fold(
                 onSuccess = { msg ->
-                    android.util.Log.i("Sync", "同步成功: $msg")
+                    android.util.Log.i("Sync", "上传成功: $msg")
                     onResult(msg)
                 },
                 onFailure = { e ->
-                    android.util.Log.e("Sync", "同步失败", e)
+                    android.util.Log.e("Sync", "上传失败", e)
+                    onResult(context.getString(com.moyue.app.R.string.sync_fail, e.message ?: ""))
+                },
+            )
+        }
+    }
+
+    /** 从云端下载：云端数据完全覆盖本地（进度取大值） */
+    fun downloadFromCloud(context: Context, syncClient: SyncClient, onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val repo = BookRepository(context)
+            syncClient.downloadFromCloud(repo).fold(
+                onSuccess = { msg ->
+                    android.util.Log.i("Sync", "下载成功: $msg")
+                    onResult(msg)
+                },
+                onFailure = { e ->
+                    android.util.Log.e("Sync", "下载失败", e)
                     onResult(context.getString(com.moyue.app.R.string.sync_fail, e.message ?: ""))
                 },
             )

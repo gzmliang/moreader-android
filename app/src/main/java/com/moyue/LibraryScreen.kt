@@ -283,8 +283,12 @@ fun LibraryScreen(
                         SyncSettingsDialog(
                             syncClient = syncClientForSync,
                             onDismiss = { showSyncSettings = false },
-                            onManualSync = { onResult ->
-                                viewModel.syncAllMetadata(context,
+                            onUpload = { onResult ->
+                                viewModel.uploadToCloud(context,
+                                    syncClientForSync, onResult)
+                            },
+                            onDownload = { onResult ->
+                                viewModel.downloadFromCloud(context,
                                     syncClientForSync, onResult)
                             },
                         )

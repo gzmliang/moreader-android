@@ -32,7 +32,8 @@ import java.io.File
 fun SyncSettingsDialog(
     syncClient: SyncClient,
     onDismiss: () -> Unit,
-    onManualSync: ((onResult: (String) -> Unit) -> Unit)? = null,
+    onUpload: ((onResult: (String) -> Unit) -> Unit)? = null,
+    onDownload: ((onResult: (String) -> Unit) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -90,23 +91,74 @@ fun SyncSettingsDialog(
 
                     Spacer(Modifier.height(16.dp))
 
-                    // 手动同步
+                    // 上传到云端
                     Button(
                         onClick = {
-                            syncResult = context.getString(com.moyue.app.R.string.sync_syncing)
-                            if (onManualSync != null) {
-                                onManualSync { msg ->
+                            syncResult = context.getString(com.moyue.app.R.string.sync_uploading_status)
+                            if (onUpload != null) {
+                                onUpload { msg ->
                                     syncResult = msg
                                 }
-                            } else {
-                                syncResult = context.getString(com.moyue.app.R.string.sync_complete)
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary),
                     ) {
-                        Icon(Icons.Default.Sync, null, Modifier.size(18.dp))
+                        Icon(Icons.Default.CloudUpload, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_manual))
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_btn))
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // 从云端下载
+                    var showDownloadConfirm by remember { mutableStateOf(false) }
+                    if (showDownloadConfirm) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_download_confirm_msg), fontSize = 12.sp)
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(
+                                        onClick = {
+                                            showDownloadConfirm = false
+                                            syncResult = context.getString(com.moyue.app.R.string.sync_downloading_status)
+                                            if (onDownload != null) {
+                                                onDownload { msg ->
+                                                    syncResult = msg
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.tertiary),
+                                    ) {
+                                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_download_confirm_btn), fontSize = 12.sp)
+                                    }
+                                    OutlinedButton(
+                                        onClick = { showDownloadConfirm = false },
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel), fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { showDownloadConfirm = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.CloudDownload, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_download_btn))
+                        }
                     }
 
                     syncResult?.let { msg ->

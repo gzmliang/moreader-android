@@ -688,6 +688,8 @@ class BookRepository(private val context: Context) {
     
     suspend fun importBookmarks(bookmarks: List<Bookmark>) = db.bookmarkDao().addBookmarks(bookmarks)
     
+    suspend fun updateBookmark(bookmark: Bookmark) = db.bookmarkDao().updateBookmark(bookmark)
+    
     suspend fun deleteBookmark(id: Long) = db.bookmarkDao().deleteBookmarkById(id)
     
     suspend fun deleteBookmark(bookmark: Bookmark) = db.bookmarkDao().deleteBookmark(bookmark)
@@ -702,6 +704,8 @@ class BookRepository(private val context: Context) {
     suspend fun addHighlight(highlight: Highlight): Long = db.highlightDao().addHighlight(highlight)
     
     suspend fun importHighlights(highlights: List<Highlight>) = db.highlightDao().addHighlights(highlights)
+    
+    suspend fun updateHighlight(highlight: Highlight) = db.highlightDao().updateHighlight(highlight)
     
     suspend fun updateHighlightNote(id: Long, note: String?) = db.highlightDao().updateHighlightNote(id, note)
     

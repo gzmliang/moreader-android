@@ -271,65 +271,114 @@ class SyncClient(private val context: Context) {
         return api("POST", "/sync/push", body)
     }
 
-    /** 合并同步：推送本地 → 拉取云端 → 仅本地没有的书从云端下载（跨设备场景） */
-    suspend fun mergeSync(repo: com.moyue.app.data.BookRepository): Result<String> {
-        // 1) 先读取本地数据快照
-        val localBooks = repo.getAllBooksOnce()
-        val localTitles = localBooks.map { it.title to it.author }.toSet()
-
-        // 2) 推送本地书签+高亮+进度到云端（DELETE+INSERT，云端以本地为准）
+    /** 上传到云端：本地数据覆盖云端（DELETE-INSERT 语义，删了的就删了） */
+    suspend fun uploadToCloud(repo: com.moyue.app.data.BookRepository): Result<String> {
         val pushResult = pushAllMetadata(repo)
-        if (pushResult.isFailure) return pushResult
+        return pushResult.map { "上传完成" }
+    }
 
-        // 3) 拉取云端数据
+    /** 从云端下载：云端数据完全覆盖本地（书签+高亮+进度，进度取大值） */
+    suspend fun downloadFromCloud(repo: com.moyue.app.data.BookRepository): Result<String> {
+        // 1) 拉取云端数据
         val pullResult = api("GET", "/sync/pull")
-        if (pullResult.isFailure) {
-            return Result.success(context.getString(com.moyue.app.R.string.sync_push_done))
-        }
+        if (pullResult.isFailure) return pullResult.map { "" }
         val pullJson = pullResult.getOrThrow()
-
-        var matched = 0
-        var progressFromCloud = 0
-        var downloadedFromCloud = 0
-
         val obj = JSONObject(pullJson)
         val items = obj.optJSONArray("books")
 
-        if (items != null && items.length() > 0) {
-            for (i in 0 until items.length()) {
-                val item = items.getJSONObject(i)
-                val title = item.optString("title", "")
-                val author = item.optString("author", "")
-                if (title.isBlank()) continue
+        if (items == null || items.length() == 0) {
+            return Result.success("下载完成：云端无数据")  // internal, shown as syncResult
+        }
 
-                val localBook = localBooks.find { it.title == title && it.author == author }
+        // 2) 读取本地所有书
+        val localBooks = repo.getAllBooksOnce()
+        var progressUpdated = 0
+        var bmCount = 0
+        var hlCount = 0
 
-                if (localBook != null) {
-                    matched++
-                    // ── 本书本地有 → 只合并进度（百分比取大）──
-                    if (item.has("progress") && !item.isNull("progress")) {
-                        val p = item.getJSONObject("progress")
-                        val cloudPct = p.optDouble("percentage", 0.0).toFloat()
-                        if (cloudPct > localBook.currentProgress) {
-                            repo.updateProgress(localBook.id,
-                                p.optString("chapter_href", null),
-                                p.optInt("chapter_index", 0),
-                                cloudPct, null,
-                                p.optInt("paragraph_index", 0),
-                                localBook.themeId, localBook.fontSize)
-                            progressFromCloud++
-                        }
-                    }
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            val title = item.optString("title", "")
+            if (title.isBlank()) continue
+            val localBook = localBooks.find { it.title == title }
+            if (localBook == null) continue
+
+            // ── 进度：取大值 ──
+            if (item.has("progress") && !item.isNull("progress")) {
+                val p = item.getJSONObject("progress")
+                val cloudPct = p.optDouble("percentage", 0.0).toFloat()
+                if (cloudPct > localBook.currentProgress) {
+                    repo.updateProgress(localBook.id,
+                        p.optString("chapter_href", null),
+                        p.optInt("chapter_index", 0),
+                        cloudPct, null,
+                        p.optInt("paragraph_index", 0),
+                        localBook.themeId, localBook.fontSize)
+                    progressUpdated++
                 }
-                // else: 本书云端有但本地没有 → 跨设备新书，暂不自动下载
-                // 用户可通过云书库手动下载
+            }
+
+            // ── 书签：删除全部本地 → 写入全部云端 ──
+            val oldBms = repo.getBookmarksOnce(localBook.id)
+            for (bm in oldBms) {
+                repo.deleteBookmark(bm.id)
+            }
+            if (item.has("bookmarks")) {
+                val bmsArr = item.getJSONArray("bookmarks")
+                val newBms = mutableListOf<com.moyue.app.data.models.Bookmark>()
+                for (j in 0 until bmsArr.length()) {
+                    val b = bmsArr.getJSONObject(j)
+                    newBms.add(com.moyue.app.data.models.Bookmark(
+                        bookId = localBook.id,
+                        chapterIndex = b.optInt("chapter_index", 0),
+                        chapterTitle = b.optString("chapter_title", null),
+                        paragraphIndex = b.optInt("paragraph_index", 0),
+                        paragraphText = b.optString("paragraph_text", ""),
+                        progress = b.optDouble("progress", 0.0).toFloat(),
+                        createdAt = b.optLong("created_at", System.currentTimeMillis()),
+                    ))
+                }
+                if (newBms.isNotEmpty()) {
+                    repo.importBookmarks(newBms)
+                    bmCount += newBms.size
+                }
+            }
+
+            // ── 高亮：删除全部本地 → 写入全部云端 ──
+            val oldHls = repo.getHighlightsOnce(localBook.id)
+            for (hl in oldHls) {
+                repo.deleteHighlightById(hl.id)
+            }
+            if (item.has("highlights")) {
+                val hlsArr = item.getJSONArray("highlights")
+                val newHls = mutableListOf<com.moyue.app.data.models.Highlight>()
+                for (j in 0 until hlsArr.length()) {
+                    val h = hlsArr.getJSONObject(j)
+                    newHls.add(com.moyue.app.data.models.Highlight(
+                        bookId = localBook.id,
+                        chapterIndex = h.optInt("chapter_index", 0),
+                        startParagraph = h.optInt("start_paragraph", 0),
+                        startOffset = h.optInt("start_offset", 0),
+                        endParagraph = h.optInt("end_paragraph", 0),
+                        endOffset = h.optInt("end_offset", 0),
+                        text = h.optString("text", ""),
+                        note = h.optString("note", null),
+                        color = h.optInt("color", 0xFFFFFF00.toInt()),
+                        createdAt = h.optLong("created_at", System.currentTimeMillis()),
+                    ))
+                }
+                if (newHls.isNotEmpty()) {
+                    repo.importHighlights(newHls)
+                    hlCount += newHls.size
+                }
             }
         }
 
-        val baseMsg = context.getString(com.moyue.app.R.string.sync_complete)
-        val msg = baseMsg +
-            if (progressFromCloud > 0) "，${progressFromCloud}本进度来自云端" else ""
-        return Result.success(msg)
+        val parts = mutableListOf("下载完成")
+        if (progressUpdated > 0) parts.add("${progressUpdated}本进度已更新")
+        if (bmCount > 0) parts.add("${bmCount}条书签")
+        if (hlCount > 0) parts.add("${hlCount}条高亮")
+        return Result.success(parts.joinToString("，"))
     }
 
     // ── 构建 JSON 辅助 ─────────────────────────────────
