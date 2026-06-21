@@ -140,7 +140,7 @@ fun LibraryScreen(
                         }, modifier = Modifier.size(32.dp)) {
                             Icon(
                                 if (isAppDark) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                contentDescription = "切换暗亮模式",
+                                contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.dark_mode_toggle),
                                 modifier = Modifier.size(20.dp),
                             )
                         }
@@ -159,13 +159,13 @@ fun LibraryScreen(
                         if (syncClientForUpload.isLoggedIn()) {
                             var showUploadAllConfirm by remember { mutableStateOf(false) }
                             IconButton(onClick = { showUploadAllConfirm = true }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.CloudUpload, contentDescription = "上传全部到云端",
+                                Icon(Icons.Default.CloudUpload, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_desc),
                                     modifier = Modifier.size(20.dp))
                             }
                             if (showUploadAllConfirm) {
                                 AlertDialog(
                                     onDismissRequest = { if (!isUploading) showUploadAllConfirm = false },
-                                    title = { Text(if (isUploading) "正在上传" else "上传全部书籍") },
+                                    title = { Text(if (isUploading) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_uploading) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_title)) },
                                     text = {
                                         if (isUploading) {
                                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -177,7 +177,7 @@ fun LibraryScreen(
                                                 )
                                             }
                                         } else {
-                                            Text("将所有本地书籍上传至云端书库？")
+                                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_confirm))
                                         }
                                     },
                                     confirmButton = {
@@ -187,14 +187,14 @@ fun LibraryScreen(
                                                 uploadScope.launch {
                                                     viewModel.uploadAllToCloud(context, client)
                                                 }
-                                            }) { Text("上传", color = MaterialTheme.colorScheme.primary) }
+                                            }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload), color = MaterialTheme.colorScheme.primary) }
                                         }
                                     },
                                     dismissButton = {
                                         if (!isUploading) {
-                                            TextButton(onClick = { showUploadAllConfirm = false }) { Text("取消") }
+                                            TextButton(onClick = { showUploadAllConfirm = false }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel)) }
                                         } else {
-                                            TextButton(onClick = { showUploadAllConfirm = false }) { Text("后台运行") }
+                                            TextButton(onClick = { showUploadAllConfirm = false }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_background)) }
                                         }
                                     },
                                 )
@@ -275,7 +275,7 @@ fun LibraryScreen(
                     // Sync settings
                     var showSyncSettings by remember { mutableStateOf(false) }
                     IconButton(onClick = { showSyncSettings = true }, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Cloud, contentDescription = "云同步",
+                        Icon(Icons.Default.Cloud, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_cloud_icon),
                             modifier = Modifier.size(18.dp))
                     }
                     if (showSyncSettings) {
@@ -411,20 +411,20 @@ private fun BookCard(
         AlertDialog(
             onDismissRequest = { showMenu = false },
             title = { Text(book.title) },
-            text = { Text("选择操作：") },
+            text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.select_action)) },
             confirmButton = {
                 TextButton(onClick = { showMenu = false; onUploadToCloud() }) {
                     Icon(Icons.Default.CloudUpload, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("上传至云端")
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_to_cloud))
                 }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { showMenu = false }) { Text("取消") }
+                    TextButton(onClick = { showMenu = false }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel)) }
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = { showMenu = false; onDelete() }) {
-                        Text("删除", color = MaterialTheme.colorScheme.error)
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete), color = MaterialTheme.colorScheme.error)
                     }
                 }
             },
@@ -538,7 +538,7 @@ private fun CloudOnlyBookCard(
                 } else {
                     Icon(
                         Icons.Default.CloudDownload,
-                        contentDescription = "下载",
+                        contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_download),
                         modifier = Modifier.size(32.dp),
                         tint = Color.Gray.copy(alpha = 0.5f),
                     )

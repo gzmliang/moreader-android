@@ -57,6 +57,7 @@
     <string name="error_ai_voice_playback_code">Playback error: %1$d/%2$d</string>
     <string name="error_ai_voice_request_failed">AI voice request failed: %1$s</string>
     <string name="error_book_not_found">Book not found</string>
+    <string name="import_duplicate_skip">\"%1$s\" already in shelf, skipped</string>
     <string name="error_chapter_out_of_range">Chapter index out of range</string>
     <string name="error_edge_tts_connection">Edge TTS connection failed: %1$s</string>
     <string name="error_parse_failed">Failed to parse book chapters, EPUB format may not be supported</string>
@@ -424,4 +425,49 @@ Just change the Base URL and API Key</string>
     <string name="tts_system_default_voice">Engine Default</string>
     <string name="tts_system_voices_loading">Loading voices…</string>
 
+    <!-- Sync -->
+    <string name="sync_upload_all_desc">Upload all to cloud</string>
+    <string name="sync_upload_all_title">Upload All Books</string>
+    <string name="sync_uploading">Uploading…</string>
+    <string name="sync_upload">Upload</string>
+    <string name="sync_background">Background</string>
+    <string name="sync_upload_to_cloud">Upload to Cloud</string>
+    <string name="sync_download">Download</string>
+    <string name="sync_syncing">Syncing…</string>
+    <string name="sync_complete">Sync Complete</string>
+    <string name="sync_push_done">Sync complete (local data pushed)</string>
+    <string name="sync_done_fmt">Sync complete%s</string>
+    <string name="sync_upload_result_success">Sync done: %1$d book(s) uploaded</string>
+    <string name="sync_upload_result_fail">Sync done: %1$d succeeded, %2$d failed</string>
+    <string name="sync_upload_all_skip">Sync done: %1$d uploaded, %2$d skipped (already in cloud)</string>
+    <string name="sync_upload_all_fail_skip">Sync done: %1$d succeeded, %2$d failed, %3$d skipped</string>
+    <string name="sync_upload_skip_exists">\"%1$s\" already in cloud, skipped</string>
+    <string name="sync_upload_fail">Upload failed: %1$s</string>
+    <string name="sync_download_fail">Download failed: %1$s</string>
+    <string name="sync_fail">Sync failed: %1$s</string>
+    <string name="sync_login_hint">Log in to sync reading progress, bookmarks and highlights</string>
+    <string name="sync_email">Email</string>
+    <string name="sync_password">Password</string>
+    <string name="sync_login_success">Login successful</string>
+    <string name="sync_login_fail">Login failed</string>
+    <string name="sync_logging_in">Logging in…</string>
+    <string name="sync_login">Log In</string>
+    <string name="sync_delete_book_confirm">Delete \"%1$s\" from the cloud?</string>
+<string name="sync_logged_in">Logged In</string>
+    <string name="sync_manual">Manual Sync</string>
+    <string name="sync_logout">Log Out</string>
+    <string name="sync_no_open_reg">Registration not open yet. Contact the author for beta access.</string>
+    <string name="sync_cloud_shelf_empty">📭 No books in cloud</string>
+    <string name="sync_search_hint">Search cloud books…</string>
+    <string name="sync_no_match">No matching books</string>
+    <string name="sync_delete_confirm">Confirm Delete</string>
+    <string name="sync_loading">Loading…</string>
+    <string name="sync_view_cloud">View Cloud Library</string>
+    <string name="sync_need_email_password">Please enter email and password</string>
+    <string name="sync_delete_fail">Delete failed: %1$s</string>
+    <string name="dark_mode_toggle">Toggle dark/light mode</string>
+    <string name="sync_cloud_icon">Cloud Sync</string>
+    <string name="select_action">Select action:</string>
+    <string name="unknown">Unknown</string>
+    <string name="sync_upload_all_confirm">Upload all local books to the cloud library?</string>
 </resources>

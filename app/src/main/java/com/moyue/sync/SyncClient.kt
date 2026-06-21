@@ -284,7 +284,7 @@ class SyncClient(private val context: Context) {
         // 3) 拉取云端数据
         val pullResult = api("GET", "/sync/pull")
         if (pullResult.isFailure) {
-            return Result.success("同步完成（已推送本地数据）")
+            return Result.success(context.getString(com.moyue.app.R.string.sync_push_done))
         }
         val pullJson = pullResult.getOrThrow()
 
@@ -326,7 +326,8 @@ class SyncClient(private val context: Context) {
             }
         }
 
-        val msg = "同步完成" +
+        val baseMsg = context.getString(com.moyue.app.R.string.sync_complete)
+        val msg = baseMsg +
             if (progressFromCloud > 0) "，${progressFromCloud}本进度来自云端" else ""
         return Result.success(msg)
     }

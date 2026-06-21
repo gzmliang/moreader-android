@@ -71,7 +71,7 @@ fun SyncSettingsDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Cloud, null, Modifier.size(24.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("墨阅云同步")
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.app_name))
             }
         },
         text = {
@@ -82,7 +82,7 @@ fun SyncSettingsDialog(
                         modifier = Modifier.size(48.dp).align(Alignment.CenterHorizontally),
                         tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(8.dp))
-                    Text("已登录", fontWeight = FontWeight.Bold,
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_logged_in), fontWeight = FontWeight.Bold,
                         modifier = Modifier.align(Alignment.CenterHorizontally))
                     Text(loggedEmail ?: "",
                         modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -93,20 +93,20 @@ fun SyncSettingsDialog(
                     // 手动同步
                     Button(
                         onClick = {
-                            syncResult = "同步中..."
+                            syncResult = context.getString(com.moyue.app.R.string.sync_syncing)
                             if (onManualSync != null) {
                                 onManualSync { msg ->
                                     syncResult = msg
                                 }
                             } else {
-                                syncResult = "同步完成"
+                                syncResult = context.getString(com.moyue.app.R.string.sync_complete)
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Default.Sync, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("手动同步进度")
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_manual))
                     }
 
                     syncResult?.let { msg ->
@@ -145,20 +145,20 @@ fun SyncSettingsDialog(
                         }
                         Icon(Icons.Default.Cloud, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text(if (isLoadingCloud) "加载中..." else "查看云端书库")
+                        Text(if (isLoadingCloud) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_loading) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_view_cloud))
                     }
 
                     cloudBooks?.let { list ->
                         Spacer(Modifier.height(8.dp))
                         if (list.isEmpty()) {
-                            Text("📭 云端暂无书籍", fontSize = 12.sp,
+                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_cloud_shelf_empty), fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         } else {
                             // 搜索框
                             OutlinedTextField(
                                 value = cloudSearchQuery,
                                 onValueChange = { cloudSearchQuery = it },
-                                placeholder = { Text("搜索云端书籍...", fontSize = 13.sp) },
+                                placeholder = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_search_hint), fontSize = 13.sp) },
                                 singleLine = true,
                                 leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(18.dp)) },
                                 trailingIcon = {
@@ -188,7 +188,7 @@ fun SyncSettingsDialog(
                             )
                             Spacer(Modifier.height(4.dp))
                             if (hasFilter && filteredList.isEmpty()) {
-                                Text("没有匹配的书籍", fontSize = 12.sp,
+                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_no_match), fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                             } else {
                                 Column(modifier = Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState())) {
@@ -272,11 +272,11 @@ fun SyncSettingsDialog(
                                                             val bmPart = if (restoredBm > 0) "，${restoredBm}书签" else ""
                                                             val hlPart = if (restoredHl > 0) "，${restoredHl}高亮" else ""
                                                             android.widget.Toast.makeText(context,
-                                                                "已下载: ${book.title}$bmPart$hlPart", android.widget.Toast.LENGTH_SHORT).show()
+                                                                "Downloaded: ${book.title}$bmPart$hlPart", android.widget.Toast.LENGTH_SHORT).show()
                                                         },
                                                         onFailure = { e ->
                                                             android.widget.Toast.makeText(context,
-                                                                "下载失败: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                                                                context.getString(com.moyue.app.R.string.sync_download_fail, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
                                                         },
                                                     )
                                                     isDownloading = null
@@ -313,7 +313,7 @@ fun SyncSettingsDialog(
                                                     onClick = { confirmDeleteBookId = book.id },
                                                     modifier = Modifier.size(20.dp),
                                                 ) {
-                                                    Icon(Icons.Default.Delete, "删除",
+                                                    Icon(Icons.Default.Delete, androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete),
                                                         Modifier.size(14.dp),
                                                         tint = MaterialTheme.colorScheme.error)
                                                 }
@@ -343,18 +343,18 @@ fun SyncSettingsDialog(
                     ) {
                         Icon(Icons.Default.Logout, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("退出登录")
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_logout))
                     }
                 } else {
                     // ── 未登录 — 登录表单 ──
-                    Text("登录后可同步阅读进度、书签和高亮",
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_login_hint),
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                     Spacer(Modifier.height(12.dp))
 
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it; loginError = null },
-                        label = { Text("邮箱") },
+                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_email)) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         modifier = Modifier.fillMaxWidth(),
@@ -364,14 +364,14 @@ fun SyncSettingsDialog(
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it; loginError = null },
-                        label = { Text("密码") },
+                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_password)) },
                         singleLine = true,
                         visualTransformation = if (showPassword) VisualTransformation.None
                             else PasswordVisualTransformation(),
                         trailingIcon = {
                             IconButton(onClick = { showPassword = !showPassword }) {
                                 Icon(if (showPassword) Icons.Default.VisibilityOff
-                                    else Icons.Default.Visibility, "显示/隐藏")
+                                    else Icons.Default.Visibility, "")
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -381,7 +381,7 @@ fun SyncSettingsDialog(
                     OutlinedTextField(
                         value = serverUrl,
                         onValueChange = { serverUrl = it },
-                        label = { Text("服务器地址") },
+                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_server_url)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -396,7 +396,7 @@ fun SyncSettingsDialog(
                     Button(
                         onClick = {
                             if (email.isBlank() || password.isBlank()) {
-                                loginError = "请输入邮箱和密码"
+                                loginError = context.getString(com.moyue.app.R.string.sync_need_email_password)
                                 return@Button
                             }
                             isLoggingIn = true
@@ -408,8 +408,8 @@ fun SyncSettingsDialog(
                                 val result = syncClient.login(email, password)
                                 isLoggingIn = false
                                 result.fold(
-                                    onSuccess = { loggedInVersion++; android.widget.Toast.makeText(context, "登录成功", android.widget.Toast.LENGTH_SHORT).show() },
-                                    onFailure = { loginError = it.message ?: "登录失败" },
+                                    onSuccess = { loggedInVersion++; android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.sync_login_success), android.widget.Toast.LENGTH_SHORT).show() },
+                                    onFailure = { loginError = it.message ?: context.getString(com.moyue.app.R.string.sync_login_fail) },
                                 )
                             }
                         },
@@ -421,11 +421,11 @@ fun SyncSettingsDialog(
                                 color = MaterialTheme.colorScheme.onPrimary)
                             Spacer(Modifier.width(8.dp))
                         }
-                        Text(if (isLoggingIn) "登录中..." else "登录")
+                        Text(if (isLoggingIn) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_logging_in) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_login))
                     }
 
                     Spacer(Modifier.height(8.dp))
-                    Text("暂不开放注册，如需内测请联系作者",
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_no_open_reg),
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                         modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -433,7 +433,7 @@ fun SyncSettingsDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            TextButton(onClick = onDismiss) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close)) }
         },
     )
 
@@ -442,10 +442,9 @@ fun SyncSettingsDialog(
         val book = cloudBooks?.find { it.id == bookId }
         AlertDialog(
             onDismissRequest = { confirmDeleteBookId = null },
-            title = { Text("确认删除") },
+            title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_delete_confirm)) },
             text = {
-                Text("确定从云端删除「${book?.title ?: ""}」吗？\n" +
-                     "该书籍的所有阅读进度、书签和高亮也会一并删除。")
+Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_delete_book_confirm, book?.title ?: ""))
             },
             confirmButton = {
                 Button(
@@ -464,7 +463,7 @@ fun SyncSettingsDialog(
                                 },
                                 onFailure = { e ->
                                     android.widget.Toast.makeText(context,
-                                        "删除失败: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                                        context.getString(com.moyue.app.R.string.sync_delete_fail, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
                                 },
                             )
                             isDeleting = null
@@ -472,10 +471,10 @@ fun SyncSettingsDialog(
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error),
-                ) { Text("删除") }
+                ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDeleteBookId = null }) { Text("取消") }
+                TextButton(onClick = { confirmDeleteBookId = null }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel)) }
             },
         )
     }

@@ -6,6 +6,7 @@
     <string name="loading">正在加载...</string>
     <string name="large_book_hint">大型书籍可能需要一些时间</string>
     <string name="error_book_not_found">未找到书籍</string>
+    <string name="import_duplicate_skip">「%1$s」已在书架中，已跳过</string>
     <string name="error_parse_failed">无法解析书籍章节，EPUB 格式可能不受支持</string>
     <string name="error_chapter_out_of_range">章节索引超出范围</string>
     <string name="error_read_failed">无法读取章节内容</string>
@@ -547,4 +548,49 @@ AI Voice（云端 TTS）：
     <string name="tts_system_default_voice">引擎默认</string>
     <string name="tts_system_voices_loading">正在加载语音列表…</string>
 
+    <!-- Sync -->
+    <string name="sync_upload_all_desc">上传全部到云端</string>
+    <string name="sync_upload_all_title">上传全部书籍</string>
+    <string name="sync_uploading">正在上传</string>
+    <string name="sync_upload">上传</string>
+    <string name="sync_background">后台运行</string>
+    <string name="sync_upload_to_cloud">上传至云端</string>
+    <string name="sync_download">下载</string>
+    <string name="sync_syncing">同步中…</string>
+    <string name="sync_complete">同步完成</string>
+    <string name="sync_push_done">同步完成（已推送本地数据）</string>
+    <string name="sync_done_fmt">同步完成%s</string>
+    <string name="sync_upload_result_success">同步完成：成功 %1$d 本</string>
+    <string name="sync_upload_result_fail">同步完成：成功 %1$d 本，失败 %2$d 本</string>
+    <string name="sync_upload_all_skip">同步完成：成功 %1$d 本，跳过 %2$d 本（已在云端）</string>
+    <string name="sync_upload_all_fail_skip">同步完成：成功 %1$d 本，失败 %2$d 本，跳过 %3$d 本</string>
+    <string name="sync_upload_skip_exists">「%1$s」已在云端，已跳过</string>
+    <string name="sync_upload_fail">上传失败: %1$s</string>
+    <string name="sync_download_fail">下载失败: %1$s</string>
+    <string name="sync_fail">同步失败: %1$s</string>
+    <string name="sync_login_hint">登录后可同步阅读进度、书签和高亮</string>
+    <string name="sync_email">邮箱</string>
+    <string name="sync_password">密码</string>
+    <string name="sync_login_success">登录成功</string>
+    <string name="sync_login_fail">登录失败</string>
+    <string name="sync_logging_in">登录中…</string>
+    <string name="sync_login">登录</string>
+    <string name="sync_delete_book_confirm">确定要删除云端「%1$s」吗？</string>
+<string name="sync_logged_in">已登录</string>
+    <string name="sync_manual">手动同步进度</string>
+    <string name="sync_logout">退出登录</string>
+    <string name="sync_no_open_reg">暂不开放注册，如需内测请联系作者</string>
+    <string name="sync_cloud_shelf_empty">📭 云端暂无书籍</string>
+    <string name="sync_search_hint">搜索云端书籍…</string>
+    <string name="sync_no_match">没有匹配的书籍</string>
+    <string name="sync_delete_confirm">确认删除</string>
+    <string name="sync_loading">加载中…</string>
+    <string name="sync_view_cloud">查看云端书库</string>
+    <string name="sync_need_email_password">请输入邮箱和密码</string>
+    <string name="sync_delete_fail">删除失败: %1$s</string>
+    <string name="dark_mode_toggle">切换暗亮模式</string>
+    <string name="sync_cloud_icon">云同步</string>
+    <string name="select_action">选择操作：</string>
+    <string name="unknown">未知</string>
+    <string name="sync_upload_all_confirm">将所有本地书籍上传至云端书库？</string>
 </resources>

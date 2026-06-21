@@ -30,6 +30,10 @@ class BookRepository(private val context: Context) {
     private val dao = db.bookDao()
     private val bookDir = File(context.filesDir, "epubs").also { it.mkdirs() }
 
+    /** importBook 返回已存在的书时为 true（用于 UI 显示跳过提示） */
+    var isRecentDuplicate: Boolean = false
+        private set
+
     fun getAllBooks(): Flow<List<Book>> = dao.getAllBooks()
 
     suspend fun getAllBooksOnce(): List<Book> = withContext(Dispatchers.IO) {
@@ -39,24 +43,34 @@ class BookRepository(private val context: Context) {
     suspend fun getBook(id: String): Book? = dao.getBook(id)
 
     suspend fun importBook(uri: Uri): Book = withContext(Dispatchers.IO) {
-        val id = UUID.randomUUID().toString()
-        val fileName = "book_$id.epub"
-        val file = File(bookDir, fileName)
+        val fileName = uri.lastPathSegment ?: "unknown.epub"
 
-        // Copy EPUB to persistent storage
+        // 先读取元数据用于查重（代价小：不复制文件）
+        val tempFile = File(context.cacheDir, "temp_import_${System.currentTimeMillis()}.epub")
         val inputStream = context.contentResolver.openInputStream(uri)
             ?: throw Exception("Cannot open file")
         inputStream.use { input ->
-            FileOutputStream(file).use { output ->
-                input.copyTo(output)
-            }
+            FileOutputStream(tempFile).use { output -> input.copyTo(output) }
+        }
+        val (title, author) = parseEpubMetadata(tempFile)
+
+        // 查重：已存在同名书则跳过
+        val existing = dao.getBookByTitle(title)
+        if (existing != null) {
+            Log.i(TAG, "Skip duplicate import: '$title' already exists (id=${existing.id})")
+            isRecentDuplicate = true
+            tempFile.delete()
+            return@withContext existing
         }
 
+        isRecentDuplicate = false
+
+        val id = UUID.randomUUID().toString()
+        val destFileName = "book_$id.epub"
+        val file = File(bookDir, destFileName)
+        tempFile.renameTo(file)
+
         Log.d(TAG, "File saved: ${file.absolutePath} (${file.length()} bytes)")
-
-        // Parse metadata
-        val (title, author) = parseEpubMetadata(file)
-
         Log.d(TAG, "Parsed metadata: title='$title', author='$author'")
 
         val book = Book(
@@ -70,18 +84,26 @@ class BookRepository(private val context: Context) {
         book
     }
 
-    /** 从已下载的 EPUB 文件直接导入本地书库 */
+    /** 从已下载的 EPUB 文件直接导入本地书库（去重） */
     suspend fun importEpubFile(epubFile: File): Book = withContext(Dispatchers.IO) {
+        val (title, author) = parseEpubMetadata(epubFile)
+
+        // 查重：已存在同名书则跳过
+        val existing = dao.getBookByTitle(title)
+        if (existing != null) {
+            Log.i(TAG, "Skip duplicate importEpub: '$title' already exists (id=${existing.id})")
+            isRecentDuplicate = true
+            epubFile.delete()
+            return@withContext existing
+        }
+
+        isRecentDuplicate = false
+
         val id = UUID.randomUUID().toString()
         val fileName = "book_$id.epub"
         val destFile = File(bookDir, fileName)
-        epubFile.inputStream().use { input ->
-            FileOutputStream(destFile).use { output ->
-                input.copyTo(output)
-            }
-        }
+        epubFile.renameTo(destFile)
         Log.d(TAG, "File imported: ${destFile.absolutePath} (${destFile.length()} bytes)")
-        val (title, author) = parseEpubMetadata(destFile)
         val book = Book(
             id = id,
             title = title,

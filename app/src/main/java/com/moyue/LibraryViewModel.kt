@@ -98,6 +98,12 @@ class LibraryViewModel(
                 if (coverPath != null) {
                     repository.updateBookCover(book.id, coverPath)
                 }
+                // 如果 importBook 返回的是已存在的书（去重），提示用户
+                if (repository.isRecentDuplicate) {
+                    android.widget.Toast.makeText(context,
+                        context.getString(com.moyue.app.R.string.import_duplicate_skip, book.title),
+                        android.widget.Toast.LENGTH_SHORT).show()
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -112,39 +118,68 @@ class LibraryViewModel(
 
     // ── 云同步 ──────────────────────────────────────────
 
-    /** 上传全部本地书籍到云端（含书签和高亮） */
+    /** 上传全部本地书籍到云端（含书签和高亮），自动跳过已在云端的 */
     fun uploadAllToCloud(context: Context, syncClient: SyncClient) {
         viewModelScope.launch {
             _isUploading.value = true
             val repo = BookRepository(context)
             val allBooks = repo.getAllBooksOnce()
-            _uploadTotal.value = allBooks.size
+
+            // 先拉云端书单，构建书名集合用于去重
+            val cloudTitles = syncClient.listBooks().getOrDefault(emptyList())
+                .map { it.title }.toSet()
+
+            val toUpload = allBooks.filter { it.title !in cloudTitles }
+            val skipped = allBooks.size - toUpload.size
+
+            _uploadTotal.value = toUpload.size
             _uploadProgress.value = 0
             var success = 0
             var fail = 0
-            for ((i, book) in allBooks.withIndex()) {
+            for ((i, book) in toUpload.withIndex()) {
                 val result = syncClient.uploadBookWithMetadata(book.id, repo)
                 if (result.isSuccess) success++ else fail++
                 _uploadProgress.value = i + 1
             }
             _isUploading.value = false
-            android.widget.Toast.makeText(context,
-                "同步完成：成功 $success 本${if (fail > 0) "，失败 $fail 本" else ""}",
-                android.widget.Toast.LENGTH_LONG).show()
+
+            val msg = when {
+                fail > 0 && skipped > 0 -> context.getString(com.moyue.app.R.string.sync_upload_all_fail_skip, success, fail, skipped)
+                fail > 0 -> context.getString(com.moyue.app.R.string.sync_upload_result_fail, success, fail)
+                skipped > 0 -> context.getString(com.moyue.app.R.string.sync_upload_all_skip, success, skipped)
+                else -> context.getString(com.moyue.app.R.string.sync_upload_result_success, success)
+            }
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
-    /** 上传单本书到云端（含书签和高亮） */
+    /** 上传单本书到云端（含书签和高亮），已在云端则跳过 */
     fun uploadSingleBook(context: Context, syncClient: SyncClient, bookId: String) {
         viewModelScope.launch {
             val repo = BookRepository(context)
+            val book = repo.getBook(bookId)
+            if (book == null) {
+                android.widget.Toast.makeText(context,
+                    context.getString(com.moyue.app.R.string.sync_upload_fail, "找不到本地书"),
+                    android.widget.Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            // 检查是否已在云端
+            val cloudTitles = syncClient.listBooks().getOrDefault(emptyList())
+                .map { it.title }.toSet()
+            if (book.title in cloudTitles) {
+                android.widget.Toast.makeText(context,
+                    context.getString(com.moyue.app.R.string.sync_upload_skip_exists, book.title),
+                    android.widget.Toast.LENGTH_SHORT).show()
+                return@launch
+            }
             syncClient.uploadBookWithMetadata(bookId, repo).fold(
                 onSuccess = { msg ->
                     android.widget.Toast.makeText(context, msg,
                         android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onFailure = { e ->
-                    android.widget.Toast.makeText(context, "上传失败: ${e.message}",
+                    android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.sync_upload_fail, e.message ?: ""),
                         android.widget.Toast.LENGTH_LONG).show()
                 },
             )
@@ -175,13 +210,13 @@ class LibraryViewModel(
                         applyPullMetadata(repo, localBook.id, metaJson)
                     }
                     android.widget.Toast.makeText(context,
-                        "已下载: ${bookInfo.title}（含${restoredBm}书签+${restoredHl}高亮）", android.widget.Toast.LENGTH_SHORT).show()
+                        "Downloaded: ${bookInfo.title} (${restoredBm}BMs+${restoredHl}HLs)", android.widget.Toast.LENGTH_SHORT).show()
                     // 刷新书架
                     _cloudBooks.value = _cloudBooks.value.filter { it.id != bookInfo.id }
                 },
                 onFailure = { e ->
                     android.widget.Toast.makeText(context,
-                        "下载失败: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                        context.getString(com.moyue.app.R.string.sync_download_fail, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
                 },
             )
         }
@@ -198,7 +233,7 @@ class LibraryViewModel(
                 },
                 onFailure = { e ->
                     android.util.Log.e("Sync", "同步失败", e)
-                    onResult("同步失败: ${e.message}")
+                    onResult(context.getString(com.moyue.app.R.string.sync_fail, e.message ?: ""))
                 },
             )
         }

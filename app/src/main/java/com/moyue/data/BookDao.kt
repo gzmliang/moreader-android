@@ -15,6 +15,9 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE id = :id")
     suspend fun getBook(id: String): Book?
 
+    @Query("SELECT * FROM books WHERE title = :title LIMIT 1")
+    suspend fun getBookByTitle(title: String): Book?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(book: Book)
 
