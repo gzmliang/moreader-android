@@ -50,6 +50,8 @@ fun EpubWebView(
     ttsHighlightIndex: Int = -1,
     ttsSentenceIdx: Int = -1,
     scrollToParagraph: Int? = null,
+    scrollToAnchor: String? = null,
+    onAnchorScrolled: (() -> Unit)? = null,
     highlightsToRender: List<Triple<Int, Int, Int>> = emptyList(),  // (startParagraph, startOffset, endOffset)
     highlightToRemove: Pair<Int, Int>? = null,  // (startOffset, endOffset)
     modifier: Modifier = Modifier,
@@ -98,6 +100,28 @@ fun EpubWebView(
         if (scrollToParagraph != null && scrollToParagraph >= 0) {
             kotlinx.coroutines.delay(500)
             webView?.evaluateJavascript("window.scrollToPara($scrollToParagraph)", null)
+        }
+    }
+
+    // Scroll to HTML anchor (e.g. #filepos0000154187 for monolithic EPUBs)
+    LaunchedEffect(scrollToAnchor) {
+        if (scrollToAnchor != null && scrollToAnchor.isNotEmpty()) {
+            kotlinx.coroutines.delay(500)
+            webView?.evaluateJavascript("""
+                (function(){
+                    var id = '$scrollToAnchor';
+                    var el = document.getElementById(id);
+                    if (!el) el = document.querySelector('[name="$scrollToAnchor"]');
+                    if (!el) el = document.querySelector('a[name="$scrollToAnchor"]');
+                    if (el) {
+                        el.scrollIntoView({behavior:'smooth', block:'start'});
+                        return 'found';
+                    }
+                    return 'not_found';
+                })()
+            """.trimIndent()) { _ ->
+                onAnchorScrolled?.invoke()
+            }
         }
     }
 

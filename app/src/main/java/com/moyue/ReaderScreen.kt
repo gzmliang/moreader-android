@@ -465,6 +465,8 @@ fun ReaderScreen(
                     ttsHighlightIndex = ttsHighlightIdx,
                     ttsSentenceIdx = state.ttsSentenceIdx,
                     scrollToParagraph = if (state.scrollToParagraph >= 0) state.scrollToParagraph else null,
+                    scrollToAnchor = state.scrollToAnchor,
+                    onAnchorScrolled = { viewModel.clearScrollToParagraph() },
                     highlightsToRender = highlights.map { Triple(it.startParagraph, it.startOffset, it.endOffset) },
                     highlightToRemove = state.highlightToRemove?.let { Pair(it.startOffset, it.endOffset) },
                     modifier = Modifier.fillMaxSize().background(Color(android.graphics.Color.parseColor(state.theme.bgColor))),

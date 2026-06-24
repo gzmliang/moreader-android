@@ -104,6 +104,7 @@ data class ReaderUiState(
     val showHighlightPanel: Boolean = false,
     val currentParagraphIndex: Int = 0,       // 当前阅读/朗读的段落
     val scrollToParagraph: Int = -1,           // 需要滚动到的段落索引（-1 表示无）
+    val scrollToAnchor: String? = null,          // 需要滚动到的 HTML 锚点（如 filepos0000154187）
     val highlightToRemove: Highlight? = null,    // Signal to remove a highlight in WebView
     // Navigation history
     val navHistory: List<NavHistoryEntry> = emptyList(),  // Stack of previous positions
@@ -274,6 +275,7 @@ class ReaderViewModel(
                 ttsCurrentIdx = -1,
                 isTtsPaused = false,
                 scrollToParagraph = -1,
+                scrollToAnchor = null,
             )
         }
         viewModelScope.launch {
@@ -339,6 +341,7 @@ class ReaderViewModel(
         val restorePara = if (forceStart) 0
             else if (ch.href == b.currentChapterHref) b.currentParagraphIndex.coerceIn(0, maxOf(0, pl.size - 1))
             else 0
+        log("ChapterNav: ch=${ch.href} forceStart=$forceStart curCHref=${b.currentChapterHref} restorePara=$restorePara idx=${s.currentChapterIndex}")
         
         _uiState.update { 
             it.copy(
@@ -357,32 +360,50 @@ class ReaderViewModel(
             _uiState.update { it.copy(scrollToParagraph = restorePara) }
         }
     }
-    fun nextChapter() { val s = _uiState.value; if (s.currentChapterIndex < s.chapters.size - 1) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex + 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(); saveProgress() } } }
-    fun prevChapter() { val s = _uiState.value; if (s.currentChapterIndex > 0) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex - 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(); saveProgress() } } }
+    fun nextChapter() { val s = _uiState.value; if (s.currentChapterIndex < s.chapters.size - 1) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex + 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(forceStart = true); saveProgress() } } }
+    fun prevChapter() { val s = _uiState.value; if (s.currentChapterIndex > 0) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex - 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(forceStart = true); saveProgress() } } }
     fun navigateToChapter(href: String) { 
         pushToHistory()
-        val chs = _uiState.value.chapters
-        val cl = href.substringBefore('#').trim()
+        val s = _uiState.value
+        val chs = s.chapters
+        val filePart = href.substringBefore('#').trim()
+        val anchorPart = href.substringAfter('#', "").trim().ifEmpty { null }
         
         // Try multiple matching strategies
-        var idx = chs.indexOfFirst { it.href == cl }
-        if (idx < 0) idx = chs.indexOfFirst { it.href.endsWith(cl) }
-        if (idx < 0) idx = chs.indexOfFirst { cl.endsWith(it.href) }
+        var idx = chs.indexOfFirst { it.href == filePart }
+        if (idx < 0) idx = chs.indexOfFirst { it.href.endsWith(filePart) }
+        if (idx < 0) idx = chs.indexOfFirst { filePart.endsWith(it.href) }
         if (idx < 0) {
-            val targetFile = cl.substringAfterLast('/')
+            val targetFile = filePart.substringAfterLast('/')
             idx = chs.indexOfFirst { it.href.substringAfterLast('/') == targetFile }
         }
         if (idx < 0) {
-            val targetNoExt = cl.substringAfterLast('/').substringBeforeLast('.')
+            val targetNoExt = filePart.substringAfterLast('/').substringBeforeLast('.')
             idx = chs.indexOfFirst { 
                 it.href.substringAfterLast('/').substringBeforeLast('.') == targetNoExt 
             }
         }
         
-        if (idx >= 0) { 
+        if (idx >= 0) {
+            // Same chapter + has anchor → just scroll via JS, don't reload
+            val sameChapter = (idx == s.currentChapterIndex)
+            if (sameChapter && anchorPart != null && s.currentHtml != null) {
+                _uiState.update { it.copy(showTocPanel = false, scrollToAnchor = anchorPart) }
+                return
+            }
+            
             killPlayChain()
+            val pendingAnchor = if (!sameChapter) anchorPart else null
             _uiState.update { it.copy(currentChapterIndex = idx, isLoading = true, currentHtml = null, showTocPanel = false, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }
-            viewModelScope.launch { loadChapterContent(forceStart = true); saveProgress() }
+            viewModelScope.launch { 
+                loadChapterContent(forceStart = true)
+                if (pendingAnchor != null) {
+                    // Wait for WebView to render the new HTML
+                    delay(800)
+                    _uiState.update { it.copy(scrollToAnchor = pendingAnchor) }
+                }
+                saveProgress() 
+            }
         }
     }
     private suspend fun saveProgress() { 
@@ -455,10 +476,18 @@ class ReaderViewModel(
         
         if (idx >= 0) {
             killPlayChain()
+            val sameChapter = (idx == _uiState.value.currentChapterIndex)
+            if (sameChapter && anchor.isNotEmpty()) {
+                _uiState.update { it.copy(scrollToAnchor = anchor) }
+                return
+            }
             _uiState.update { it.copy(currentChapterIndex = idx, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }
             viewModelScope.launch { 
                 loadChapterContent()
-                // TODO: Scroll to anchor after content loaded
+                if (anchor.isNotEmpty()) {
+                    delay(800)
+                    _uiState.update { it.copy(scrollToAnchor = anchor) }
+                }
                 saveProgress() 
             }
         } else {
@@ -1465,6 +1494,7 @@ class ReaderViewModel(
                         ttsCurrentIdx = -1,
                         isTtsPaused = false,
                         scrollToParagraph = -1,
+                        scrollToAnchor = null,
                     )
                 }
                 viewModelScope.launch {
@@ -1474,7 +1504,7 @@ class ReaderViewModel(
                 }
             }
         } else {
-            _uiState.update { it.copy(scrollToParagraph = -1) }
+            _uiState.update { it.copy(scrollToParagraph = -1, scrollToAnchor = null) }
             viewModelScope.launch {
                 kotlinx.coroutines.delay(100)
                 _uiState.update { it.copy(scrollToParagraph = bookmark.paragraphIndex) }
@@ -1539,6 +1569,7 @@ class ReaderViewModel(
                 ttsCurrentIdx = -1,
                 isTtsPaused = false,
                 scrollToParagraph = -1,
+                scrollToAnchor = null,
             )
         }
         viewModelScope.launch {
@@ -1616,7 +1647,7 @@ class ReaderViewModel(
                 }
             }
         } else {
-            _uiState.update { it.copy(scrollToParagraph = -1) }
+            _uiState.update { it.copy(scrollToParagraph = -1, scrollToAnchor = null) }
             viewModelScope.launch {
                 kotlinx.coroutines.delay(100)
                 _uiState.update { it.copy(scrollToParagraph = highlight.startParagraph) }
@@ -1634,7 +1665,7 @@ class ReaderViewModel(
         }
     }
 
-    fun clearScrollToParagraph() { _uiState.update { it.copy(scrollToParagraph = -1) } }
+    fun clearScrollToParagraph() { _uiState.update { it.copy(scrollToParagraph = -1, scrollToAnchor = null) } }
 
     // ===== Highlight =====
     private val _highlights = MutableStateFlow<List<Highlight>>(emptyList())
