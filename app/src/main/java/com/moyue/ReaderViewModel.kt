@@ -204,10 +204,9 @@ class ReaderViewModel(
 
     private fun extractParagraphsFromHtml(html: String): List<String> {
         val doc = org.jsoup.Jsoup.parse(html)
-        // 先移除不需要朗读的 HTML 标签（注音、注释、脚注标记等），保留汉字本身
-        doc.select("rt, rp, rtc, rb, sup, sub, .note, .footnote, .annotation, .tcy, .math-super, [class*=note], [class*=footnote]").remove()
-        // 注意：此处可以做文本级过滤但保留段落索引对齐
-        // WebView 中给所有 p,h1-h6 元素添加了点击监听，索引必须对应
+        // ⚠️ 不要 remove 任何元素！WebView DOM 用 querySelectorAll('p,h1-h6') 获取段落索引，
+        // 这里必须和 DOM 完全对齐，否则保存的段落索引恢复时会跳到错误位置。
+        // 只做文本级清理（去注音/脚注标记的文字内容），不改变 DOM 结构。
         val paragraphs = doc.select("p, h1, h2, h3, h4, h5, h6").map { para ->
             var text = para.text().trim()
             // 清除脚注标记 [1] [2] ...
@@ -408,7 +407,7 @@ class ReaderViewModel(
     }
     private suspend fun saveProgress() { 
         val s = _uiState.value; val b = s.book ?: return; val c = s.chapters.getOrNull(s.currentChapterIndex) ?: return
-        val maxIdx = s.ttsParagraphs.size.coerceAtMost(100) - 1
+        val maxIdx = s.ttsParagraphs.size - 1
         val paraIdx = if (maxIdx < 0) 0 else s.currentParagraphIndex.coerceIn(0, maxIdx)
         repository.updateProgress(b.id, c.href, s.currentChapterIndex, b.currentProgress, null, paraIdx, s.theme.id, s.fontSize) 
     }
@@ -2108,5 +2107,17 @@ class ReaderViewModel(
         context.startActivity(android.content.Intent.createChooser(intent, null))
     }
 
-    override fun onCleared() { super.onCleared(); killPlayChain(); currentTTSProvider?.destroy(); recordingJob?.cancel() }
+    override fun onCleared() {
+        super.onCleared()
+        killPlayChain(); currentTTSProvider?.destroy(); recordingJob?.cancel()
+        // 保存阅读进度（章节、段落位置等），防止退出后位置丢失
+        val s = _uiState.value; val b = s.book; val c = s.chapters.getOrNull(s.currentChapterIndex)
+        if (b != null && c != null) {
+            val maxIdx = s.ttsParagraphs.size - 1
+            val paraIdx = if (maxIdx < 0) 0 else s.currentParagraphIndex.coerceIn(0, maxIdx)
+            kotlinx.coroutines.runBlocking {
+                repository.updateProgress(b.id, c.href, s.currentChapterIndex, b.currentProgress, null, paraIdx, s.theme.id, s.fontSize)
+            }
+        }
+    }
 }
