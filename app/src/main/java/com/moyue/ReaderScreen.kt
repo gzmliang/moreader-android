@@ -51,6 +51,8 @@ fun ReaderScreen(
     bookId: String,
     repository: BookRepository,
     onBack: () -> Unit,
+    initialChapterIndex: Int = -1,
+    initialParagraphIndex: Int = -1,
     viewModel: ReaderViewModel = viewModel(
         key = "reader_$bookId",
         factory = ReaderViewModelFactory(repository, LocalContext.current.applicationContext as android.app.Application)
@@ -60,6 +62,13 @@ fun ReaderScreen(
     LaunchedEffect(bookId) { viewModel.loadBook(bookId) }
 
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // Navigate to bookmark position if provided from bookmarks list
+    LaunchedEffect(initialChapterIndex, bookId, state.isLoading) {
+        if (initialChapterIndex >= 0 && !state.isLoading) {
+            viewModel.navigateToBookmarkPosition(initialChapterIndex, initialParagraphIndex)
+        }
+    }
     val highlights by viewModel.loadedHighlights.collectAsStateWithLifecycle()
     val allBookHighlights by repository.getHighlightsForBook(bookId).collectAsStateWithLifecycle(initialValue = emptyList())
     val context = LocalContext.current

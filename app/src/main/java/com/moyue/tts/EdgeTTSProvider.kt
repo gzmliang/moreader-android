@@ -132,15 +132,24 @@ class EdgeTTSProvider(
         playAudio(audioData, listener)
     }
 
+    private var currentTempFile: java.io.File? = null
+
     private fun playAudio(audioData: ByteArray, listener: TTSListener) {
         try {
+            val tempFile = java.io.File.createTempFile("tts_", ".mp3")
+            tempFile.writeBytes(audioData)
+            currentTempFile = tempFile
             audioPlayer = android.media.MediaPlayer().apply {
-                val tempFile = java.io.File.createTempFile("tts_", ".mp3")
-                tempFile.writeBytes(audioData)
                 setDataSource(tempFile.absolutePath)
-                setOnCompletionListener { listener.onDone() }
+                setOnCompletionListener {
+                    listener.onDone()
+                    tempFile.delete()
+                    currentTempFile = null
+                }
                 setOnErrorListener { _, what, extra ->
                     listener.onError("Playback error: $what/$extra")
+                    tempFile.delete()
+                    currentTempFile = null
                     true
                 }
                 prepareAsync()
@@ -163,6 +172,8 @@ class EdgeTTSProvider(
             release()
         }
         audioPlayer = null
+        currentTempFile?.delete()
+        currentTempFile = null
     }
 
     override fun destroy() {

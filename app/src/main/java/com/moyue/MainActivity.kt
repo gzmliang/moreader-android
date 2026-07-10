@@ -122,7 +122,11 @@ class MainActivity : ComponentActivity() {
 
 sealed class Screen {
     data object Library : Screen()
-    data class Reader(val bookId: String) : Screen()
+    data class Reader(
+        val bookId: String,
+        val initialChapterIndex: Int = -1,
+        val initialParagraphIndex: Int = -1,
+    ) : Screen()
     data object Bookmarks : Screen()
     data object Vocabulary : Screen()
     data object Flashcards : Screen()
@@ -170,7 +174,9 @@ fun MoreaderApp(
             ReaderScreen(
                 bookId = currentScreen.bookId,
                 repository = repository,
-                onBack = { navStack = navStack.dropLast(1) }
+                onBack = { navStack = navStack.dropLast(1) },
+                initialChapterIndex = currentScreen.initialChapterIndex,
+                initialParagraphIndex = currentScreen.initialParagraphIndex,
             )
         }
         is Screen.Bookmarks -> {
@@ -178,7 +184,7 @@ fun MoreaderApp(
                 repository = repository,
                 onBack = { navStack = navStack.dropLast(1) },
                 onNavigateToBookmark = { bookId, chapterIndex, progress ->
-                    navigateTo(Screen.Reader(bookId))
+                    navigateTo(Screen.Reader(bookId, initialChapterIndex = chapterIndex, initialParagraphIndex = 0))
                 }
             )
         }

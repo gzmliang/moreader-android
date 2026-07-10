@@ -1454,40 +1454,43 @@ class ReaderViewModel(
     fun navigateToBookmark(bookmark: Bookmark) {
         pushToHistory()
         _uiState.update { it.copy(showBookmarkPanel = false) }
-        val s = _uiState.value
-        val chapters = s.chapters
 
         // ── 跨平台书签：来自浏览器同步，chapterIndex==0, paragraphIndex==0，
         //     但有 paragraphText。通过在 EPUB 中搜索文字找到真实位置 ──
         if (bookmark.chapterIndex == 0 && bookmark.paragraphIndex == 0
             && !bookmark.paragraphText.isNullOrBlank()) {
-
             viewModelScope.launch {
                 val found = findTextPosition(bookmark.paragraphText!!)
                 if (found != null) {
                     val (chIdx, paraIdx) = found
-                    // 更新书签的章节/段落索引到数据库
                     val updated = bookmark.copy(chapterIndex = chIdx, paragraphIndex = paraIdx)
                     repository.updateBookmark(updated)
-
-                    // 用找到的真实位置跳转
-                    navigateToChapterAndParagraph(chIdx, paraIdx)
-                } else {
-                    // 搜不到文字，至少打开书
-                    Log.w("ReaderVM", "跨平台书签：未找到匹配文字 '${bookmark.paragraphText}'")
+                    doNavigateToBookmarkPosition(chIdx, paraIdx)
                 }
             }
             return
         }
 
-        // ── 正常书签跳转 ──
-        if (bookmark.chapterIndex != s.currentChapterIndex) {
-            val targetChapter = chapters.getOrNull(bookmark.chapterIndex)
+        doNavigateToBookmarkPosition(bookmark.chapterIndex, bookmark.paragraphIndex)
+    }
+
+    /** Navigate to a bookmark position by chapter/paragraph index (from bookmarks list) */
+    fun navigateToBookmarkPosition(chapterIndex: Int, paragraphIndex: Int) {
+        pushToHistory()
+        doNavigateToBookmarkPosition(chapterIndex, paragraphIndex)
+    }
+
+    private fun doNavigateToBookmarkPosition(chapterIndex: Int, paragraphIndex: Int) {
+        val s = _uiState.value
+        val chapters = s.chapters
+
+        if (chapterIndex != s.currentChapterIndex) {
+            val targetChapter = chapters.getOrNull(chapterIndex)
             if (targetChapter != null) {
                 killPlayChain()
                 _uiState.update {
                     it.copy(
-                        currentChapterIndex = bookmark.chapterIndex,
+                        currentChapterIndex = chapterIndex,
                         isLoading = true,
                         currentHtml = null,
                         ttsParagraphs = emptyList(),
@@ -1500,14 +1503,14 @@ class ReaderViewModel(
                 viewModelScope.launch {
                     loadChapterContent()
                     kotlinx.coroutines.delay(200)
-                    _uiState.update { it.copy(scrollToParagraph = bookmark.paragraphIndex) }
+                    _uiState.update { it.copy(scrollToParagraph = paragraphIndex) }
                 }
             }
         } else {
             _uiState.update { it.copy(scrollToParagraph = -1, scrollToAnchor = null) }
             viewModelScope.launch {
                 kotlinx.coroutines.delay(100)
-                _uiState.update { it.copy(scrollToParagraph = bookmark.paragraphIndex) }
+                _uiState.update { it.copy(scrollToParagraph = paragraphIndex) }
             }
         }
     }
