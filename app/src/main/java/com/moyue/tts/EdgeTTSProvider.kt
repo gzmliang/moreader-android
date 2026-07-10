@@ -34,6 +34,7 @@ class EdgeTTSProvider(
 
     override val type: TTSProviderType get() = TTSProviderType.EDGE_TTS
     override val isSpeaking: Boolean get() = audioPlayer?.isPlaying ?: false
+    override val currentPositionMs: Long get() = audioPlayer?.currentPosition?.toLong() ?: 0L
 
     private fun makeRatePct(rate: Float): String =
         if (rate >= 1.0f) "+${((rate - 1.0f) * 100).toInt()}%"

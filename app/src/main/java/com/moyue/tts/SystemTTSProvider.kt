@@ -66,6 +66,7 @@ class SystemTTSProvider(context: Context) : TTSProvider {
 
     override val type: TTSProviderType get() = TTSProviderType.SYSTEM
     override val isSpeaking: Boolean get() = globalTts?.isSpeaking ?: false
+    override val currentPositionMs: Long get() = 0L  // System TTS 有 onRangeStart，不需要轮询
 
     init {
         dlog("=== SystemTTSProvider 创建 ===")

@@ -32,6 +32,7 @@ interface TTSProvider {
     fun stop()
     fun destroy()
     val isSpeaking: Boolean
+    val currentPositionMs: Long get() = 0L  // 实际音频播放位置（毫秒）
     val type: com.moyue.app.data.models.TTSProviderType
 }
 

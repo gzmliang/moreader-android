@@ -27,6 +27,7 @@ class AIVoiceTTSProvider(
 
     override val type: TTSProviderType get() = TTSProviderType.AI_VOICE
     override val isSpeaking: Boolean get() = audioPlayer?.isPlaying ?: false
+    override val currentPositionMs: Long get() = audioPlayer?.currentPosition?.toLong() ?: 0L
 
     /**
      * Fetch audio bytes for preloading

@@ -976,7 +976,7 @@ class ReaderViewModel(
 
         killPlayChain(); audioCache.clear()
         currentTTSProvider?.destroy(); currentTTSProvider = null
-        _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = 0, ttsPlayIdx = 0) }
+        _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = 0) }
         consecutiveErrors = 0
         playChainActive = true
 
@@ -1024,12 +1024,7 @@ class ReaderViewModel(
         killPlayChain(); audioCache.clear()
         currentTTSProvider?.destroy(); currentTTSProvider = null
         
-        // Calculate highlight index with offset (same logic as playOne)
-        // ttsCurrentIdx = highlight index (for UI), ttsPlayIdx = actual play index
-        val offset = s.ttsHighlightOffset
-        val highlightIdx = (index - offset).coerceIn(0, maxOf(0, paragraphs.size - 1))
-        
-        _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = highlightIdx, ttsPlayIdx = index) }
+        _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = index) }
         consecutiveErrors = 0
         playChainActive = true
 
@@ -1276,33 +1271,36 @@ class ReaderViewModel(
     private fun startWordBoundaryTracking(boundaries: List<com.moyue.app.tts.WordBoundary>, text: String, paraIdx: Int) {
         estJob?.cancel()
         estJob = viewModelScope.launch {
-            var prevMs = 0L
-            val spd = _uiState.value.ttsSpeed
-            val hasChinese = text.any { it in '\u4e00'..'\u9fff' }
-            val charsPerSec = if (hasChinese) (6f * spd).coerceAtLeast(4f) else (15f * spd).coerceAtLeast(8f)
-            log("[SENT:wb] START P${paraIdx + 1} — boundaries=${boundaries.size} ends=${sentenceEnds.size} range=[${sentenceEnds.firstOrNull() ?: 0}..${sentenceEnds.lastOrNull() ?: 0}] bRange=[${boundaries.firstOrNull()?.charStart ?: 0}..${boundaries.lastOrNull()?.charEnd ?: 0}]")
+            log("[SENT:wb] START P${paraIdx + 1} - boundaries=${boundaries.size} ends=${sentenceEnds.size} range=[${sentenceEnds.firstOrNull() ?: 0}..${sentenceEnds.lastOrNull() ?: 0}] bRange=[${boundaries.firstOrNull()?.charStart ?: 0}..${boundaries.lastOrNull()?.charEnd ?: 0}]")
+            if (sentenceEnds.size <= 1) return@launch
+            // 预计算每个句子对应的第一个词边界时间
+            val sentenceStartMs = LongArray(sentenceEnds.size)  // 每个句子开始时对应的音频毫秒
             for (sentIdx in 1 until sentenceEnds.size) {
                 val sentStart = sentenceEnds[sentIdx - 1]
-                val sentChars = sentenceEnds[sentIdx] - sentStart
                 val firstWord = boundaries.find { it.charStart >= sentStart }
-                if (firstWord == null) {
-                    // 降级：找不到词边界就用字符比例估算时间
-                    val waitMs = (sentChars.toFloat() / charsPerSec * 1000f).toLong().coerceAtLeast(80L)
-                    log("[SENT:wb] ⛔️ no word at sentStart=$sentStart — fallback est ${waitMs}ms ($sentChars chars)")
-                    delay(waitMs)
-                    if (!playChainActive) break
-                    _uiState.update { it.copy(ttsSentenceIdx = sentIdx) }
-                    log("[TIME] ⏱ ${paraIdx + 1}.#$sentIdx HL-SET @${System.currentTimeMillis()}")
-                    continue
+                sentenceStartMs[sentIdx] = firstWord?.offsetMs?.toLong() ?: -1L
+            }
+            if (sentenceStartMs[1] < 0) sentenceStartMs[1] = 0L  // 防止第一个无法定位
+            var lastSetSentIdx = 0
+            while (playChainActive) {
+                val audioMs = currentTTSProvider?.currentPositionMs ?: 0L
+                // 找出当前音频位置对应的句子索引
+                var targetSentIdx = lastSetSentIdx
+                for (sentIdx in (lastSetSentIdx + 1) until sentenceEnds.size) {
+                    if (sentenceStartMs[sentIdx] >= 0 && audioMs >= sentenceStartMs[sentIdx]) {
+                        targetSentIdx = sentIdx
+                    } else {
+                        break
+                    }
                 }
-                val targetMs = firstWord.offsetMs.toLong()
-                val waitMs = (targetMs - prevMs).coerceAtLeast(50)
-                delay(waitMs)
-                if (!playChainActive) break
-                _uiState.update { it.copy(ttsSentenceIdx = sentIdx) }
-                log("[SENT:wb] P${paraIdx + 1} #$sentIdx/${sentenceEnds.size} @${targetMs}ms")
-                log("[TIME] ⏱ ${paraIdx + 1}.#$sentIdx HL-SET @${System.currentTimeMillis()}")
-                prevMs = targetMs
+                if (targetSentIdx != lastSetSentIdx) {
+                    lastSetSentIdx = targetSentIdx
+                    _uiState.update { it.copy(ttsSentenceIdx = targetSentIdx) }
+                    log("[SENT:wb] P${paraIdx + 1} #$targetSentIdx/${sentenceEnds.size} audio@${audioMs}ms")
+                }
+                // 已到最后一个句子，不再轮询
+                if (targetSentIdx >= sentenceEnds.size - 1) break
+                delay(30L)  // 30ms 轮询，足够流畅且不浪费 CPU
             }
         }
     }
