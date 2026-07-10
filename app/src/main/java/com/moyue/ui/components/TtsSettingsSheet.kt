@@ -31,6 +31,10 @@ import com.moyue.app.data.models.ReaderTheme
 import com.moyue.app.data.models.TTSProviderType
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 
 // Common voice presets
 private val AI_VOICE_MODELS = listOf(
@@ -70,7 +74,7 @@ private fun SectionHeader(title: String, expanded: Boolean, onToggle: () -> Unit
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             )
             Spacer(Modifier.width(4.dp))
-            Text(title, fontWeight = FontWeight.Medium, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            Text(title, fontWeight = FontWeight.Medium, fontSize = 13.sp, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
             help?.invoke()
         }
     }
@@ -146,6 +150,7 @@ fun TtsSettingsSheet(
                     androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_engine),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.width(4.dp))
                 var showTtsHelp by remember { mutableStateOf(false) }
@@ -219,6 +224,7 @@ fun TtsSettingsSheet(
                     ),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Slider(
                     value = ttsSpeed,
@@ -236,7 +242,71 @@ fun TtsSettingsSheet(
                 val localEp = remember(edgeEndpoint) { mutableStateOf(edgeEndpoint) }
                 val localVoice = remember(edgeVoice) { mutableStateOf(edgeVoice) }
                 var showVoicePicker by remember { mutableStateOf(false) }
+                var isPreviewing by remember { mutableStateOf(false) }
                 val context = LocalContext.current
+                val scope = rememberCoroutineScope()
+                val previewClient = remember {
+                    okhttp3.OkHttpClient.Builder()
+                        .connectTimeout(4, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(40, java.util.concurrent.TimeUnit.SECONDS)
+                        .build()
+                }
+
+                fun playPreview() {
+                    if (isPreviewing) return
+                    isPreviewing = true
+                    scope.launch {
+                        try {
+                            val voiceId = localVoice.value
+                            val previewText = when {
+                                voiceId.startsWith("zh-") -> "你好，这是我的声音。"
+                                voiceId.startsWith("ja-") -> "こんにちは、これが私の声です。"
+                                voiceId.startsWith("ko-") -> "안녕하세요, 제 목소리입니다."
+                                else -> "Hello, this is my voice."
+                            }
+                            val json = org.json.JSONObject().apply {
+                                put("text", previewText)
+                                put("voice", voiceId)
+                                put("rate", "+0%")
+                                put("pitch", "+0Hz")
+                            }
+                            val body = json.toString().toRequestBody("application/json".toMediaType())
+                            val request = okhttp3.Request.Builder()
+                                .url("${localEp.value.removeSuffix("/")}/tts")
+                                .post(body)
+                                .build()
+                            val response = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                previewClient.newCall(request).execute()
+                            }
+                            if (response.isSuccessful) {
+                                val audioBytes = response.body?.bytes()
+                                if (audioBytes != null) {
+                                    val tempFile = java.io.File.createTempFile("voice_preview_", ".mp3")
+                                    tempFile.writeBytes(audioBytes)
+                                    val mp = android.media.MediaPlayer().apply {
+                                        setDataSource(tempFile.absolutePath)
+                                        setOnCompletionListener {
+                                            release()
+                                            tempFile.delete()
+                                            isPreviewing = false
+                                        }
+                                        setOnErrorListener { _, _, _ ->
+                                            release()
+                                            tempFile.delete()
+                                            isPreviewing = false
+                                            true
+                                        }
+                                        prepare()
+                                        start()
+                                    }
+                                } else { isPreviewing = false }
+                            } else { isPreviewing = false }
+                        } catch (e: Exception) {
+                            isPreviewing = false
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -266,6 +336,34 @@ fun TtsSettingsSheet(
                                 }
                             },
                         )
+                    }
+                }
+                // Preview button row
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    FilledTonalButton(
+                        onClick = { playPreview() },
+                        enabled = !isPreviewing,
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                    ) {
+                        if (isPreviewing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.voice_picker_stop),
+                                fontSize = 12.sp,
+                            )
+                        } else {
+                            Text(
+                                "🔊 ${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.voice_picker_preview)}",
+                                fontSize = 12.sp,
+                            )
+                        }
                     }
                 }
                 if (showVoicePicker) {
@@ -742,8 +840,9 @@ fun TtsSettingsSheet(
             HorizontalDivider(Modifier.padding(vertical = 6.dp))
             Text(
                 androidx.compose.ui.res.stringResource(com.moyue.app.R.string.theme),
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(4.dp))
             FlowRow(
@@ -773,6 +872,7 @@ fun TtsSettingsSheet(
                             containerColor = Color(android.graphics.Color.parseColor(theme.bgColor)),
                             labelColor = Color(android.graphics.Color.parseColor(theme.textColor)),
                             selectedContainerColor = Color(android.graphics.Color.parseColor(theme.bgColor)),
+                            selectedLabelColor = Color(android.graphics.Color.parseColor(theme.textColor)),
                         ),
                     )
                 }
@@ -788,13 +888,13 @@ fun TtsSettingsSheet(
                     onClick = onRecordingClick,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("🎙️ ${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.recording_entry)}", fontSize = 12.sp)
+                    Text("🎙️ ${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.recording_entry)}", fontSize = 12.sp, maxLines = 1)
                 }
                 FilledTonalButton(
                     onClick = onBrowseRecordingsClick,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("📂 ${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.recording_browse)}", fontSize = 12.sp)
+                    Text("📂 ${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.recording_browse)}", fontSize = 12.sp, maxLines = 1)
                 }
             }
             Spacer(Modifier.height(12.dp))
