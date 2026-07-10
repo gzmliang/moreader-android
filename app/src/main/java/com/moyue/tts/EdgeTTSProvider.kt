@@ -116,7 +116,7 @@ class EdgeTTSProvider(
                     val wb = parseWordBoundaries(response.header("X-Word-Boundaries") ?: "")
                     if (wb.isNotEmpty()) listener.onWordBoundaries(wb)
                 }
-                listener.onStart()
+                // onStart moved to playAudio's setOnPreparedListener for precise A/V sync
                 playAudio(blob, listener)
             }
         })
@@ -128,7 +128,7 @@ class EdgeTTSProvider(
      */
     override fun playRaw(audioData: ByteArray, listener: TTSListener) {
         stop()
-        listener.onStart()
+        // onStart moved to playAudio's setOnPreparedListener for precise A/V sync
         playAudio(audioData, listener)
     }
 
@@ -144,7 +144,12 @@ class EdgeTTSProvider(
                     true
                 }
                 prepareAsync()
-                setOnPreparedListener { start() }
+                setOnPreparedListener {
+                    // onStart fires here - when audio actually starts playing
+                    // This ensures highlight syncs with real audio, not file prep
+                    listener.onStart()
+                    start()
+                }
             }
         } catch (e: Exception) {
             listener.onError("Playback error: ${e.message}")
