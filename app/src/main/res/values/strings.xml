@@ -600,4 +600,20 @@ AI Voice（云端 TTS）：
     <string name="sync_download_confirm_btn">确认下载</string>
     <string name="sync_download_confirm_msg">本地数据将被云端数据覆盖，确认下载？</string>
     <string name="sync_download_empty">下载完成：云端无数据</string>
+    <!-- Voice picker dialog -->
+    <string name="voice_picker_title">选择音色</string>
+    <string name="voice_picker_search">搜索语音…</string>
+    <string name="voice_picker_tab_common">常用</string>
+    <string name="voice_picker_tab_chinese">中文</string>
+    <string name="voice_picker_tab_english">English</string>
+    <string name="voice_picker_tab_japanese">日本語</string>
+    <string name="voice_picker_tab_korean">한국어</string>
+    <string name="voice_picker_tab_other">其他</string>
+    <string name="voice_picker_preview">试听</string>
+    <string name="voice_picker_stop">停止</string>
+    <string name="voice_picker_empty">没有匹配的语音</string>
+    <string name="voice_picker_preview_text_chinese">你好，这是我的声音。</string>
+    <string name="voice_picker_preview_text_english">Hello, this is my voice.</string>
+    <string name="voice_picker_preview_text_japanese">こんにちは、これが私の声です。</string>
+    <string name="voice_picker_preview_text_korean">안녕하세요, 제 목소리입니다.</string>
 </resources>

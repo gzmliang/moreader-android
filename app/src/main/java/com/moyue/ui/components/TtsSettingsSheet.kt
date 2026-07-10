@@ -235,7 +235,7 @@ fun TtsSettingsSheet(
             if (currentProvider == TTSProviderType.EDGE_TTS) {
                 val localEp = remember(edgeEndpoint) { mutableStateOf(edgeEndpoint) }
                 val localVoice = remember(edgeVoice) { mutableStateOf(edgeVoice) }
-                var showVoiceMenu by remember { mutableStateOf(false) }
+                var showVoicePicker by remember { mutableStateOf(false) }
                 val context = LocalContext.current
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -245,21 +245,19 @@ fun TtsSettingsSheet(
                         value = localEp.value,
                         onValueChange = { localEp.value = it; onEdgeConfigChange(it, localVoice.value) },
                         label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_server_url), fontSize = 11.sp) },
-                        singleLine = true, modifier = Modifier.weight(1f),
+                        singleLine = true, modifier = Modifier.weight(1.2f),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                         textStyle = TextStyle(fontSize = 12.sp),
                     )
                     Box(modifier = Modifier.weight(1f)) {
                         OutlinedTextField(
-                            value = localVoice.value.let { voiceId ->
-                                EDGE_VOICES.find { it.id == voiceId }?.displayName(context) ?: voiceId
-                            },
+                            value = EDGE_VOICES.find { it.id == localVoice.value }?.displayName(context) ?: localVoice.value,
                             onValueChange = {}, readOnly = true,
                             label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_voice), fontSize = 11.sp) },
                             singleLine = true, modifier = Modifier.fillMaxWidth(),
                             textStyle = TextStyle(fontSize = 12.sp),
                             trailingIcon = {
-                                IconButton(onClick = { showVoiceMenu = true }) {
+                                IconButton(onClick = { showVoicePicker = true }) {
                                     Icon(
                                         Icons.Default.KeyboardArrowDown,
                                         contentDescription = null,
@@ -268,36 +266,19 @@ fun TtsSettingsSheet(
                                 }
                             },
                         )
-                        DropdownMenu(
-                            expanded = showVoiceMenu,
-                            onDismissRequest = { showVoiceMenu = false },
-                            modifier = Modifier.heightIn(max = 300.dp),
-                        ) {
-                            groupedEdgeVoices().forEach { (localeName, voices) ->
-                                DropdownMenuItem(
-                                    text = { Text(localeName, fontWeight = FontWeight.Bold, fontSize = 11.sp) },
-                                    onClick = {},
-                                    enabled = false,
-                                )
-                                voices.forEach { voice ->
-                                    val isSelected = voice.id == localVoice.value
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                (if (isSelected) "✓ " else "    ") + voice.displayName(context),
-                                                fontSize = 12.sp,
-                                            )
-                                        },
-                                        onClick = {
-                                            localVoice.value = voice.id
-                                            onEdgeConfigChange(localEp.value, voice.id)
-                                            showVoiceMenu = false
-                                        },
-                                    )
-                                }
-                            }
-                        }
                     }
+                }
+                if (showVoicePicker) {
+                    VoicePickerDialog(
+                        endpoint = localEp.value,
+                        currentVoiceId = localVoice.value,
+                        onVoiceSelected = { voiceId ->
+                            localVoice.value = voiceId
+                            onEdgeConfigChange(localEp.value, voiceId)
+                            showVoicePicker = false
+                        },
+                        onDismiss = { showVoicePicker = false },
+                    )
                 }
             }
 

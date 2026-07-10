@@ -477,4 +477,20 @@ Just change the Base URL and API Key</string>
     <string name="sync_download_confirm_btn">Confirm Download</string>
     <string name="sync_download_confirm_msg">Local data will be overwritten by cloud data. Confirm download?</string>
     <string name="sync_download_empty">Download complete: no cloud data</string>
+    <!-- Voice picker dialog -->
+    <string name="voice_picker_title">Choose Voice</string>
+    <string name="voice_picker_search">Search voices…</string>
+    <string name="voice_picker_tab_common">Recent</string>
+    <string name="voice_picker_tab_chinese">中文</string>
+    <string name="voice_picker_tab_english">English</string>
+    <string name="voice_picker_tab_japanese">日本語</string>
+    <string name="voice_picker_tab_korean">한국어</string>
+    <string name="voice_picker_tab_other">Other</string>
+    <string name="voice_picker_preview">Preview</string>
+    <string name="voice_picker_stop">Stop</string>
+    <string name="voice_picker_empty">No matching voices</string>
+    <string name="voice_picker_preview_text_chinese">你好，这是我的声音。</string>
+    <string name="voice_picker_preview_text_english">Hello, this is my voice.</string>
+    <string name="voice_picker_preview_text_japanese">こんにちは、これが私の声です。</string>
+    <string name="voice_picker_preview_text_korean">안녕하세요, 제 목소리입니다.</string>
 </resources>
