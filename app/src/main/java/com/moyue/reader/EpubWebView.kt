@@ -434,6 +434,7 @@ fun EpubWebView(
                                     });
                                 };
                                 window.scrollToPara=function(idx){
+                                    if(idx===0){window.scrollTo(0,0);return;}
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
                                     if(idx>=0&&idx<all.length){
                                         all[idx].scrollIntoView({behavior:'smooth',block:'center'});

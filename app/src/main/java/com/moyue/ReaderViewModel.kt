@@ -105,6 +105,7 @@ data class ReaderUiState(
     val currentParagraphIndex: Int = 0,       // 当前阅读/朗读的段落
     val scrollToParagraph: Int = -1,           // 需要滚动到的段落索引（-1 表示无）
     val scrollToAnchor: String? = null,          // 需要滚动到的 HTML 锚点（如 filepos0000154187）
+    val isChapterSwitching: Boolean = false,     // 章节切换过渡期标记，暂停 scroll 监听写 DB
     val highlightToRemove: Highlight? = null,    // Signal to remove a highlight in WebView
     // Navigation history
     val navHistory: List<NavHistoryEntry> = emptyList(),  // Stack of previous positions
@@ -275,11 +276,13 @@ class ReaderViewModel(
                 isTtsPaused = false,
                 scrollToParagraph = -1,
                 scrollToAnchor = null,
+                isChapterSwitching = true,
             )
         }
         viewModelScope.launch {
             loadChapterContent()
-            // Scroll to the saved paragraph — ALWAYS use the history entry's position,
+            _uiState.update { it.copy(isChapterSwitching = false) }
+            // Scroll to the saved paragraph - ALWAYS use the history entry's position,
             // not the DB-restored one (which may be for a different chapter)
             _uiState.update { it.copy(scrollToParagraph = targetPara) }
             saveProgress()
@@ -357,10 +360,14 @@ class ReaderViewModel(
         if (restorePara > 0) {
             kotlinx.coroutines.delay(300)
             _uiState.update { it.copy(scrollToParagraph = restorePara) }
+        } else {
+            // forceStart 或新章节：显式滚到顶部，防止 WebView 保留旧滚动位置
+            kotlinx.coroutines.delay(300)
+            _uiState.update { it.copy(scrollToParagraph = 0) }
         }
     }
-    fun nextChapter() { val s = _uiState.value; if (s.currentChapterIndex < s.chapters.size - 1) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex + 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(forceStart = true); saveProgress() } } }
-    fun prevChapter() { val s = _uiState.value; if (s.currentChapterIndex > 0) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex - 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }; viewModelScope.launch { loadChapterContent(forceStart = true); saveProgress() } } }
+    fun nextChapter() { val s = _uiState.value; if (s.currentChapterIndex < s.chapters.size - 1) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex + 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false, currentParagraphIndex = 0, isChapterSwitching = true) }; viewModelScope.launch { loadChapterContent(forceStart = true); _uiState.update { it.copy(isChapterSwitching = false) }; saveProgress() } } }
+    fun prevChapter() { val s = _uiState.value; if (s.currentChapterIndex > 0) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex - 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false, currentParagraphIndex = 0, isChapterSwitching = true) }; viewModelScope.launch { loadChapterContent(forceStart = true); _uiState.update { it.copy(isChapterSwitching = false) }; saveProgress() } } }
     fun navigateToChapter(href: String) { 
         pushToHistory()
         val s = _uiState.value
@@ -393,9 +400,11 @@ class ReaderViewModel(
             
             killPlayChain()
             val pendingAnchor = if (!sameChapter) anchorPart else null
-            _uiState.update { it.copy(currentChapterIndex = idx, isLoading = true, currentHtml = null, showTocPanel = false, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }
+            _uiState.update { it.copy(currentChapterIndex = idx, isLoading = true, currentHtml = null, showTocPanel = false, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false, currentParagraphIndex = 0, isChapterSwitching = true) }
             viewModelScope.launch { 
                 loadChapterContent(forceStart = true)
+                // 章节加载完毕，清除切换标记，允许 scroll 监听恢复正常工作
+                _uiState.update { it.copy(isChapterSwitching = false) }
                 if (pendingAnchor != null) {
                     // Wait for WebView to render the new HTML
                     delay(800)
@@ -1482,10 +1491,12 @@ class ReaderViewModel(
                         isTtsPaused = false,
                         scrollToParagraph = -1,
                         scrollToAnchor = null,
+                        isChapterSwitching = true,
                     )
                 }
                 viewModelScope.launch {
                     loadChapterContent()
+                    _uiState.update { it.copy(isChapterSwitching = false) }
                     kotlinx.coroutines.delay(200)
                     _uiState.update { it.copy(scrollToParagraph = paragraphIndex) }
                 }
@@ -1557,10 +1568,12 @@ class ReaderViewModel(
                 isTtsPaused = false,
                 scrollToParagraph = -1,
                 scrollToAnchor = null,
+                isChapterSwitching = true,
             )
         }
         viewModelScope.launch {
             loadChapterContent()
+            _uiState.update { it.copy(isChapterSwitching = false) }
             kotlinx.coroutines.delay(200)
             _uiState.update { it.copy(scrollToParagraph = paraIdx) }
         }
@@ -1625,11 +1638,13 @@ class ReaderViewModel(
                         currentHtml = null, 
                         ttsParagraphs = emptyList(), 
                         ttsCurrentIdx = -1, 
-                        isTtsPaused = false 
+                        isTtsPaused = false,
+                        isChapterSwitching = true,
                     ) 
                 }
                 viewModelScope.launch {
                     loadChapterContent()
+                    _uiState.update { it.copy(isChapterSwitching = false) }
                     _uiState.update { it.copy(scrollToParagraph = highlight.startParagraph) }
                 }
             }
@@ -1645,7 +1660,9 @@ class ReaderViewModel(
     fun setCurrentParagraph(idx: Int) { 
         if (_uiState.value.currentParagraphIndex == idx) return  // No-op if same
         _uiState.update { it.copy(currentParagraphIndex = idx) }
-        // Persist paragraph position (debounced — only if changed significantly)
+        // 章节切换过渡期不写 DB，避免 WebView 恢复旧滚动位置污染进度
+        if (_uiState.value.isChapterSwitching) return
+        // Persist paragraph position (debounced - only if changed significantly)
         val book = _uiState.value.book ?: return
         viewModelScope.launch {
             repository.updateBookParagraph(book.id, idx)
