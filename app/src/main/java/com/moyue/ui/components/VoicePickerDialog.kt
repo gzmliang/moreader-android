@@ -58,9 +58,10 @@ fun VoicePickerDialog(
     var searchQuery by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf(0) }
     var previewingVoiceId by remember { mutableStateOf<String?>(null) }
+    var mediaPlayerRef by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
     val previewClient = remember {
         OkHttpClient.Builder()
-            .connectTimeout(4, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(40, TimeUnit.SECONDS)
             .build()
     }
@@ -104,8 +105,20 @@ fun VoicePickerDialog(
     }
 
     // ---- Preview function ----
+    fun stopPreview() {
+        mediaPlayerRef?.let { mp ->
+            try { mp.stop() } catch (_: Exception) {}
+            try { mp.release() } catch (_: Exception) {}
+        }
+        mediaPlayerRef = null
+        previewingVoiceId = null
+    }
+
     fun playPreview(voiceId: String) {
-        if (previewingVoiceId != null) return // Already playing
+        if (previewingVoiceId != null) {
+            stopPreview()
+            return
+        }
         previewingVoiceId = voiceId
         scope.launch {
             try {
@@ -135,7 +148,7 @@ fun VoicePickerDialog(
                 }
                 if (response.isSuccessful) {
                     val audioBytes = response.body?.bytes()
-                    if (audioBytes != null) {
+                    if (audioBytes != null && audioBytes.isNotEmpty()) {
                         val tempFile = java.io.File.createTempFile("voice_preview_", ".mp3")
                         tempFile.writeBytes(audioBytes)
                         val mp = android.media.MediaPlayer().apply {
@@ -143,17 +156,20 @@ fun VoicePickerDialog(
                             setOnCompletionListener {
                                 release()
                                 tempFile.delete()
+                                if (mediaPlayerRef === this) mediaPlayerRef = null
                                 previewingVoiceId = null
                             }
-                            setOnErrorListener { _, _, _ ->
-                                release()
+                            setOnErrorListener { mp2, _, _ ->
+                                mp2.release()
                                 tempFile.delete()
+                                if (mediaPlayerRef === mp2) mediaPlayerRef = null
                                 previewingVoiceId = null
                                 true
                             }
                             prepare()
                             start()
                         }
+                        mediaPlayerRef = mp
                     } else {
                         previewingVoiceId = null
                     }
@@ -163,6 +179,17 @@ fun VoicePickerDialog(
             } catch (e: Exception) {
                 previewingVoiceId = null
             }
+        }
+    }
+
+    // 停止预览并释放资源（Dialog 关闭时调用）
+    DisposableEffect(Unit) {
+        onDispose {
+            mediaPlayerRef?.let { mp ->
+                try { mp.stop() } catch (_: Exception) {}
+                try { mp.release() } catch (_: Exception) {}
+            }
+            mediaPlayerRef = null
         }
     }
 
@@ -350,13 +377,13 @@ fun VoicePickerDialog(
                                     // Preview button
                                     FilledTonalIconButton(
                                         onClick = { playPreview(voice.id) },
-                                        enabled = !isPreviewing,
                                         modifier = Modifier.size(32.dp),
                                     ) {
                                         if (isPreviewing) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(14.dp),
-                                                strokeWidth = 2.dp,
+                                            Icon(
+                                                Icons.Default.Stop,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
                                             )
                                         } else {
                                             Icon(

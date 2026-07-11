@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -243,17 +244,30 @@ fun TtsSettingsSheet(
                 val localVoice = remember(edgeVoice) { mutableStateOf(edgeVoice) }
                 var showVoicePicker by remember { mutableStateOf(false) }
                 var isPreviewing by remember { mutableStateOf(false) }
+                var mediaPlayerRef by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
                 val context = LocalContext.current
                 val scope = rememberCoroutineScope()
                 val previewClient = remember {
                     okhttp3.OkHttpClient.Builder()
-                        .connectTimeout(4, java.util.concurrent.TimeUnit.SECONDS)
+                        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
                         .readTimeout(40, java.util.concurrent.TimeUnit.SECONDS)
                         .build()
                 }
 
+                fun stopPreview() {
+                    mediaPlayerRef?.let { mp ->
+                        try { mp.stop() } catch (_: Exception) {}
+                        try { mp.release() } catch (_: Exception) {}
+                    }
+                    mediaPlayerRef = null
+                    isPreviewing = false
+                }
+
                 fun playPreview() {
-                    if (isPreviewing) return
+                    if (isPreviewing) {
+                        stopPreview()
+                        return
+                    }
                     isPreviewing = true
                     scope.launch {
                         try {
@@ -280,7 +294,7 @@ fun TtsSettingsSheet(
                             }
                             if (response.isSuccessful) {
                                 val audioBytes = response.body?.bytes()
-                                if (audioBytes != null) {
+                                if (audioBytes != null && audioBytes.isNotEmpty()) {
                                     val tempFile = java.io.File.createTempFile("voice_preview_", ".mp3")
                                     tempFile.writeBytes(audioBytes)
                                     val mp = android.media.MediaPlayer().apply {
@@ -288,17 +302,20 @@ fun TtsSettingsSheet(
                                         setOnCompletionListener {
                                             release()
                                             tempFile.delete()
+                                            if (mediaPlayerRef === this) mediaPlayerRef = null
                                             isPreviewing = false
                                         }
-                                        setOnErrorListener { _, _, _ ->
-                                            release()
+                                        setOnErrorListener { mp2, _, _ ->
+                                            mp2.release()
                                             tempFile.delete()
+                                            if (mediaPlayerRef === mp2) mediaPlayerRef = null
                                             isPreviewing = false
                                             true
                                         }
                                         prepare()
                                         start()
                                     }
+                                    mediaPlayerRef = mp
                                 } else { isPreviewing = false }
                             } else { isPreviewing = false }
                         } catch (e: Exception) {
@@ -345,13 +362,13 @@ fun TtsSettingsSheet(
                 ) {
                     FilledTonalButton(
                         onClick = { playPreview() },
-                        enabled = !isPreviewing,
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
                     ) {
                         if (isPreviewing) {
-                            CircularProgressIndicator(
+                            Icon(
+                                Icons.Default.Stop,
+                                contentDescription = null,
                                 modifier = Modifier.size(14.dp),
-                                strokeWidth = 2.dp,
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
