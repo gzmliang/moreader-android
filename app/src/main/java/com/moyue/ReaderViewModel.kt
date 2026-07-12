@@ -1175,6 +1175,15 @@ class ReaderViewModel(
                 if (wb != null && wb.isNotEmpty() && sentenceEnds.size > 1) {
                     // 子段词边界 -> 映射到原文位置
                     val mappedWb = wb.map { com.moyue.app.tts.WordBoundary(it.offsetMs, it.text, it.charStart + charOffset, it.charEnd + charOffset) }
+                    // 立即设高亮到当前子段的起始句子（不等 delay，消除切换间隙断档）
+                    var firstSentIdx = 0
+                    while (firstSentIdx < sentenceEnds.size - 1 && sentenceEnds[firstSentIdx] <= charOffset) {
+                        firstSentIdx++
+                    }
+                    if (firstSentIdx != _uiState.value.ttsSentenceIdx) {
+                        _uiState.update { it.copy(ttsSentenceIdx = firstSentIdx) }
+                        log("[SUBSEG] P${paraIdx + 1} sub${subIdx + 1} 立即设高亮 -> 句$firstSentIdx")
+                    }
                     // 只追踪当前子段覆盖范围内的句子（从 charOffset 到 charOffset + subText.length）
                     val subEnd = charOffset + subText.length
                     startSubSegmentWordBoundaryTracking(mappedWb, fullText, paraIdx, charOffset, subEnd, subIdx)
@@ -1215,6 +1224,19 @@ class ReaderViewModel(
                 val now = System.currentTimeMillis()
                 val elapsed = now - paraStartMs
                 log("[TIME] ⏱ P${paraIdx + 1} sub${subIdx + 1} DONE @${now}ms (+${elapsed}ms)")
+                // 在取消追踪前，用 charOffset 确定性计算当前子段的最后一个句子，立即设高亮
+                // 避免倍速播放时 estJob 的 delay 还没到就被取消，导致末尾几句高亮丢失
+                if (sentenceEnds.isNotEmpty()) {
+                    val subEnd = charOffset + subText.length
+                    var lastSentIdx = 0
+                    for (i in sentenceEnds.indices) {
+                        if (sentenceEnds[i] <= subEnd) lastSentIdx = i
+                    }
+                    if (lastSentIdx != _uiState.value.ttsSentenceIdx) {
+                        _uiState.update { it.copy(ttsSentenceIdx = lastSentIdx) }
+                        log("[SUBSEG] P${paraIdx + 1} sub${subIdx + 1} onDone设末尾高亮 -> 句$lastSentIdx")
+                    }
+                }
                 estJob?.cancel()
                 consecutiveErrors = 0
                 advanceSubSegment(paraIdx, subIdx, highlightIdx)
