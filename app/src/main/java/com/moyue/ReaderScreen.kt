@@ -485,7 +485,6 @@ fun ReaderScreen(
                 
                 // TTS 防误触锁定遮罩 - 半透明覆盖，拦截所有触摸，只留暂停/继续 + 长按解锁
                 if (state.ttsLocked) {
-                    // TTS 防误触锁定遮罩
                     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
                     var unlockHeld by remember { mutableStateOf(false) }
                     var unlockReady by remember { mutableStateOf(false) }
@@ -494,41 +493,26 @@ fun ReaderScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.35f))
-                            // 拦截空白区域点击，不透传给 WebView
+                            .background(Color.Black.copy(alpha = 0.12f))
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
                                 onClick = { },
                             ),
-                        contentAlignment = Alignment.Center,
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(20.dp),
+                        // 所有控制按钮 - 顶部一排，完全不挡中间高亮区
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(24.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // 暂停/继续大按钮
-                            FilledIconButton(
-                                onClick = { viewModel.togglePlayPause() },
-                                modifier = Modifier.size(72.dp),
-                                shape = RoundedCornerShape(36.dp),
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = Color.White.copy(alpha = 0.95f),
-                                    contentColor = Color.Black,
-                                ),
-                            ) {
-                                Icon(
-                                    if (state.isTtsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    modifier = Modifier.size(40.dp),
-                                    contentDescription = if (state.isTtsPlaying) "暂停" else "继续",
-                                )
-                            }
-
-                            // 长按解锁区域
+                            // 长按解锁
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(20.dp))
-                                    .background(Color.White.copy(alpha = 0.18f))
+                                    .background(Color.White.copy(alpha = 0.25f))
                                     .pointerInput(Unit) {
                                         awaitPointerEventScope {
                                             while (true) {
@@ -557,33 +541,48 @@ fun ReaderScreen(
                                             }
                                         }
                                     }
-                                    .padding(horizontal = 28.dp, vertical = 14.dp),
+                                    .padding(horizontal = 20.dp, vertical = 10.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            if (unlockReady) Icons.Default.LockOpen else Icons.Default.Lock,
-                                            contentDescription = "长按解锁",
-                                            tint = if (unlockReady) Color(0xFF4CAF50) else Color.White,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(
-                                            if (unlockReady) "已解锁" else "长按解锁",
-                                            color = Color.White,
-                                            fontSize = 13.sp,
-                                        )
-                                    }
-                                    // 按压进度条
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        if (unlockReady) Icons.Default.LockOpen else Icons.Default.Lock,
+                                        contentDescription = "长按解锁",
+                                        tint = if (unlockReady) Color(0xFF4CAF50) else Color.White,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        if (unlockReady) "已解锁" else "长按解锁",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                    )
                                     if (unlockHeld && !unlockReady) {
+                                        Spacer(Modifier.width(6.dp))
                                         LinearProgressIndicator(
-                                            modifier = Modifier.width(100.dp).padding(top = 6.dp).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                            modifier = Modifier.width(60.dp).height(3.dp).clip(RoundedCornerShape(2.dp)),
                                             color = Color.White,
                                             trackColor = Color.White.copy(alpha = 0.25f),
                                         )
                                     }
                                 }
+                            }
+
+                            // 暂停/继续
+                            FilledIconButton(
+                                onClick = { viewModel.togglePlayPause() },
+                                modifier = Modifier.size(56.dp),
+                                shape = RoundedCornerShape(28.dp),
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = Color.White.copy(alpha = 0.95f),
+                                    contentColor = Color.Black,
+                                ),
+                            ) {
+                                Icon(
+                                    if (state.isTtsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    modifier = Modifier.size(32.dp),
+                                    contentDescription = if (state.isTtsPlaying) "暂停" else "继续",
+                                )
                             }
                         }
                     }
