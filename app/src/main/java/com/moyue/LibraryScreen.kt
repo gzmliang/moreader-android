@@ -59,7 +59,7 @@ fun LibraryScreen(
     val books by viewModel.books.collectAsStateWithLifecycle()
     val mergedItems by viewModel.mergedItems.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
-    var isSearchActive by remember { mutableStateOf(false) }
+    val isSearchActive by viewModel.isSearchActive.collectAsStateWithLifecycle()
     // Upload progress state
     val isUploading by viewModel.isUploading.collectAsStateWithLifecycle()
     val uploadProgress by viewModel.uploadProgress.collectAsStateWithLifecycle()
@@ -73,6 +73,13 @@ fun LibraryScreen(
                 viewModel.importBook(context, uri)
             }
             onSharedUrisConsumed()
+        }
+    }
+
+    // 回到书架时，如果 searchQuery 非空则自动激活搜索框
+    LaunchedEffect(Unit) {
+        if (searchQuery.isNotBlank() && !isSearchActive) {
+            viewModel.setSearchActive(true)
         }
     }
 
@@ -114,8 +121,7 @@ fun LibraryScreen(
                 navigationIcon = {
                     if (isSearchActive) {
                         IconButton(onClick = {
-                            isSearchActive = false
-                            viewModel.setSearchQuery("")
+                            viewModel.setSearchActive(false)
                         }) {
                             Icon(Icons.Default.Close, contentDescription = null)
                         }
@@ -127,7 +133,7 @@ fun LibraryScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (!isSearchActive) {
-                            IconButton(onClick = { isSearchActive = true }, modifier = Modifier.size(32.dp)) {
+                            IconButton(onClick = { viewModel.setSearchActive(true) }, modifier = Modifier.size(32.dp)) {
                                 Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
                             }
                         }
@@ -361,14 +367,26 @@ fun LibraryScreen(
                 }
             }
         } else {
-            LazyVerticalGrid(
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+            ) {
+                // 搜索结果显示提示
+                if (searchQuery.isNotBlank()) {
+                    Text(
+                        "搜索 \"$searchQuery\" · 找到 ${mergedItems.size} 本",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
+                    )
+                }
+                LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
                 contentPadding = PaddingValues(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                modifier = Modifier.fillMaxSize(),
             ) {
                 items(mergedItems, key = {
                     it.localBook?.id ?: "cloud_${it.cloudInfo?.id}"
@@ -400,6 +418,7 @@ fun LibraryScreen(
         }
     }
 }
+        }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

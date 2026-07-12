@@ -37,6 +37,10 @@ class LibraryViewModel(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
 
+    /** 搜索激活状态 — 持久化到 ViewModel，避免导航回来丢失 */
+    private val _isSearchActive = MutableStateFlow(false)
+    val isSearchActive: StateFlow<Boolean> = _isSearchActive
+
     val books: StateFlow<List<Book>> = repository.getAllBooks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -88,6 +92,14 @@ class LibraryViewModel(
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
+        _isSearchActive.value = true
+    }
+
+    fun setSearchActive(active: Boolean) {
+        _isSearchActive.value = active
+        if (!active) {
+            _searchQuery.value = ""
+        }
     }
 
     fun importBook(context: Context, uri: Uri) {

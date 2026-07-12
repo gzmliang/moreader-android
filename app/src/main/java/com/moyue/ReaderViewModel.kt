@@ -72,6 +72,7 @@ data class ReaderUiState(
     val ttsHighlightOffset: Int = 0,  // 高亮偏移量（负 = 高亮提前，正 = 高亮延迟），默认0
     val ttsSentenceIdx: Int = -1,       // 当前句子高亮索引
     val ttsSentenceCount: Int = 0,      // 当前段落总句子数
+    val ttsSentenceEnds: String = "",    // 句子边界偏移数组（逗号分隔，传给JS用）
     val ttsDebugLog: String = "",
     val showTtsDebugLog: Boolean = false,
     // Fullscreen mode
@@ -1019,10 +1020,10 @@ class ReaderViewModel(
                         sentenceEnds[si] = pos + rawSentences[si].length
                         searchPos = sentenceEnds[si]
                     }
-                    _uiState.update { it.copy(ttsSentenceCount = sentenceEnds.size, ttsSentenceIdx = 0) }
+                    _uiState.update { it.copy(ttsSentenceCount = sentenceEnds.size, ttsSentenceIdx = 0, ttsSentenceEnds = sentenceEnds.joinToString(",")) }
                     log("[SENT] P${idx + 1} → ${sentenceEnds.size} sentences")
                 } else {
-                    _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1) }
+                    _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1, ttsSentenceEnds = "") }
                 }
                 // 3. 词边界驱动 (Edge TTS — 最精确)
                 val wb = pendingBoundaries
@@ -1073,7 +1074,7 @@ class ReaderViewModel(
             }
             override fun onError(msg: String) {
                 estJob?.cancel()
-                _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1) }
+                _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1, ttsSentenceEnds = "") }
                 log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg))
                 consecutiveErrors++
                 if (consecutiveErrors >= 3) {
@@ -1166,10 +1167,10 @@ class ReaderViewModel(
                             sentenceEnds[si] = pos + rawSentences[si].length
                             searchPos = sentenceEnds[si]
                         }
-                        _uiState.update { it.copy(ttsSentenceCount = sentenceEnds.size, ttsSentenceIdx = 0) }
+                        _uiState.update { it.copy(ttsSentenceCount = sentenceEnds.size, ttsSentenceIdx = 0, ttsSentenceEnds = sentenceEnds.joinToString(",")) }
                         log("[SENT] P${paraIdx + 1} -> ${sentenceEnds.size} sentences (full)")
                     } else {
-                        _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1) }
+                        _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1, ttsSentenceEnds = "") }
                     }
                 }
                 // 词边界驱动（用 charOffset 映射回原文位置）
@@ -1245,7 +1246,7 @@ class ReaderViewModel(
             }
             override fun onError(msg: String) {
                 estJob?.cancel()
-                _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1) }
+                _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1, ttsSentenceEnds = "") }
                 log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, paraIdx, msg))
                 consecutiveErrors++
                 if (consecutiveErrors >= 3) {

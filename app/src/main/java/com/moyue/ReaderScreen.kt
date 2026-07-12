@@ -475,6 +475,7 @@ fun ReaderScreen(
                     onScrollToParagraph = { idx -> viewModel.setCurrentParagraph(idx) },
                     ttsHighlightIndex = ttsHighlightIdx,
                     ttsSentenceIdx = state.ttsSentenceIdx,
+                    ttsSentenceEnds = state.ttsSentenceEnds,
                     scrollToParagraph = if (state.scrollToParagraph >= 0) state.scrollToParagraph else null,
                     scrollToAnchor = state.scrollToAnchor,
                     onAnchorScrolled = { viewModel.clearScrollToParagraph() },

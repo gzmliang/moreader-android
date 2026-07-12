@@ -49,6 +49,7 @@ fun EpubWebView(
     onScrollToParagraph: ((Int) -> Unit)? = null,
     ttsHighlightIndex: Int = -1,
     ttsSentenceIdx: Int = -1,
+    ttsSentenceEnds: String = "",
     scrollToParagraph: Int? = null,
     scrollToAnchor: String? = null,
     onAnchorScrolled: (() -> Unit)? = null,
@@ -71,7 +72,7 @@ fun EpubWebView(
     // (was two separate effects — async evaluateJavascript order was undefined,
     //  causing initAndHighlight to run before ttsHL added .tts-hl class)
     var prevHighlightIdx by remember { mutableStateOf(ttsHighlightIndex) }
-    LaunchedEffect(ttsHighlightIndex, ttsSentenceIdx) {
+    LaunchedEffect(ttsHighlightIndex, ttsSentenceIdx, ttsSentenceEnds) {
         val paraChanged = ttsHighlightIndex != prevHighlightIdx
         prevHighlightIdx = ttsHighlightIndex
         webView?.let { wv ->
@@ -81,8 +82,10 @@ fun EpubWebView(
                     wv.evaluateJavascript("window.ttsClear();window.ttsSentenceClear()", null)
                 }
                 ttsSentenceIdx == 0 || paraChanged -> {
-                    android.util.Log.d("EpubWV", "[TIME] ⏱ initHL($ttsHighlightIndex,0) paraChanged=$paraChanged @${System.currentTimeMillis()}")
-                    wv.evaluateJavascript("window.initAndHighlight($ttsHighlightIndex,0)", null)
+                    // 把 Kotlin 算好的句子边界传给 JS，避免 JS 自己切分产生偏移不一致
+                    val endsJson = if (ttsSentenceEnds.isNotBlank()) "[$ttsSentenceEnds]" else "[]"
+                    android.util.Log.d("EpubWV", "[TIME] ⏱ initHL($ttsHighlightIndex,0,$endsJson) paraChanged=$paraChanged @${System.currentTimeMillis()}")
+                    wv.evaluateJavascript("window.initAndHighlight($ttsHighlightIndex,0,$endsJson)", null)
                 }
                 ttsSentenceIdx > 0 -> {
                     android.util.Log.d("EpubWV", "[TIME] ⏱ ttsHLSentence($ttsSentenceIdx) @${System.currentTimeMillis()}")
@@ -331,8 +334,9 @@ fun EpubWebView(
                                 // Sentence-level highlight
                                 window.ttsSentences=[];
                                 window._ttsSentencePara=null;
-                                window.initAndHighlight=function(paraIdx,sentenceIdx){
-                                    console.log('[initHL] para='+paraIdx+' sent='+sentenceIdx);
+                                window.ttsSentEnds=[];  // 从 Kotlin 传入的句子边界
+                                window.initAndHighlight=function(paraIdx,sentenceIdx,sentEnds){
+                                    console.log('[initHL] para='+paraIdx+' sent='+sentenceIdx+' ends='+JSON.stringify(sentEnds));
                                     MoreaderBridge.jsLog('[JS] initAndHighlight('+paraIdx+','+sentenceIdx+')');
                                     document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
@@ -340,39 +344,20 @@ fun EpubWebView(
                                     var el=all[paraIdx];
                                     el.classList.add('tts-hl');
                                     el.scrollIntoView({behavior:'smooth',block:'center'});
-                                    window.ttsSentences=[];
                                     window._ttsSentencePara=el;
-                                    var text=el.textContent;
-                                    // 与 Kotlin SENTENCE_REGEX 保持一致：在 (.!?。！？；;) 之后拆分，包括末尾无标点的残留文本
-                                    var matches=[];
-                                    var splitPos=0;
-                                    var re=/[.!?。！？；;]/g;
-                                    var m;
-                                    while((m=re.exec(text))!==null){
-                                        var end=m.index+1;
-                                        matches.push(text.substring(splitPos,end));
-                                        splitPos=end;
-                                        // 跳过标点后的空格
-                                        while(splitPos<text.length&&text.charAt(splitPos)===' ')splitPos++;
-                                        // 跳过闭合引号（避免 ." 或 !' 把引号当成独立句子）
-                                        while(splitPos<text.length&&/["'\u00BB\u00AB\u201C\u201D\u2018\u2019\u300C\u300D\u300E\u300F]/.test(text.charAt(splitPos)))splitPos++;
+                                    // 使用 Kotlin 传来的句子边界
+                                    window.ttsSentEnds=sentEnds||[];
+                                    MoreaderBridge.jsLog('[JS] sentEnds from Kotlin: '+JSON.stringify(window.ttsSentEnds));
+                                    // 重建 ttsSentences 供兼容使用
+                                    window.ttsSentences=[];
+                                    var prev=0;
+                                    for(var i=0;i<window.ttsSentEnds.length;i++){
+                                        var e=window.ttsSentEnds[i];
+                                        window.ttsSentences.push({start:prev,end:e});
+                                        prev=e;
                                     }
-                                    // 兜住末尾没有标点的残留文本
-                                    if(splitPos<text.length)matches.push(text.substring(splitPos));
-                                    if(matches.length===0)matches=[text];
-                                    MoreaderBridge.jsLog('[JS] sentSplit: newMatches='+matches.length+' textLen='+text.length);
-                                    var pos=0;
-                                    for(var i=0;i<matches.length;i++){
-                                        var s=matches[i];
-                                        window.ttsSentences.push({start:pos,end:pos+s.length});
-                                        pos+=s.length;
-                                        if(pos<text.length&&text.charAt(pos)===' ')pos++;
-                                    }
-                                    if(window.ttsSentences.length===0){
-                                        window.ttsSentences.push({start:0,end:text.length});
-                                    }
+                                    MoreaderBridge.jsLog('[JS] ttsSentences rebuilt: '+window.ttsSentences.length+' sentences');
                                     if(sentenceIdx>=0&&sentenceIdx<window.ttsSentences.length){
-                                        // 清除上一段残留的绿色高亮，再设新句子的
                                         window.ttsSentenceClear();
                                         window._ttsHLSentence(sentenceIdx);
                                     }
