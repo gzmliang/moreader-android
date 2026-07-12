@@ -196,6 +196,23 @@ class ReaderViewModel(
     private var estJob: kotlinx.coroutines.Job? = null  // 句子跟踪协程
     private val SENTENCE_REGEX = Regex("(?<=[.!?。！？；;])\\s*['\"\\u00BB\\u00AB\\u201C\\u201D\\u2018\\u2019\\u300C\\u300D\\u300E\\u300F]*")
 
+    // ======== 长段落子段拆分 ========
+    // 长段落（>200字）按句号切成 2-3 个子段，每段 150-250 字，保留足够上下文
+    private val LONG_PARAGRAPH_THRESHOLD = 200  // 超过此字数才拆分
+    private val SUBSEGMENT_TARGET = 180         // 每个子段目标字数
+    private val SUBSEGMENT_MIN = 80             // 子段最小字数（太短合并到上一段）
+    // 子段缓存: "paraIdx:subIdx" -> (audio, boundaries, charOffset)
+    private data class SubSegCache(
+        val audio: ByteArray,
+        val boundaries: List<com.moyue.app.tts.WordBoundary>,
+        val charOffset: Int,
+    )
+    private val subSegCache = mutableMapOf<String, SubSegCache>()
+    // 当前播放的子段状态
+    private var currentSubSegParaIdx = -1
+    private var currentSubSegs: List<String> = emptyList()
+    private var currentSubSegOffsets: List<Int> = emptyList()
+
     private fun log(msg: String) {
         Log.d(TAG, msg)
         // Also pull SystemTTSProvider's debug log
@@ -779,7 +796,110 @@ class ReaderViewModel(
     /** Get current provider without re-creating */
     private fun getProvider(): TTSProvider? = currentTTSProvider
 
-    /** Preload paragraphs [startIdx, endIdx) into audioCache */
+    /**
+     * 将长段落按句号切成 2-3 个子段，每段 150-250 字。
+     * 切分点选在目标字数附近最近的句号处，保留足够上下文。
+     * 返回 (子段文本列表, 每个子段在原文中的起始字符偏移列表)。
+     */
+    private fun splitLongParagraph(text: String): Pair<List<String>, List<Int>> {
+        // 找所有句末标点位置（句号、问号、感叹号、分号）
+        val breakChars = setOf('.', '!', '?', '。', '！', '？', '；', ';')
+        val breakPoints = mutableListOf<Int>()  // 标点在 text 中的索引+1（切分点在该标点之后）
+        for (i in text.indices) {
+            if (text[i] in breakChars) {
+                breakPoints.add(i + 1)
+            }
+        }
+        if (breakPoints.isEmpty()) {
+            // 无标点，按目标字数硬切
+            return chunkBySize(text, SUBSEGMENT_TARGET)
+        }
+
+        val segments = mutableListOf<String>()
+        val offsets = mutableListOf<Int>()
+        var startPos = 0
+
+        while (startPos < text.length) {
+            val remaining = text.length - startPos
+            if (remaining <= SUBSEGMENT_MIN * 2) {
+                // 剩余不够分两段，全部归入当前段
+                if (remaining > 0) {
+                    segments.add(text.substring(startPos))
+                    offsets.add(startPos)
+                }
+                break
+            }
+
+            val targetEnd = startPos + SUBSEGMENT_TARGET
+            // 在 [startPos + SUBSEGMENT_MIN, startPos + remaining] 范围内找最接近 targetEnd 的切分点
+            var bestBreak = -1
+            for (bp in breakPoints) {
+                if (bp <= startPos + SUBSEGMENT_MIN) continue
+                if (bp >= startPos + remaining) break
+                if (bestBreak == -1 || kotlin.math.abs(bp - targetEnd) < kotlin.math.abs(bestBreak - targetEnd)) {
+                    bestBreak = bp
+                }
+                // 找到第一个超过 targetEnd 的就可以停了（后面的只会更远）
+                if (bp >= targetEnd) break
+            }
+
+            if (bestBreak == -1) {
+                // 没找到合适的切分点，剩余全部归入当前段
+                segments.add(text.substring(startPos))
+                offsets.add(startPos)
+                break
+            }
+
+            segments.add(text.substring(startPos, bestBreak))
+            offsets.add(startPos)
+            startPos = bestBreak
+        }
+
+        // 合并过短的末段
+        if (segments.size >= 2 && segments.last().length < SUBSEGMENT_MIN) {
+            val last = segments.removeAt(segments.lastIndex)
+            val lastOffset = offsets.removeAt(offsets.lastIndex)
+            segments[segments.lastIndex] = segments.last() + last
+            // offset 不变，合并后 charOffset 仍是上段的
+        }
+
+        log("[SUBSEG] ${text.length}字 -> ${segments.size}段: ${segments.map { "${it.length}字" }}")
+        return Pair(segments, offsets)
+    }
+
+    /** 按固定大小切分文本（无标点时的兜底方案） */
+    private fun chunkBySize(text: String, size: Int): Pair<List<String>, List<Int>> {
+        val segments = mutableListOf<String>()
+        val offsets = mutableListOf<Int>()
+        var pos = 0
+        while (pos < text.length) {
+            val end = minOf(pos + size, text.length)
+            segments.add(text.substring(pos, end))
+            offsets.add(pos)
+            pos = end
+        }
+        return Pair(segments, offsets)
+    }
+
+    /** Preload a single sub-segment of a long paragraph (for Edge TTS). */
+    private suspend fun preloadSubSegment(paraIdx: Int, subIdx: Int, text: String, charOffset: Int, ttsSpeed: Float): Boolean {
+        val key = "$paraIdx:$subIdx"
+        if (subSegCache.containsKey(key)) return true
+        val p = getProvider() ?: return false
+        val result = when (p) {
+            is EdgeTTSProvider -> p.fetchAudio(text, ttsSpeed)
+            is AIVoiceTTSProvider -> p.fetchAudio(text, ttsSpeed)?.let { PreloadResult(it) }
+            is CustomTTSProvider -> p.fetchAudio(text, ttsSpeed)?.let { PreloadResult(it) }
+            else -> null
+        }
+        if (result != null && result.audio.isNotEmpty()) {
+            subSegCache[key] = SubSegCache(result.audio, result.boundaries, charOffset)
+            return true
+        }
+        return false
+    }
+
+    /** Preload paragraphs [startIdx, endIdx) into audioCache or subSegCache */
     private fun preloadRange(startIdx: Int, endIdx: Int) {
         val s = _uiState.value
         val paragraphs = s.ttsParagraphs
@@ -789,17 +909,27 @@ class ReaderViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             for (i in startIdx until actualEnd) {
                 if (!playChainActive) break
-                if (audioCache.containsKey(i)) continue
                 val text = paragraphs[i]; if (text.length < 2) { audioCache[i] = ByteArray(0); continue }
-                val result = when (val p = getProvider()) {
-                    is EdgeTTSProvider -> p.fetchAudio(text, ttsSpeed)
-                    is AIVoiceTTSProvider -> p.fetchAudio(text, ttsSpeed)?.let { PreloadResult(it) }
-                    is CustomTTSProvider -> p.fetchAudio(text, ttsSpeed)?.let { PreloadResult(it) }
-                    else -> null
-                }
-                if (result != null && result.audio.isNotEmpty()) {
-                    audioCache[i] = result.audio
-                    if (result.boundaries.isNotEmpty()) boundariesCache[i] = result.boundaries
+                if (text.length > LONG_PARAGRAPH_THRESHOLD) {
+                    // 长段落：预加载所有子段
+                    val (segs, offsets) = splitLongParagraph(text)
+                    for (si in segs.indices) {
+                        if (!playChainActive) break
+                        preloadSubSegment(i, si, segs[si], offsets[si], ttsSpeed)
+                    }
+                } else {
+                    // 短段落：整段预加载
+                    if (audioCache.containsKey(i)) continue
+                    val result = when (val p = getProvider()) {
+                        is EdgeTTSProvider -> p.fetchAudio(text, ttsSpeed)
+                        is AIVoiceTTSProvider -> p.fetchAudio(text, ttsSpeed)?.let { PreloadResult(it) }
+                        is CustomTTSProvider -> p.fetchAudio(text, ttsSpeed)?.let { PreloadResult(it) }
+                        else -> null
+                    }
+                    if (result != null && result.audio.isNotEmpty()) {
+                        audioCache[i] = result.audio
+                        if (result.boundaries.isNotEmpty()) boundariesCache[i] = result.boundaries
+                    }
                 }
             }
         }
@@ -819,7 +949,7 @@ class ReaderViewModel(
             // End of chapter reached — auto-advance to next chapter if available
             if (s.currentChapterIndex < s.chapters.size - 1) {
                 log("[TTS] 📖 ${getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_tts_chapter_complete)}")
-                audioCache.clear()
+                audioCache.clear(); boundariesCache.clear(); subSegCache.clear()
                 _uiState.update { it.copy(
                     currentChapterIndex = it.currentChapterIndex + 1,
                     isLoading = true, ttsParagraphs = emptyList(), ttsCurrentIdx = -1
@@ -845,8 +975,21 @@ class ReaderViewModel(
         // Note: highlight update moved to listener.onStart() to sync with actual audio playback
 
         val text = paragraphs[idx]
-        // Skip blank paragraphs entirely — prevents infinite error loops
+        // Skip blank paragraphs entirely - prevents infinite error loops
         if (text.isBlank()) { playOne(idx + 1); return }
+
+        // ── 长段落子段拆分（非 System TTS）──
+        // 长段落切成 2-3 个子段逐段合成，减少等待时间，保留上下文质量
+        if (text.length > LONG_PARAGRAPH_THRESHOLD && s.ttsProvider != TTSProviderType.SYSTEM) {
+            val (segs, offsets) = splitLongParagraph(text)
+            currentSubSegParaIdx = idx
+            currentSubSegs = segs
+            currentSubSegOffsets = offsets
+            log("[SUBSEG] P${idx + 1} 长段落 ${text.length}字 -> ${segs.size}子段播放")
+            playSubSegment(idx, 0, highlightIdx)
+            return
+        }
+
         val speed = s.ttsSpeed
         val cached = audioCache.remove(idx)
 
@@ -971,6 +1114,231 @@ class ReaderViewModel(
         }
     }
 
+    /**
+     * 播放长段落的一个子段。子段文本来自 currentSubSegs，charOffset 来自 currentSubSegOffsets。
+     * 仍使用整段的 sentenceEnds 做高亮，通过 charOffset 把子段的词边界映射回原文位置。
+     */
+    private fun playSubSegment(paraIdx: Int, subIdx: Int, highlightIdx: Int) {
+        if (!playChainActive) return
+        if (paraIdx != currentSubSegParaIdx || subIdx >= currentSubSegs.size) {
+            // 子段状态失效，回退到整段播放
+            playOne(paraIdx + 1)
+            return
+        }
+
+        val fullText = _uiState.value.ttsParagraphs[paraIdx]
+        val subText = currentSubSegs[subIdx]
+        val charOffset = currentSubSegOffsets[subIdx]
+        if (subText.isBlank()) {
+            advanceSubSegment(paraIdx, subIdx, highlightIdx)
+            return
+        }
+
+        val s = _uiState.value
+        val speed = s.ttsSpeed
+        val cacheKey = "$paraIdx:$subIdx"
+        val cached = subSegCache.remove(cacheKey)
+        log("[SUBSEG] P${paraIdx + 1} sub${subIdx + 1}/${currentSubSegs.size} (${subText.length}字, offset=$charOffset) ${if (cached != null) "cached" else "fetch"}")
+
+        val listener = object : TTSListener {
+            private var rangesReceived = false
+            private var detectJob: kotlinx.coroutines.Job? = null
+            private var paraStartMs = 0L
+
+            override fun onStart() {
+                paraStartMs = System.currentTimeMillis()
+                log("[TIME] ⏱ P${paraIdx + 1} sub${subIdx + 1} START @${paraStartMs}ms")
+                rangesReceived = false
+                detectJob?.cancel(); detectJob = null
+                // 段落高亮
+                _uiState.update { it.copy(ttsCurrentIdx = highlightIdx, ttsPlayIdx = paraIdx) }
+                // 拆分句子（仅第一个子段需要设置 sentenceEnds；后续子段追加）
+                if (subIdx == 0) {
+                    val rawSentences = fullText.split(SENTENCE_REGEX).filter { it.isNotBlank() }
+                    sentenceEnds = IntArray(rawSentences.size)
+                    if (rawSentences.isNotEmpty()) {
+                        var searchPos = 0
+                        for (si in rawSentences.indices) {
+                            val pos = fullText.indexOf(rawSentences[si], searchPos)
+                            if (pos < 0) { sentenceEnds[si] = searchPos; continue }
+                            sentenceEnds[si] = pos + rawSentences[si].length
+                            searchPos = sentenceEnds[si]
+                        }
+                        _uiState.update { it.copy(ttsSentenceCount = sentenceEnds.size, ttsSentenceIdx = 0) }
+                        log("[SENT] P${paraIdx + 1} -> ${sentenceEnds.size} sentences (full)")
+                    } else {
+                        _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1) }
+                    }
+                }
+                // 词边界驱动（用 charOffset 映射回原文位置）
+                val wb = pendingBoundaries
+                if (wb != null && wb.isNotEmpty() && sentenceEnds.size > 1) {
+                    // 子段词边界 -> 映射到原文位置
+                    val mappedWb = wb.map { com.moyue.app.tts.WordBoundary(it.offsetMs, it.text, it.charStart + charOffset, it.charEnd + charOffset) }
+                    // 只追踪当前子段覆盖范围内的句子（从 charOffset 到 charOffset + subText.length）
+                    val subEnd = charOffset + subText.length
+                    startSubSegmentWordBoundaryTracking(mappedWb, fullText, paraIdx, charOffset, subEnd, subIdx)
+                }
+                pendingBoundaries = null
+                // 估算兜底
+                if (sentenceEnds.size > 1 && wb == null) {
+                    detectJob = viewModelScope.launch {
+                        delay(2500L)
+                        if (!rangesReceived && playChainActive) {
+                            log("[SENT:est] P${paraIdx + 1} sub${subIdx + 1} - fallback estimation")
+                            startSubSegmentEstimation(fullText, paraIdx, charOffset, subText.length)
+                        }
+                    }
+                }
+            }
+            override fun onWordBoundaries(boundaries: List<com.moyue.app.tts.WordBoundary>) {
+                pendingBoundaries = boundaries
+            }
+            override fun onRange(start: Int, end: Int) {
+                if (!rangesReceived) {
+                    rangesReceived = true
+                    detectJob?.cancel()
+                    estJob?.cancel()
+                    estJob = null
+                }
+                if (sentenceEnds.isEmpty()) return
+                // start/end 是相对于子段的偏移，需要加上 charOffset 映射到原文
+                val mappedStart = start + charOffset
+                var sentIdx = 0
+                while (sentIdx < sentenceEnds.size - 1 && sentenceEnds[sentIdx] <= mappedStart) sentIdx++
+                if (sentIdx != _uiState.value.ttsSentenceIdx) {
+                    _uiState.update { it.copy(ttsSentenceIdx = sentIdx) }
+                    log("[SENT] P${paraIdx + 1} sub${subIdx + 1} #$sentIdx/${sentenceEnds.size} @$mappedStart")
+                }
+            }
+            override fun onDone() {
+                val now = System.currentTimeMillis()
+                val elapsed = now - paraStartMs
+                log("[TIME] ⏱ P${paraIdx + 1} sub${subIdx + 1} DONE @${now}ms (+${elapsed}ms)")
+                estJob?.cancel()
+                consecutiveErrors = 0
+                advanceSubSegment(paraIdx, subIdx, highlightIdx)
+            }
+            override fun onError(msg: String) {
+                estJob?.cancel()
+                _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1) }
+                log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, paraIdx, msg))
+                consecutiveErrors++
+                if (consecutiveErrors >= 3) {
+                    log("[TTS] ⛔ ${getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_stop)}")
+                    killPlayChain()
+                    _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }
+                } else {
+                    advanceSubSegment(paraIdx, subIdx, highlightIdx)
+                }
+            }
+        }
+
+        if (cached != null) {
+            // 注入缓存的词边界
+            if (cached.boundaries.isNotEmpty()) {
+                listener.onWordBoundaries(cached.boundaries)
+            }
+            when (val p = getProvider()) {
+                is EdgeTTSProvider -> p.playRaw(cached.audio, listener)
+                is AIVoiceTTSProvider -> p.playRaw(cached.audio, listener)
+                is CustomTTSProvider -> p.playRaw(cached.audio, listener)
+            }
+        } else {
+            val p = recreateProvider()
+            if (p == null) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }; return }
+            p.speak(subText, speed, listener)
+        }
+
+        // 预取下一个子段（同段落）
+        if (subIdx + 1 < currentSubSegs.size) {
+            viewModelScope.launch(Dispatchers.IO) {
+                if (playChainActive) {
+                    preloadSubSegment(paraIdx, subIdx + 1, currentSubSegs[subIdx + 1], currentSubSegOffsets[subIdx + 1], speed)
+                }
+            }
+        } else {
+            // 最后一个子段，预取下一段落
+            if (s.ttsProvider != TTSProviderType.SYSTEM) {
+                preloadRange(paraIdx + 1, paraIdx + 6)
+            }
+        }
+    }
+
+    /** 子段播完后，播放下一个子段或下一段落 */
+    private fun advanceSubSegment(paraIdx: Int, subIdx: Int, highlightIdx: Int) {
+        if (subIdx + 1 < currentSubSegs.size) {
+            playSubSegment(paraIdx, subIdx + 1, highlightIdx)
+        } else {
+            // 清理子段状态，播放下一段落
+            currentSubSegParaIdx = -1
+            currentSubSegs = emptyList()
+            currentSubSegOffsets = emptyList()
+            playOne(paraIdx + 1)
+        }
+    }
+
+    /** 子段级词边界追踪 - 只追踪当前子段范围内的句子 */
+    private fun startSubSegmentWordBoundaryTracking(
+        boundaries: List<com.moyue.app.tts.WordBoundary>,
+        text: String, paraIdx: Int, subStart: Int, subEnd: Int, subIdx: Int
+    ) {
+        estJob?.cancel()
+        estJob = viewModelScope.launch {
+            var prevMs = 0L
+            val spd = _uiState.value.ttsSpeed
+            val hasChinese = text.any { it in '\u4e00'..'\u9fff' }
+            val charsPerSec = if (hasChinese) (6f * spd).coerceAtLeast(4f) else (15f * spd).coerceAtLeast(8f)
+            log("[SENT:wb] P${paraIdx + 1} sub${subIdx + 1} - ${boundaries.size} words, range=[$subStart..$subEnd]")
+            for (sentIdx in 1 until sentenceEnds.size) {
+                val sentStart = sentenceEnds[sentIdx - 1]
+                val sentEnd = sentenceEnds[sentIdx]
+                // 跳过不在当前子段范围内的句子
+                if (sentEnd <= subStart) continue
+                if (sentStart >= subEnd) break
+                val sentChars = sentEnd - sentStart
+                val firstWord = boundaries.find { it.charStart >= sentStart }
+                if (firstWord == null) {
+                    val waitMs = (sentChars.toFloat() / charsPerSec * 1000f).toLong().coerceAtLeast(80L)
+                    delay(waitMs)
+                    if (!playChainActive) break
+                    _uiState.update { it.copy(ttsSentenceIdx = sentIdx) }
+                    continue
+                }
+                val targetMs = firstWord.offsetMs.toLong()
+                val waitMs = (targetMs - prevMs).coerceAtLeast(50)
+                delay(waitMs)
+                if (!playChainActive) break
+                _uiState.update { it.copy(ttsSentenceIdx = sentIdx) }
+                log("[SENT:wb] P${paraIdx + 1} sub${subIdx + 1} #$sentIdx/${sentenceEnds.size} @${targetMs}ms")
+                prevMs = targetMs
+            }
+        }
+    }
+
+    /** 子段级估算降级 */
+    private fun startSubSegmentEstimation(text: String, paraIdx: Int, subStart: Int, subLen: Int) {
+        val spd = _uiState.value.ttsSpeed
+        val hasChinese = text.any { it in '\u4e00'..'\u9fff' }
+        val charsPerSec = if (hasChinese) (6f * spd).coerceAtLeast(4f) else (15f * spd).coerceAtLeast(8f)
+        val subEnd = subStart + subLen
+        estJob?.cancel()
+        estJob = viewModelScope.launch {
+            for (sentIdx in 1 until sentenceEnds.size) {
+                val sentStart = sentenceEnds[sentIdx - 1]
+                val sentEnd = sentenceEnds[sentIdx]
+                if (sentEnd <= subStart) continue
+                if (sentStart >= subEnd) break
+                val sentChars = sentEnd - sentStart
+                val waitMs = (sentChars.toFloat() / charsPerSec * 1000f).toLong().coerceAtLeast(80L)
+                delay(waitMs)
+                if (!playChainActive) break
+                _uiState.update { it.copy(ttsSentenceIdx = sentIdx) }
+                log("[SENT:est] P${paraIdx + 1} sub #$sentIdx/${sentenceEnds.size} ($sentChars chars, ${waitMs}ms)")
+            }
+        }
+    }
+
     fun readChapter() {
         log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_full_read))
         playChainActive = true
@@ -995,16 +1363,24 @@ class ReaderViewModel(
             viewModelScope.launch(Dispatchers.IO) {
                 val p = getProvider() ?: return@launch
                 val spd = _uiState.value.ttsSpeed
-                when (p) {
-                    is EdgeTTSProvider -> {
-                        val result = p.fetchAudio(firstText, spd)
-                        if (result != null) {
-                            audioCache[0] = result.audio
-                            if (result.boundaries.isNotEmpty()) boundariesCache[0] = result.boundaries
-                        }
+                if (firstText.length > LONG_PARAGRAPH_THRESHOLD && p is EdgeTTSProvider) {
+                    // 长段落：预加载第一个子段（首段秒播的关键）
+                    val (segs, offsets) = splitLongParagraph(firstText)
+                    if (segs.isNotEmpty()) {
+                        preloadSubSegment(0, 0, segs[0], offsets[0], spd)
                     }
-                    is AIVoiceTTSProvider -> p.fetchAudio(firstText, spd)?.let { audioCache[0] = it }
-                    is CustomTTSProvider -> p.fetchAudio(firstText, spd)?.let { audioCache[0] = it }
+                } else {
+                    when (p) {
+                        is EdgeTTSProvider -> {
+                            val result = p.fetchAudio(firstText, spd)
+                            if (result != null) {
+                                audioCache[0] = result.audio
+                                if (result.boundaries.isNotEmpty()) boundariesCache[0] = result.boundaries
+                            }
+                        }
+                        is AIVoiceTTSProvider -> p.fetchAudio(firstText, spd)?.let { audioCache[0] = it }
+                        is CustomTTSProvider -> p.fetchAudio(firstText, spd)?.let { audioCache[0] = it }
+                    }
                 }
             }
         }
@@ -1043,16 +1419,24 @@ class ReaderViewModel(
             viewModelScope.launch(Dispatchers.IO) {
                 val p = getProvider() ?: return@launch
                 val spd = _uiState.value.ttsSpeed
-                when (p) {
-                    is EdgeTTSProvider -> {
-                        val result = p.fetchAudio(firstText, spd)
-                        if (result != null) {
-                            audioCache[index] = result.audio
-                            if (result.boundaries.isNotEmpty()) boundariesCache[index] = result.boundaries
-                        }
+                if (firstText.length > LONG_PARAGRAPH_THRESHOLD && p is EdgeTTSProvider) {
+                    // 长段落：预加载第一个子段（首段秒播的关键）
+                    val (segs, offsets) = splitLongParagraph(firstText)
+                    if (segs.isNotEmpty()) {
+                        preloadSubSegment(index, 0, segs[0], offsets[0], spd)
                     }
-                    is AIVoiceTTSProvider -> p.fetchAudio(firstText, spd)?.let { audioCache[index] = it }
-                    is CustomTTSProvider -> p.fetchAudio(firstText, spd)?.let { audioCache[index] = it }
+                } else {
+                    when (p) {
+                        is EdgeTTSProvider -> {
+                            val result = p.fetchAudio(firstText, spd)
+                            if (result != null) {
+                                audioCache[index] = result.audio
+                                if (result.boundaries.isNotEmpty()) boundariesCache[index] = result.boundaries
+                            }
+                        }
+                        is AIVoiceTTSProvider -> p.fetchAudio(firstText, spd)?.let { audioCache[index] = it }
+                        is CustomTTSProvider -> p.fetchAudio(firstText, spd)?.let { audioCache[index] = it }
+                    }
                 }
             }
         }
@@ -1272,7 +1656,7 @@ class ReaderViewModel(
         _uiState.update { it.copy(isTtsPaused = false, isTtsPlaying = true, ttsCurrentIdx = playIdx) }
         playOne(playIdx)
     }
-    private fun killPlayChain() { playChainActive = false; currentTTSProvider?.stop(); audioCache.clear(); boundariesCache.clear(); estJob?.cancel() }
+    private fun killPlayChain() { playChainActive = false; currentTTSProvider?.stop(); audioCache.clear(); boundariesCache.clear(); subSegCache.clear(); currentSubSegParaIdx = -1; currentSubSegs = emptyList(); currentSubSegOffsets = emptyList(); estJob?.cancel() }
 
     // ======== 句子追踪 ========
     /** Edge TTS 词边界驱动 — 每个句子定位第一个词的时间偏移精确调度 */
