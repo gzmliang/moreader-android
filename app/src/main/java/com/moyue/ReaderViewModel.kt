@@ -102,6 +102,7 @@ data class ReaderUiState(
     val vocabPlanOptions: List<String> = listOf("默认"),
     val showBookmarkPanel: Boolean = false,
     val showHighlightPanel: Boolean = false,
+    val ttsLocked: Boolean = false,  // TTS 防误触锁定模式
     val currentParagraphIndex: Int = 0,       // 当前阅读/朗读的段落
     val scrollToParagraph: Int = -1,           // 需要滚动到的段落索引（-1 表示无）
     val scrollToAnchor: String? = null,          // 需要滚动到的 HTML 锚点（如 filepos0000154187）
@@ -887,7 +888,8 @@ class ReaderViewModel(
         if (subSegCache.containsKey(key)) return true
         val p = getProvider() ?: return false
         val result = when (p) {
-            is EdgeTTSProvider -> p.fetchAudio(text, ttsSpeed)
+            // 强制使用 /tts_with_boundaries：子段可能只有1句话但需要词边界做高亮同步
+            is EdgeTTSProvider -> p.fetchAudioWithBoundaries(text, ttsSpeed)
             is AIVoiceTTSProvider -> p.fetchAudio(text, ttsSpeed)?.let { PreloadResult(it) }
             is CustomTTSProvider -> p.fetchAudio(text, ttsSpeed)?.let { PreloadResult(it) }
             else -> null
@@ -1267,9 +1269,24 @@ class ReaderViewModel(
                 is CustomTTSProvider -> p.playRaw(cached.audio, listener)
             }
         } else {
+            // Cache miss — 对于 EdgeTTS 强制获取词边界（子段可能只有1句话但高亮同步需要）
             val p = recreateProvider()
             if (p == null) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }; return }
-            p.speak(subText, speed, listener)
+            if (p is EdgeTTSProvider) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    val result = p.fetchAudioWithBoundaries(subText, speed)
+                    withContext(Dispatchers.Main) {
+                        if (result != null && result.audio.isNotEmpty()) {
+                            if (result.boundaries.isNotEmpty()) listener.onWordBoundaries(result.boundaries)
+                            p.playRaw(result.audio, listener)
+                        } else {
+                            listener.onError("子段合成失败")
+                        }
+                    }
+                }
+            } else {
+                p.speak(subText, speed, listener)
+            }
         }
 
         // 预取下一个子段（同段落）
@@ -1678,6 +1695,10 @@ class ReaderViewModel(
         _uiState.update { it.copy(isTtsPaused = false, isTtsPlaying = true, ttsCurrentIdx = playIdx) }
         playOne(playIdx)
     }
+    fun toggleTtsLock() {
+        _uiState.update { it.copy(ttsLocked = !it.ttsLocked) }
+        log("[TTS] ${if (!_uiState.value.ttsLocked) "解锁" else "锁定"}防误触模式")
+    }
     private fun killPlayChain() { playChainActive = false; currentTTSProvider?.stop(); audioCache.clear(); boundariesCache.clear(); subSegCache.clear(); currentSubSegParaIdx = -1; currentSubSegs = emptyList(); currentSubSegOffsets = emptyList(); estJob?.cancel() }
 
     // ======== 句子追踪 ========
@@ -1724,7 +1745,7 @@ class ReaderViewModel(
             }
         }
     }
-    fun ttsStop() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_stop)); killPlayChain(); _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) } }
+    fun ttsStop() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_stop)); killPlayChain(); _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1, ttsLocked = false) } }
     private var lastToggleTime = 0L
 
     fun togglePlayPause() {

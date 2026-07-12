@@ -77,6 +77,21 @@ class EdgeTTSProvider(
     }
 
     /**
+     * Fetch audio with word boundaries forced (always /tts_with_boundaries).
+     * Used for sub-segments where single-sentence might otherwise skip boundaries.
+     */
+    suspend fun fetchAudioWithBoundaries(text: String, rate: Float = 1.0f): PreloadResult? {
+        return try {
+            val body = makeJsonBody(text, rate)
+            val response = client.newCall(newRequest("tts_with_boundaries", body)).execute()
+            if (!response.isSuccessful) return null
+            val audio = response.body?.bytes() ?: return null
+            val boundaries = parseWordBoundaries(response.header("X-Word-Boundaries") ?: "")
+            PreloadResult(audio, boundaries)
+        } catch (e: Exception) { null }
+    }
+
+    /**
      * Lightweight fetch: only get word boundaries (no audio).
      * Used for async boundary backfill when preload missed them.
      */

@@ -396,12 +396,14 @@ fun ReaderScreen(
                         currentIndex = state.currentChapterIndex, totalChapters = state.chapters.size,
                         fontSize = state.fontSize, fontFamily = state.fontFamily, fontWeight = state.fontWeight,
                         isTtsPlaying = state.isTtsPlaying, isTtsPaused = state.isTtsPaused,
+                        isTtsLocked = state.ttsLocked,
                         onPrev = { viewModel.prevChapter() }, onNext = { viewModel.nextChapter() },
                         onFontSizeChange = { viewModel.setFontSize(it) },
                         onFontFamilyChange = { viewModel.setFontFamily(it) },
                         onFontWeightChange = { viewModel.setFontWeight(it) },
                         onPlayPause = { viewModel.togglePlayPause() },
                         onStop = { viewModel.ttsStop() },
+                        onToggleLock = { viewModel.toggleTtsLock() },
                         onToggleDebug = { viewModel.toggleTtsDebugLog() },
                         onNavigateToChapter = { idx ->
                             val ch = state.chapters.getOrNull(idx)
@@ -480,6 +482,112 @@ fun ReaderScreen(
                     highlightToRemove = state.highlightToRemove?.let { Pair(it.startOffset, it.endOffset) },
                     modifier = Modifier.fillMaxSize().background(Color(android.graphics.Color.parseColor(state.theme.bgColor))),
                 )
+                
+                // TTS 防误触锁定遮罩 - 半透明覆盖，拦截所有触摸，只留暂停/继续 + 长按解锁
+                if (state.ttsLocked) {
+                    // TTS 防误触锁定遮罩
+                    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+                    var unlockHeld by remember { mutableStateOf(false) }
+                    var unlockReady by remember { mutableStateOf(false) }
+                    val scope = rememberCoroutineScope()
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.35f))
+                            // 拦截空白区域点击，不透传给 WebView
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { },
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(20.dp),
+                        ) {
+                            // 暂停/继续大按钮
+                            FilledIconButton(
+                                onClick = { viewModel.togglePlayPause() },
+                                modifier = Modifier.size(72.dp),
+                                shape = RoundedCornerShape(36.dp),
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = Color.White.copy(alpha = 0.95f),
+                                    contentColor = Color.Black,
+                                ),
+                            ) {
+                                Icon(
+                                    if (state.isTtsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    modifier = Modifier.size(40.dp),
+                                    contentDescription = if (state.isTtsPlaying) "暂停" else "继续",
+                                )
+                            }
+
+                            // 长按解锁区域
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Color.White.copy(alpha = 0.18f))
+                                    .pointerInput(Unit) {
+                                        awaitPointerEventScope {
+                                            while (true) {
+                                                val event = awaitPointerEvent(PointerEventPass.Main)
+                                                val change = event.changes.firstOrNull() ?: continue
+                                                if (change.pressed) {
+                                                    if (!unlockHeld) {
+                                                        unlockHeld = true
+                                                        unlockReady = false
+                                                        scope.launch {
+                                                            kotlinx.coroutines.delay(800)
+                                                            if (unlockHeld) {
+                                                                unlockReady = true
+                                                                haptic.performHapticFeedback(
+                                                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress
+                                                                )
+                                                                viewModel.toggleTtsLock()
+                                                            }
+                                                        }
+                                                    }
+                                                    change.consume()
+                                                } else {
+                                                    unlockHeld = false
+                                                    unlockReady = false
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .padding(horizontal = 28.dp, vertical = 14.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            if (unlockReady) Icons.Default.LockOpen else Icons.Default.Lock,
+                                            contentDescription = "长按解锁",
+                                            tint = if (unlockReady) Color(0xFF4CAF50) else Color.White,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            if (unlockReady) "已解锁" else "长按解锁",
+                                            color = Color.White,
+                                            fontSize = 13.sp,
+                                        )
+                                    }
+                                    // 按压进度条
+                                    if (unlockHeld && !unlockReady) {
+                                        LinearProgressIndicator(
+                                            modifier = Modifier.width(100.dp).padding(top = 6.dp).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                            color = Color.White,
+                                            trackColor = Color.White.copy(alpha = 0.25f),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 
                 // Floating navigation back button — persistent, stays until user taps back or dismisses
                 AnimatedVisibility(
@@ -793,11 +901,13 @@ fun ReaderScreen(
 private fun ReaderBottomBar(
     currentIndex: Int, totalChapters: Int, fontSize: Int, fontFamily: String, fontWeight: String,
     isTtsPlaying: Boolean, isTtsPaused: Boolean,
+    isTtsLocked: Boolean,
     onPrev: () -> Unit, onNext: () -> Unit,
     onFontSizeChange: (Int) -> Unit,
     onFontFamilyChange: (String) -> Unit,
     onFontWeightChange: (String) -> Unit,
     onPlayPause: () -> Unit, onStop: () -> Unit,
+    onToggleLock: () -> Unit,
     onToggleDebug: () -> Unit,
     onNavigateToChapter: (Int) -> Unit,
     bookProgress: Float,
@@ -1033,10 +1143,10 @@ private fun ReaderBottomBar(
 
                     // TTS: Play/Pause
                     if (isTtsPlaying || isTtsPaused) {
-                        EqualButton(onPlayPause) {
+                        EqualButton(onClick = { if (!isTtsLocked) onPlayPause() }) {
                             Icon(if (isTtsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = if (isTtsPlaying) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pause) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.resume),
-                                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                tint = if (isTtsLocked) barTextColor.copy(alpha = 0.3f) else MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                         }
                     } else {
                         EqualButton(onPlayPause) {
@@ -1046,8 +1156,18 @@ private fun ReaderBottomBar(
 
                     // TTS: Stop (conditional)
                     if (isTtsPlaying || isTtsPaused) {
-                        EqualButton(onStop) {
-                            Icon(Icons.Default.Stop, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.stop), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                        EqualButton(onClick = { if (!isTtsLocked) onStop() }) {
+                            Icon(Icons.Default.Stop, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.stop), tint = if (isTtsLocked) MaterialTheme.colorScheme.error.copy(alpha = 0.3f) else MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                        }
+                    }
+
+                    // TTS: Lock (防误触)
+                    if (isTtsPlaying || isTtsPaused) {
+                        EqualButton(onToggleLock) {
+                            Icon(if (isTtsLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                contentDescription = "锁定",
+                                tint = if (isTtsLocked) MaterialTheme.colorScheme.primary else barTextColor,
+                                modifier = Modifier.size(18.dp))
                         }
                     }
 
