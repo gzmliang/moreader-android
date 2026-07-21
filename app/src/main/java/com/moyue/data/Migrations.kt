@@ -101,3 +101,10 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         database.execSQL("ALTER TABLE vocabulary ADD COLUMN plan TEXT NOT NULL DEFAULT '默认'")
     }
 }
+
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        // Add text brightness to books table
+        database.execSQL("ALTER TABLE books ADD COLUMN textBrightness INTEGER NOT NULL DEFAULT 100")
+    }
+}

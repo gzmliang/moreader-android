@@ -132,8 +132,25 @@ data class ReaderUiState(
     val showRecordingDialog: Boolean = false,
     val showRecordingManager: Boolean = false,
     val recordingsList: List<com.moyue.app.ui.components.RecordingItem> = emptyList(),
+    val textBrightness: Int = 100,            // 0-100 text brightness
 ) {
     val canGoBack: Boolean get() = navHistory.isNotEmpty()
+    
+    /** Adjusted text color for dark themes based on brightness slider */
+    val computedTextColor: String get() {
+        if (!theme.isDark || textBrightness >= 100) return theme.textColor
+        val adj = textBrightness.coerceIn(0, 100)
+        val orig = android.graphics.Color.parseColor(theme.textColor)
+        val r = android.graphics.Color.red(orig)
+        val g = android.graphics.Color.green(orig)
+        val b = android.graphics.Color.blue(orig)
+        val tr = 0x55; val tg = 0x55; val tb = 0x55  // min target (#555555)
+        val f = (100 - adj) / 100f
+        val nr = (r + (tr - r) * f).toInt().coerceIn(0, 255)
+        val ng = (g + (tg - g) * f).toInt().coerceIn(0, 255)
+        val nb = (b + (tb - b) * f).toInt().coerceIn(0, 255)
+        return String.format("#%02X%02X%02X", nr, ng, nb)
+    }
 }
 
 class ReaderViewModel(
@@ -337,6 +354,7 @@ class ReaderViewModel(
             toc = toc, 
             currentChapterIndex = book.currentChapterIndex.coerceIn(0, maxOf(0, chapters.size - 1)), 
             theme = restoredTheme,
+            textBrightness = book.textBrightness.coerceIn(0, 100),
             fontSize = book.fontSize,
             ttsProvider = restoredTtsProvider,
             edgeTtsVoice = restoredTtsVoice,
@@ -456,6 +474,14 @@ class ReaderViewModel(
     }
     fun setFontFamily(f: String) { _uiState.update { it.copy(fontFamily = f) } }
     fun setFontWeight(w: String) { _uiState.update { it.copy(fontWeight = w) } }
+    fun setTextBrightness(v: Int) {
+        val adj = v.coerceIn(0, 100)
+        _uiState.update { it.copy(textBrightness = adj) }
+        val book = _uiState.value.book ?: return
+        viewModelScope.launch {
+            repository.updateBookBrightness(book.id, adj)
+        }
+    }
     fun onTextSelected(infoJson: String) {
         try {
             val obj = JSONObject(infoJson)

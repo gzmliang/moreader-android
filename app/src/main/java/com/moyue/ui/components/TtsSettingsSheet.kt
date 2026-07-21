@@ -105,6 +105,7 @@ fun TtsSettingsSheet(
     localAiModelName: String = "",
     localAiGpuLayers: Int = 0,
     currentTheme: ReaderTheme = ReaderTheme.LIGHT,
+    currentTextBrightness: Int = 100,
     onProviderChange: (TTSProviderType) -> Unit,
     onSpeedChange: (Float) -> Unit,
     onEdgeConfigChange: (endpoint: String, voice: String) -> Unit,
@@ -119,6 +120,7 @@ fun TtsSettingsSheet(
     clearLocalAiLogs: () -> Unit = {},
     onGpuLayersChange: (Int) -> Unit = {},
     onThemeChange: (ReaderTheme) -> Unit = {},
+    onTextBrightnessChange: (Int) -> Unit = {},
     onRecordingClick: () -> Unit = {},
     onBrowseRecordingsClick: () -> Unit = {},
     onClose: () -> Unit,
@@ -891,6 +893,39 @@ fun TtsSettingsSheet(
                             selectedContainerColor = Color(android.graphics.Color.parseColor(theme.bgColor)),
                             selectedLabelColor = Color(android.graphics.Color.parseColor(theme.textColor)),
                         ),
+                    )
+                }
+            }
+
+            // === Text brightness (dark themes only) ===
+            if (currentTheme.isDark) {
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        "亮度",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                        modifier = Modifier.width(36.dp),
+                    )
+                    Slider(
+                        value = currentTextBrightness.toFloat(),
+                        onValueChange = { onTextBrightnessChange(it.toInt()) },
+                        valueRange = 0f..100f,
+                        modifier = Modifier.weight(1f).height(24.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                    )
+                    Text(
+                        "${currentTextBrightness}%",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.width(38.dp).wrapContentWidth(Alignment.End),
                     )
                 }
             }

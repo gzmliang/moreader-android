@@ -23,6 +23,7 @@ data class Book(
     val ttsProvider: String = "",            // "EDGE_TTS", "AI_VOICE", "SYSTEM", "CUSTOM_TTS"
     val ttsVoice: String = "",               // last used voice name
     val ttsSpeed: Float = 1.0f,              // per-book TTS speed
+    val textBrightness: Int = 100,            // 0-100 text brightness (for dark themes, 100=original)
 )
 
 // TOC entry

@@ -663,6 +663,11 @@ class BookRepository(private val context: Context) {
         dao.upsert(book.copy(fontSize = size))
     }
 
+    suspend fun updateBookBrightness(id: String, brightness: Int) = withContext(Dispatchers.IO) {
+        val book = dao.getBook(id) ?: return@withContext
+        dao.upsert(book.copy(textBrightness = brightness))
+    }
+
     suspend fun updateBookParagraph(id: String, paraIdx: Int) = withContext(Dispatchers.IO) {
         val book = dao.getBook(id) ?: return@withContext
         dao.upsert(book.copy(currentParagraphIndex = paraIdx))
