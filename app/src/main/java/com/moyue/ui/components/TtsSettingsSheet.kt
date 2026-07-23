@@ -32,10 +32,12 @@ import com.moyue.app.data.models.ReaderTheme
 import com.moyue.app.data.models.TTSProviderType
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
+import com.moyue.app.tts.TTSListener
+import com.moyue.app.tts.TTSProvider
+import com.moyue.app.tts.EdgeTTSProvider
+import com.moyue.app.tts.AIVoiceTTSProvider
+import com.moyue.app.tts.CustomTTSProvider
+import com.moyue.app.tts.SystemTTSProvider
 
 // Common voice presets
 private val AI_VOICE_MODELS = listOf(
@@ -53,6 +55,59 @@ private fun aiVoicesForModel(model: String): List<Pair<String, String>> {
             else -> "♂"
         }
         "$model:$name" to "${name.replaceFirstChar { it.uppercase() }} $genderLabel"
+    }
+}
+
+// 试听文本：Edge 按语言选句；其他引擎统一用中文测试句（墨阅以中文阅读为主）
+private fun previewTextForVoice(voiceId: String, isEdge: Boolean): String {
+    if (isEdge) {
+        return when {
+            voiceId.startsWith("zh-") -> "你好，这是我的声音，用于测试朗读效果。"
+            voiceId.startsWith("ja-") -> "こんにちは、これが私の声です。"
+            voiceId.startsWith("ko-") -> "안녕하세요, 제 목소리입니다。"
+            else -> "Hello, this is my voice."
+        }
+    }
+    return "你好，这是语音测试，用于确认当前引擎的声音是否满意。"
+}
+
+/**
+ * 试听按钮：直接复用各引擎真实的 TTSProvider 实例（speak），
+ * 与正式朗读走同一套代码与网络栈，保证预览行为与实际出声一致。
+ */
+@Composable
+private fun PreviewButton(
+    isPreviewing: MutableState<Boolean>,
+    previewRef: MutableState<TTSProvider?>,
+    makeProvider: () -> TTSProvider,
+    previewText: String,
+) {
+    FilledTonalButton(
+        onClick = {
+            if (isPreviewing.value) {
+                previewRef.value?.stop()
+                previewRef.value = null
+                isPreviewing.value = false
+            } else {
+                isPreviewing.value = true
+                val provider = makeProvider()
+                previewRef.value = provider
+                provider.speak(previewText, 1.0f, object : TTSListener {
+                    override fun onStart() {}
+                    override fun onDone() { isPreviewing.value = false; previewRef.value = null }
+                    override fun onError(message: String) { isPreviewing.value = false; previewRef.value = null }
+                })
+            }
+        },
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        if (isPreviewing.value) {
+            Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.voice_picker_stop), fontSize = 12.sp)
+        } else {
+            Text("🔊 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.voice_picker_preview), fontSize = 12.sp)
+        }
     }
 }
 
@@ -245,86 +300,9 @@ fun TtsSettingsSheet(
                 val localEp = remember(edgeEndpoint) { mutableStateOf(edgeEndpoint) }
                 val localVoice = remember(edgeVoice) { mutableStateOf(edgeVoice) }
                 var showVoicePicker by remember { mutableStateOf(false) }
-                var isPreviewing by remember { mutableStateOf(false) }
-                var mediaPlayerRef by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+                val isPreviewing = remember { mutableStateOf(false) }
+                val previewRef = remember { mutableStateOf<TTSProvider?>(null as TTSProvider?) }
                 val context = LocalContext.current
-                val scope = rememberCoroutineScope()
-                val previewClient = remember {
-                    okhttp3.OkHttpClient.Builder()
-                        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                        .readTimeout(40, java.util.concurrent.TimeUnit.SECONDS)
-                        .build()
-                }
-
-                fun stopPreview() {
-                    mediaPlayerRef?.let { mp ->
-                        try { mp.stop() } catch (_: Exception) {}
-                        try { mp.release() } catch (_: Exception) {}
-                    }
-                    mediaPlayerRef = null
-                    isPreviewing = false
-                }
-
-                fun playPreview() {
-                    if (isPreviewing) {
-                        stopPreview()
-                        return
-                    }
-                    isPreviewing = true
-                    scope.launch {
-                        try {
-                            val voiceId = localVoice.value
-                            val previewText = when {
-                                voiceId.startsWith("zh-") -> "你好，这是我的声音。"
-                                voiceId.startsWith("ja-") -> "こんにちは、これが私の声です。"
-                                voiceId.startsWith("ko-") -> "안녕하세요, 제 목소리입니다."
-                                else -> "Hello, this is my voice."
-                            }
-                            val json = org.json.JSONObject().apply {
-                                put("text", previewText)
-                                put("voice", voiceId)
-                                put("rate", "+0%")
-                                put("pitch", "+0Hz")
-                            }
-                            val body = json.toString().toRequestBody("application/json".toMediaType())
-                            val request = okhttp3.Request.Builder()
-                                .url("${localEp.value.removeSuffix("/")}/tts")
-                                .post(body)
-                                .build()
-                            val response = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                previewClient.newCall(request).execute()
-                            }
-                            if (response.isSuccessful) {
-                                val audioBytes = response.body?.bytes()
-                                if (audioBytes != null && audioBytes.isNotEmpty()) {
-                                    val tempFile = java.io.File.createTempFile("voice_preview_", ".mp3")
-                                    tempFile.writeBytes(audioBytes)
-                                    val mp = android.media.MediaPlayer().apply {
-                                        setDataSource(tempFile.absolutePath)
-                                        setOnCompletionListener {
-                                            release()
-                                            tempFile.delete()
-                                            if (mediaPlayerRef === this) mediaPlayerRef = null
-                                            isPreviewing = false
-                                        }
-                                        setOnErrorListener { mp2, _, _ ->
-                                            mp2.release()
-                                            tempFile.delete()
-                                            if (mediaPlayerRef === mp2) mediaPlayerRef = null
-                                            isPreviewing = false
-                                            true
-                                        }
-                                        prepare()
-                                        start()
-                                    }
-                                    mediaPlayerRef = mp
-                                } else { isPreviewing = false }
-                            } else { isPreviewing = false }
-                        } catch (e: Exception) {
-                            isPreviewing = false
-                        }
-                    }
-                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -362,28 +340,12 @@ fun TtsSettingsSheet(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     horizontalArrangement = Arrangement.End,
                 ) {
-                    FilledTonalButton(
-                        onClick = { playPreview() },
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                    ) {
-                        if (isPreviewing) {
-                            Icon(
-                                Icons.Default.Stop,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.voice_picker_stop),
-                                fontSize = 12.sp,
-                            )
-                        } else {
-                            Text(
-                                "🔊 ${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.voice_picker_preview)}",
-                                fontSize = 12.sp,
-                            )
-                        }
-                    }
+                    PreviewButton(
+                        isPreviewing = isPreviewing,
+                        previewRef = previewRef,
+                        makeProvider = { EdgeTTSProvider(localEp.value, localVoice.value) },
+                        previewText = previewTextForVoice(localVoice.value, isEdge = true),
+                    )
                 }
                 if (showVoicePicker) {
                     VoicePickerDialog(
@@ -430,6 +392,20 @@ fun TtsSettingsSheet(
                         singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
                     )
                 }
+                // Preview button row
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    val isPreviewing = remember { mutableStateOf(false) }
+                    val previewRef = remember { mutableStateOf<TTSProvider?>(null as TTSProvider?) }
+                    PreviewButton(
+                        isPreviewing = isPreviewing,
+                        previewRef = previewRef,
+                        makeProvider = { AIVoiceTTSProvider(localEp.value, localKey.value, localModel.value, localVoice.value) },
+                        previewText = previewTextForVoice(localVoice.value, isEdge = false),
+                    )
+                }
             }
 
             if (currentProvider == TTSProviderType.CUSTOM_TTS) {
@@ -465,6 +441,20 @@ fun TtsSettingsSheet(
                         value = localVoice.value, onValueChange = { localVoice.value = it; onCustomTTSConfigChange(localEp.value, localKey.value, localModel.value, it) },
                         label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_voice), fontSize = 11.sp) },
                         singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
+                    )
+                }
+                // Preview button row
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    val isPreviewing = remember { mutableStateOf(false) }
+                    val previewRef = remember { mutableStateOf<TTSProvider?>(null as TTSProvider?) }
+                    PreviewButton(
+                        isPreviewing = isPreviewing,
+                        previewRef = previewRef,
+                        makeProvider = { CustomTTSProvider(localEp.value, localKey.value, localModel.value, localVoice.value) },
+                        previewText = previewTextForVoice(localVoice.value, isEdge = false),
                     )
                 }
             }
@@ -538,6 +528,25 @@ fun TtsSettingsSheet(
                     }
                 }
 
+                Spacer(Modifier.height(4.dp))
+                // Preview button row (System TTS: uses device engine + selected voice)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    val isPreviewing = remember { mutableStateOf(false) }
+                    val previewRef = remember { mutableStateOf<TTSProvider?>(null as TTSProvider?) }
+                    PreviewButton(
+                        isPreviewing = isPreviewing,
+                        previewRef = previewRef,
+                        makeProvider = {
+                            SystemTTSProvider(context).also { p ->
+                                if (systemTtsVoice.isNotEmpty()) p.setVoice(systemTtsVoice)
+                            }
+                        },
+                        previewText = previewTextForVoice(systemTtsVoice, isEdge = false),
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
                 // Link to system TTS settings
                 OutlinedCard(
