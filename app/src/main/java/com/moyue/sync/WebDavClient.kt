@@ -2,6 +2,7 @@ package com.moyue.app.sync
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -76,16 +77,41 @@ class WebDavClient(private val context: Context) {
     }
 
     /**
+     * 规范化构建请求的完整 URL，彻底解决多加 /dav 或拼错路径导致的 404
+     */
+    fun buildFullUrl(subPath: String): String {
+        val base = getServerUrl().trimEnd('/')
+        if (subPath.isBlank() || subPath == "/") return base
+        if (subPath.startsWith("http://") || subPath.startsWith("https://")) return subPath
+
+        val baseUri = try {
+            Uri.parse(base)
+        } catch (e: Exception) {
+            null
+        }
+
+        val basePath = (baseUri?.path ?: "").trimEnd('/')
+        val cleanSub = if (subPath.startsWith("/")) subPath else "/$subPath"
+
+        return if (basePath.isNotBlank() && cleanSub.startsWith(basePath)) {
+            val rest = cleanSub.substring(basePath.length)
+            val cleanRest = if (rest.startsWith("/")) rest else "/$rest"
+            base + cleanRest
+        } else {
+            base + cleanSub
+        }
+    }
+
+    /**
      * 列出目录内容 (PROPFIND Depth: 1)
-     * @param subPath 相对路径，例如 "" 或 "/books"
+     * @param subPath 相对路径，例如 "" 或 "/dav/media" 或 "media"
      */
     suspend fun listFiles(subPath: String = ""): Result<List<DavItem>> = withContext(Dispatchers.IO) {
         try {
             val base = getServerUrl()
             if (base.isBlank()) return@withContext Result.failure(Exception("WebDAV 未配置"))
 
-            val cleanSub = if (subPath.isNotBlank() && !subPath.startsWith("/")) "/$subPath" else subPath
-            val url = base + cleanSub
+            val url = buildFullUrl(subPath)
 
             val req = Request.Builder()
                 .url(url)
@@ -117,12 +143,7 @@ class WebDavClient(private val context: Context) {
      */
     suspend fun downloadFile(remoteItemPath: String, destFile: File): Result<File> = withContext(Dispatchers.IO) {
         try {
-            val base = getServerUrl()
-            val fullUrl = if (remoteItemPath.startsWith("http://") || remoteItemPath.startsWith("https://")) {
-                remoteItemPath
-            } else {
-                base.trimEnd('/') + "/" + remoteItemPath.trimStart('/')
-            }
+            val fullUrl = buildFullUrl(remoteItemPath)
 
             val req = Request.Builder()
                 .url(fullUrl)
@@ -151,9 +172,7 @@ class WebDavClient(private val context: Context) {
      */
     suspend fun uploadFile(subPath: String, file: File): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val base = getServerUrl()
-            val cleanSub = if (!subPath.startsWith("/")) "/$subPath" else subPath
-            val targetUrl = base + cleanSub
+            val targetUrl = buildFullUrl(subPath)
 
             val req = Request.Builder()
                 .url(targetUrl)
@@ -179,6 +198,13 @@ class WebDavClient(private val context: Context) {
     private fun parsePropFindResponse(xml: String, requestUrl: String): List<DavItem> {
         val list = mutableListOf<DavItem>()
         try {
+            val reqPath = try {
+                val parsedPath = Uri.parse(requestUrl).path ?: ""
+                URLDecoder.decode(parsedPath, "UTF-8").trimEnd('/')
+            } catch (e: Exception) {
+                ""
+            }
+
             val factory = XmlPullParserFactory.newInstance()
             factory.isNamespaceAware = true
             val parser = factory.newPullParser()
@@ -233,10 +259,11 @@ class WebDavClient(private val context: Context) {
                                 decodedHref.trimEnd('/').substringAfterLast('/')
                             }
                             if (rawName.isNotBlank()) {
-                                // 排除自身目录
-                                val isSelf = decodedHref.trimEnd('/') == requestUrl.trimEnd('/') ||
-                                        requestUrl.endsWith(decodedHref.trimEnd('/')) ||
-                                        decodedHref == "/" || decodedHref.isEmpty()
+                                val itemPath = decodedHref.trimEnd('/')
+                                val isSelf = itemPath.equals(reqPath, ignoreCase = true) ||
+                                        itemPath.isEmpty() ||
+                                        itemPath == "/"
+
                                 if (!isSelf) {
                                     list.add(
                                         DavItem(

@@ -1,11 +1,11 @@
 package com.moyue.app.ui.components
 
 import android.content.Context
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -15,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -25,6 +24,7 @@ import com.moyue.app.data.BookRepository
 import com.moyue.app.sync.WebDavClient
 import kotlinx.coroutines.launch
 import java.io.File
+import java.net.URLDecoder
 
 @Composable
 fun WebDavBrowserDialog(
@@ -46,6 +46,18 @@ fun WebDavBrowserDialog(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var downloadingPath by remember { mutableStateOf<String?>(null) }
+
+    val baseUri = remember(serverUrl) {
+        try { Uri.parse(webDavClient.getServerUrl()) } catch (e: Exception) { null }
+    }
+    val rootDavPath = remember(baseUri) {
+        (baseUri?.path ?: "").trimEnd('/')
+    }
+
+    fun isAtRoot(path: String): Boolean {
+        val p = path.trimEnd('/')
+        return p.isBlank() || p == rootDavPath || p == "/"
+    }
 
     fun refreshList(path: String) {
         isLoading = true
@@ -77,10 +89,14 @@ fun WebDavBrowserDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Storage, contentDescription = null, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(8.dp))
+                val displayTitle = if (isConfigured) {
+                    if (isAtRoot(currentPath)) "WebDAV 网盘" else {
+                        val decoded = try { URLDecoder.decode(currentPath, "UTF-8") } catch (e: Exception) { currentPath }
+                        "..." + decoded.trimEnd('/').substringAfterLast('/')
+                    }
+                } else "连接 WebDAV 网盘"
                 Text(
-                    if (isConfigured) {
-                        if (currentPath.isBlank()) "WebDAV 网盘" else "WebDAV: .../${currentPath.trimEnd('/').substringAfterLast('/')}"
-                    } else "连接 WebDAV 网盘",
+                    displayTitle,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -155,11 +171,16 @@ fun WebDavBrowserDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (currentPath.isNotBlank()) {
+                        if (!isAtRoot(currentPath)) {
                             TextButton(
                                 onClick = {
-                                    val parent = currentPath.trimEnd('/').substringBeforeLast('/', "")
-                                    refreshList(parent)
+                                    val p = currentPath.trimEnd('/')
+                                    val parent = p.substringBeforeLast('/', "")
+                                    if (parent.isBlank() || parent == rootDavPath) {
+                                        refreshList("")
+                                    } else {
+                                        refreshList(parent)
+                                    }
                                 }
                             ) {
                                 Icon(Icons.Default.ArrowBack, null, Modifier.size(16.dp))
