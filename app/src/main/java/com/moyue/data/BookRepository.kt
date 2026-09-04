@@ -54,13 +54,14 @@ class BookRepository(private val context: Context) {
         }
         val (title, author) = parseEpubMetadata(tempFile)
 
-        // 查重：已存在同名书则跳过
+        // 查重：已存在同名书则跳过，但更新最后阅读/访问时间，让它置顶到最前
         val existing = dao.getBookByTitle(title)
         if (existing != null) {
-            Log.i(TAG, "Skip duplicate import: '$title' already exists (id=${existing.id})")
+            Log.i(TAG, "Skip duplicate import: '$title' already exists (id=${existing.id}), touch lastReadAt")
             isRecentDuplicate = true
             tempFile.delete()
-            return@withContext existing
+            dao.updateLastReadAt(existing.id, System.currentTimeMillis())
+            return@withContext dao.getBook(existing.id) ?: existing
         }
 
         isRecentDuplicate = false
@@ -73,11 +74,14 @@ class BookRepository(private val context: Context) {
         Log.d(TAG, "File saved: ${file.absolutePath} (${file.length()} bytes)")
         Log.d(TAG, "Parsed metadata: title='$title', author='$author'")
 
+        val now = System.currentTimeMillis()
         val book = Book(
             id = id,
             title = title,
             author = author,
             filePath = file.absolutePath,
+            addedAt = now,
+            lastReadAt = now,
         )
 
         dao.upsert(book)
@@ -88,13 +92,14 @@ class BookRepository(private val context: Context) {
     suspend fun importEpubFile(epubFile: File): Book = withContext(Dispatchers.IO) {
         val (title, author) = parseEpubMetadata(epubFile)
 
-        // 查重：已存在同名书则跳过
+        // 查重：已存在同名书则跳过，但更新最后阅读时间使其置顶
         val existing = dao.getBookByTitle(title)
         if (existing != null) {
-            Log.i(TAG, "Skip duplicate importEpub: '$title' already exists (id=${existing.id})")
+            Log.i(TAG, "Skip duplicate importEpub: '$title' already exists (id=${existing.id}), touch lastReadAt")
             isRecentDuplicate = true
             epubFile.delete()
-            return@withContext existing
+            dao.updateLastReadAt(existing.id, System.currentTimeMillis())
+            return@withContext dao.getBook(existing.id) ?: existing
         }
 
         isRecentDuplicate = false
@@ -104,11 +109,14 @@ class BookRepository(private val context: Context) {
         val destFile = File(bookDir, fileName)
         epubFile.renameTo(destFile)
         Log.d(TAG, "File imported: ${destFile.absolutePath} (${destFile.length()} bytes)")
+        val now = System.currentTimeMillis()
         val book = Book(
             id = id,
             title = title,
             author = author,
             filePath = destFile.absolutePath,
+            addedAt = now,
+            lastReadAt = now,
         )
         dao.upsert(book)
         book

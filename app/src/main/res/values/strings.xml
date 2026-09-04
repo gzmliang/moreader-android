@@ -28,6 +28,19 @@
     <string name="empty_library_hint">导入一本 EPUB 开始阅读吧</string>
     <string name="delete_book_title">删除书籍</string>
     <string name="delete_book_confirm">确定要删除「%1$s」吗？</string>
+    <string name="sort_title">排序方式</string>
+    <string name="sort_recent">最近阅读 / 最新添加</string>
+    <string name="sort_name">书名排序 (A-Z)</string>
+    <string name="sort_author">作者排序</string>
+    <string name="sort_progress">阅读进度</string>
+    <string name="webdav_title">WebDAV 网盘</string>
+    <string name="webdav_server_url">WebDAV 地址 (如 http://ip:port/dav)</string>
+    <string name="webdav_user">账号</string>
+    <string name="webdav_pass">密码</string>
+    <string name="webdav_save">保存并连接</string>
+    <string name="webdav_connected">已连接 WebDAV</string>
+    <string name="webdav_disconnect">断开连接</string>
+    <string name="webdav_empty_folder">当前目录无 EPUB 电子书</string>
 
     <!-- Reader -->
     <string name="load_book">正在加载书籍...</string>

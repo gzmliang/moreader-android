@@ -28,6 +28,15 @@ data class LibraryItem(
     val isCloudOnly: Boolean get() = localBook == null && cloudInfo != null
     val isLocalOnly: Boolean get() = localBook != null && cloudInfo == null
     val isOnBoth: Boolean get() = localBook != null && cloudInfo != null
+    val lastReadOrAdded: Long get() = localBook?.lastReadAt ?: localBook?.addedAt ?: 0L
+    val progress: Float get() = localBook?.currentProgress ?: 0f
+}
+
+enum class BookSortOrder {
+    RECENT,      // 最近阅读 / 最新添加
+    TITLE,       // 书名 A-Z
+    AUTHOR,      // 作者名
+    PROGRESS,    // 阅读进度
 }
 
 class LibraryViewModel(
@@ -55,8 +64,15 @@ class LibraryViewModel(
     private val _isUploading = MutableStateFlow(false)
     val isUploading: StateFlow<Boolean> = _isUploading
 
-    /** 合并本地+云端书架，云端独有书籍放后面 */
-    val mergedItems: StateFlow<List<LibraryItem>> = combine(books, _cloudBooks, _searchQuery) { localBooks, cloudBooks, query ->
+    private val _sortOrder = MutableStateFlow(BookSortOrder.RECENT)
+    val sortOrder: StateFlow<BookSortOrder> = _sortOrder
+
+    fun setSortOrder(order: BookSortOrder) {
+        _sortOrder.value = order
+    }
+
+    /** 合并本地+云端书架，根据所选排序方式排序 */
+    val mergedItems: StateFlow<List<LibraryItem>> = combine(books, _cloudBooks, _searchQuery, _sortOrder) { localBooks, cloudBooks, query, sort ->
         val localTitles = localBooks.map { it.title }.toMutableSet()
 
         val items = mutableListOf<LibraryItem>()
@@ -75,10 +91,28 @@ class LibraryViewModel(
             }
         }
 
-        // 3) 搜索过滤
+        // 3) 排序规则
+        val sortedItems = when (sort) {
+            BookSortOrder.RECENT -> items.sortedWith(
+                compareByDescending<LibraryItem> { it.localBook != null } // 本地书优先于纯云端书
+                    .thenByDescending { it.lastReadOrAdded }
+            )
+            BookSortOrder.TITLE -> items.sortedWith(
+                compareBy(java.text.Collator.getInstance(java.util.Locale.CHINA)) { it.title }
+            )
+            BookSortOrder.AUTHOR -> items.sortedWith(
+                compareBy(java.text.Collator.getInstance(java.util.Locale.CHINA)) { it.author }
+            )
+            BookSortOrder.PROGRESS -> items.sortedWith(
+                compareByDescending<LibraryItem> { it.progress }
+                    .thenByDescending { it.lastReadOrAdded }
+            )
+        }
+
+        // 4) 搜索过滤
         if (query.isNotBlank()) {
-            items.filter { it.title.contains(query, ignoreCase = true) || it.author.contains(query, ignoreCase = true) }
-        } else items
+            sortedItems.filter { it.title.contains(query, ignoreCase = true) || it.author.contains(query, ignoreCase = true) }
+        } else sortedItems
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** 从服务器加载云端书库清单 */

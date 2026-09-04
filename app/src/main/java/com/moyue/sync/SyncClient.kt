@@ -25,6 +25,7 @@ class SyncClient(private val context: Context) {
         private const val KEY_SERVER = "sync_server"
         private const val KEY_TOKEN = "sync_token"
         private const val KEY_EMAIL = "sync_email"
+        private const val KEY_PASSWORD = "sync_password"
         private const val DEFAULT_SERVER = "http://powerplus.blogsyte.com:5001"
 
         private val JSON_MEDIA = "application/json".toMediaType()
@@ -44,19 +45,24 @@ class SyncClient(private val context: Context) {
     fun getServerUrl(): String = prefs.getString(KEY_SERVER, DEFAULT_SERVER) ?: DEFAULT_SERVER
     fun getToken(): String? = prefs.getString(KEY_TOKEN, null)
     fun getEmail(): String? = prefs.getString(KEY_EMAIL, null)
-    fun isLoggedIn(): Boolean = getToken() != null
+    fun getSavedPassword(): String? = prefs.getString(KEY_PASSWORD, null)
+    fun isLoggedIn(): Boolean = getToken() != null || (!getEmail().isNullOrBlank() && !getSavedPassword().isNullOrBlank())
 
-    fun saveLogin(token: String, email: String) {
-        prefs.edit()
+    fun saveLogin(token: String, email: String, password: String? = null) {
+        val editor = prefs.edit()
             .putString(KEY_TOKEN, token)
             .putString(KEY_EMAIL, email)
-            .apply()
+        if (password != null) {
+            editor.putString(KEY_PASSWORD, password)
+        }
+        editor.apply()
     }
 
     fun logout() {
         prefs.edit()
             .remove(KEY_TOKEN)
             .remove(KEY_EMAIL)
+            .remove(KEY_PASSWORD)
             .apply()
     }
 
@@ -67,17 +73,40 @@ class SyncClient(private val context: Context) {
         path: String,
         body: String? = null,
         auth: Boolean = true,
+        canRetryAuth: Boolean = true,
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             val url = getServerUrl().trimEnd('/') + path
             val req = Request.Builder().url(url).method(method, body?.toRequestBody(JSON_MEDIA))
             if (auth) {
-                val token = getToken()
+                var token = getToken()
+                if (token == null) {
+                    // 尝试用保存的密码静默重新登录
+                    val email = getEmail()
+                    val pass = getSavedPassword()
+                    if (!email.isNullOrBlank() && !pass.isNullOrBlank()) {
+                        val reloginResult = login(email, pass)
+                        token = reloginResult.getOrNull()
+                    }
+                }
                 if (token == null) return@withContext Result.failure(Exception("未登录"))
                 req.addHeader("Authorization", "Bearer $token")
             }
             val resp = client.newCall(req.build()).execute()
             val respBody = resp.body?.string() ?: ""
+
+            // 如果遇到 401 Unauthorized 且支持重试，尝试静默重新登录一次
+            if (resp.code == 401 && auth && canRetryAuth) {
+                val email = getEmail()
+                val pass = getSavedPassword()
+                if (!email.isNullOrBlank() && !pass.isNullOrBlank()) {
+                    val relogin = login(email, pass)
+                    if (relogin.isSuccess) {
+                        return@withContext api(method, path, body, auth, canRetryAuth = false)
+                    }
+                }
+            }
+
             if (resp.isSuccessful) {
                 Result.success(respBody)
             } else {
@@ -92,11 +121,11 @@ class SyncClient(private val context: Context) {
 
     suspend fun login(email: String, password: String): Result<String> {
         val body = """{"email":"$email","password":"$password"}"""
-        val result = api("POST", "/sync/auth/login", body, auth = false)
+        val result = api("POST", "/sync/auth/login", body, auth = false, canRetryAuth = false)
         return result.map { json ->
             val obj = JSONObject(json)
             val token = obj.getString("token")
-            saveLogin(token, email)
+            saveLogin(token, email, password)
             token
         }
     }

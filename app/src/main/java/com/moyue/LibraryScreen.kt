@@ -37,7 +37,9 @@ import coil3.compose.AsyncImage
 import com.moyue.app.data.BookRepository
 import com.moyue.app.data.models.*
 import com.moyue.app.sync.SyncClient
+import com.moyue.app.sync.WebDavClient
 import com.moyue.app.ui.components.SyncSettingsDialog
+import com.moyue.app.ui.components.WebDavBrowserDialog
 import com.moyue.app.util.LocaleHelper
 import java.io.File
 
@@ -64,7 +66,13 @@ fun LibraryScreen(
     val isUploading by viewModel.isUploading.collectAsStateWithLifecycle()
     val uploadProgress by viewModel.uploadProgress.collectAsStateWithLifecycle()
     val uploadTotal by viewModel.uploadTotal.collectAsStateWithLifecycle()
+    val sortOrder by viewModel.sortOrder.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val coroutineScope = rememberCoroutineScope()
+
+    var showSortMenu by remember { mutableStateOf(false) }
+    var showWebDavDialog by remember { mutableStateOf(false) }
 
     // Handle shared files from other apps
     LaunchedEffect(sharedUris) {
@@ -73,6 +81,10 @@ fun LibraryScreen(
                 viewModel.importBook(context, uri)
             }
             onSharedUrisConsumed()
+            // 导入后滚动到顶部
+            coroutineScope.launch {
+                gridState.animateScrollToItem(0)
+            }
         }
     }
 
@@ -89,6 +101,11 @@ fun LibraryScreen(
     ) { uris: List<Uri> ->
         uris.forEach { uri ->
             viewModel.importBook(context, uri)
+        }
+        if (uris.isNotEmpty()) {
+            coroutineScope.launch {
+                gridState.animateScrollToItem(0)
+            }
         }
     }
 
@@ -137,6 +154,47 @@ fun LibraryScreen(
                                 Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
                             }
                         }
+
+                        // 排序按钮
+                        Box {
+                            IconButton(onClick = { showSortMenu = true }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.SwapVert, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_title), modifier = Modifier.size(20.dp))
+                            }
+                            DropdownMenu(
+                                expanded = showSortMenu,
+                                onDismissRequest = { showSortMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text((if (sortOrder == BookSortOrder.RECENT) "✓ " else "") + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_recent), fontSize = 13.sp) },
+                                    onClick = {
+                                        viewModel.setSortOrder(BookSortOrder.RECENT)
+                                        showSortMenu = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text((if (sortOrder == BookSortOrder.TITLE) "✓ " else "") + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_name), fontSize = 13.sp) },
+                                    onClick = {
+                                        viewModel.setSortOrder(BookSortOrder.TITLE)
+                                        showSortMenu = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text((if (sortOrder == BookSortOrder.AUTHOR) "✓ " else "") + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_author), fontSize = 13.sp) },
+                                    onClick = {
+                                        viewModel.setSortOrder(BookSortOrder.AUTHOR)
+                                        showSortMenu = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text((if (sortOrder == BookSortOrder.PROGRESS) "✓ " else "") + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_progress), fontSize = 13.sp) },
+                                    onClick = {
+                                        viewModel.setSortOrder(BookSortOrder.PROGRESS)
+                                        showSortMenu = false
+                                    }
+                                )
+                            }
+                        }
+
                         // Dark/Light mode toggle for app UI
                         IconButton(onClick = {
                             val newDark = !isAppDark
@@ -278,6 +336,23 @@ fun LibraryScreen(
                         }
                     }
 
+                    // WebDAV 网盘浏览按钮
+                    val webDavClient = remember { WebDavClient(context) }
+                    IconButton(onClick = { showWebDavDialog = true }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Storage, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.webdav_title), modifier = Modifier.size(18.dp))
+                    }
+                    if (showWebDavDialog) {
+                        WebDavBrowserDialog(
+                            webDavClient = webDavClient,
+                            onDismiss = { showWebDavDialog = false },
+                            onBookImported = {
+                                coroutineScope.launch {
+                                    gridState.animateScrollToItem(0)
+                                }
+                            }
+                        )
+                    }
+
                     // Sync settings
                     var showSyncSettings by remember { mutableStateOf(false) }
                     IconButton(onClick = { showSyncSettings = true }, modifier = Modifier.size(32.dp)) {
@@ -382,6 +457,7 @@ fun LibraryScreen(
                     )
                 }
                 LazyVerticalGrid(
+                state = gridState,
                 columns = GridCells.Fixed(3),
                 contentPadding = PaddingValues(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
