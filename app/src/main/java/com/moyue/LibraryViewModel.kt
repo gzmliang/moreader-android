@@ -199,6 +199,22 @@ class LibraryViewModel(
         }
     }
 
+    /** 上传单本书到 WebDAV 网盘（含书签和高亮） */
+    fun uploadSingleBookToWebDav(context: Context, webDavClient: com.moyue.app.sync.WebDavClient, bookId: String) {
+        viewModelScope.launch {
+            val repo = BookRepository(context)
+            android.widget.Toast.makeText(context, "正在上传至 WebDAV...", android.widget.Toast.LENGTH_SHORT).show()
+            webDavClient.uploadBookWithMetadata(bookId, repo).fold(
+                onSuccess = { msg ->
+                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                },
+                onFailure = { e ->
+                    android.widget.Toast.makeText(context, "上传至 WebDAV 失败: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            )
+        }
+    }
+
     /** 上传单本书到云端（含书签和高亮），已在云端则跳过 */
     fun uploadSingleBook(context: Context, syncClient: SyncClient, bookId: String) {
         viewModelScope.launch {

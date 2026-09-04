@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moyue.app.sync.SyncClient
+import com.moyue.app.sync.WebDavClient
 import com.moyue.app.data.BookRepository
 import kotlinx.coroutines.launch
 import java.io.File
@@ -37,6 +38,7 @@ fun SyncSettingsDialog(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val webDavClient = remember { WebDavClient(context) }
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -51,8 +53,11 @@ fun SyncSettingsDialog(
     var isDeleting by remember { mutableStateOf<Int?>(null) }
     var confirmDeleteBookId by remember { mutableStateOf<Int?>(null) }
     var cloudSearchQuery by remember { mutableStateOf("") }
-    var loggedInVersion by remember { mutableStateOf(0) }  // 登录状态变更触发器
-    // 用本地状态跟踪登录状态，确保 UI 即时刷新
+    var loggedInVersion by remember { mutableStateOf(0) }
+    var showHelpDialog by remember { mutableStateOf(false) }
+
+    var defaultCloudTarget by remember { mutableStateOf(webDavClient.getDefaultCloudTarget()) }
+
     val localIsLoggedIn by remember { derivedStateOf { loggedInVersion >= 0 && syncClient.isLoggedIn() } }
     val localLoggedEmail by remember { derivedStateOf { syncClient.getEmail() } }
     val filteredCloudBooks = cloudBooks?.let { list ->
@@ -72,24 +77,77 @@ fun SyncSettingsDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Cloud, null, Modifier.size(24.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.app_name))
+                Text("云同步与上传设置", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                IconButton(onClick = { showHelpDialog = true }, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.HelpOutline, contentDescription = "帮助", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                }
             }
         },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                // ── 默认云端上传目标选择 ──
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("默认书籍上传目标", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = defaultCloudTarget == "MOYUE",
+                                onClick = {
+                                    defaultCloudTarget = "MOYUE"
+                                    webDavClient.setDefaultCloudTarget("MOYUE")
+                                }
+                            )
+                            Text("墨阅自建云 (同步进度)", fontSize = 12.sp, modifier = Modifier.clickable {
+                                defaultCloudTarget = "MOYUE"
+                                webDavClient.setDefaultCloudTarget("MOYUE")
+                            })
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = defaultCloudTarget == "WEBDAV",
+                                onClick = {
+                                    defaultCloudTarget = "WEBDAV"
+                                    webDavClient.setDefaultCloudTarget("WEBDAV")
+                                }
+                            )
+                            Text("WebDAV 网盘 (带书签)", fontSize = 12.sp, modifier = Modifier.clickable {
+                                defaultCloudTarget = "WEBDAV"
+                                webDavClient.setDefaultCloudTarget("WEBDAV")
+                            })
+                        }
+                        if (defaultCloudTarget == "WEBDAV") {
+                            val curUploadDir = webDavClient.getDefaultUploadDir()
+                            Text(
+                                if (curUploadDir.isBlank()) "当前目录：网盘根目录 (可在WebDAV浏览界面修改)" else "当前目录：$curUploadDir",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+
                 if (isLoggedIn) {
                     // ── 已登录状态 ──
                     Icon(Icons.Default.CheckCircle, null,
-                        modifier = Modifier.size(48.dp).align(Alignment.CenterHorizontally),
+                        modifier = Modifier.size(40.dp).align(Alignment.CenterHorizontally),
                         tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(6.dp))
                     Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_logged_in), fontWeight = FontWeight.Bold,
                         modifier = Modifier.align(Alignment.CenterHorizontally))
                     Text(loggedEmail ?: "",
                         modifier = Modifier.align(Alignment.CenterHorizontally),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), fontSize = 12.sp)
 
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(12.dp))
 
                     // 上传到云端
                     Button(
@@ -167,7 +225,7 @@ fun SyncSettingsDialog(
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(10.dp))
 
                     // 查看云端书库
                     OutlinedButton(
@@ -206,7 +264,6 @@ fun SyncSettingsDialog(
                             Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_cloud_shelf_empty), fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         } else {
-                            // 搜索框
                             OutlinedTextField(
                                 value = cloudSearchQuery,
                                 onValueChange = { cloudSearchQuery = it },
@@ -223,10 +280,6 @@ fun SyncSettingsDialog(
                                 modifier = Modifier.fillMaxWidth().height(48.dp),
                                 textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
                                 shape = RoundedCornerShape(8.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                                ),
                             )
                             Spacer(Modifier.height(6.dp))
                             val filteredList = filteredCloudBooks ?: list
@@ -243,7 +296,7 @@ fun SyncSettingsDialog(
                                 Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_no_match), fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                             } else {
-                                Column(modifier = Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState())) {
+                                Column(modifier = Modifier.heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
                                     filteredList.forEach { book ->
                                     Surface(
                                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
@@ -255,19 +308,16 @@ fun SyncSettingsDialog(
                                                         onSuccess = { file ->
                                                             val repo = BookRepository(context)
                                                             val localBook = repo.importEpubFile(file)
-                                                            // Re-extract cover from downloaded EPUB
                                                             val coverPath = repo.extractCover(localBook.id)
                                                             if (coverPath != null) {
                                                                 repo.updateBookCover(localBook.id, coverPath)
                                                             }
                                                             file.delete()
-                                                            // 拉取云端元数据（书签+高亮+进度）
                                                             var restoredBm = 0
                                                             var restoredHl = 0
                                                             syncClient.pullBookMetadata(book.id).onSuccess { metaJson ->
                                                                 try {
                                                                     val obj = org.json.JSONObject(metaJson)
-                                                                    // 书签
                                                                     if (obj.has("bookmarks")) {
                                                                         val arr = obj.getJSONArray("bookmarks")
                                                                         val bms = (0 until arr.length()).map { j ->
@@ -285,7 +335,6 @@ fun SyncSettingsDialog(
                                                                         repo.importBookmarks(bms)
                                                                         restoredBm = bms.size
                                                                     }
-                                                                    // 高亮
                                                                     if (obj.has("highlights")) {
                                                                         val arr = obj.getJSONArray("highlights")
                                                                         val hls = (0 until arr.length()).map { j ->
@@ -306,7 +355,6 @@ fun SyncSettingsDialog(
                                                                         repo.importHighlights(hls)
                                                                         restoredHl = hls.size
                                                                     }
-                                                                    // 进度
                                                                     if (obj.has("progress") && !obj.isNull("progress")) {
                                                                         val p = obj.getJSONObject("progress")
                                                                         val chIdx = p.optInt("chapter_index", -1)
@@ -341,13 +389,10 @@ fun SyncSettingsDialog(
                                         Row(verticalAlignment = Alignment.CenterVertically,
                                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
                                             if (isDownloading == book.id) {
-                                                CircularProgressIndicator(Modifier.size(12.dp),
-                                                    strokeWidth = 1.5.dp)
+                                                CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
                                                 Spacer(Modifier.width(4.dp))
                                             } else {
-                                                Icon(Icons.Default.Download, null,
-                                                    Modifier.size(12.dp),
-                                                    tint = MaterialTheme.colorScheme.primary)
+                                                Icon(Icons.Default.Download, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
                                                 Spacer(Modifier.width(4.dp))
                                             }
                                             Text("${book.title} (${book.author})",
@@ -356,10 +401,8 @@ fun SyncSettingsDialog(
                                                 maxLines = 1,
                                                 modifier = Modifier.weight(1f),
                                                 overflow = TextOverflow.Ellipsis)
-                                            // 删除按钮
                                             if (isDeleting == book.id) {
-                                                CircularProgressIndicator(Modifier.size(12.dp),
-                                                    strokeWidth = 1.5.dp)
+                                                CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
                                             } else {
                                                 IconButton(
                                                     onClick = { confirmDeleteBookId = book.id },
@@ -454,7 +497,6 @@ fun SyncSettingsDialog(
                             isLoggingIn = true
                             loginError = null
                             scope.launch {
-                                // Update server URL if changed
                                 context.getSharedPreferences("moreader_sync", Context.MODE_PRIVATE).edit()
                                     .putString("sync_server", serverUrl).apply()
                                 val result = syncClient.login(email, password)
@@ -489,6 +531,54 @@ fun SyncSettingsDialog(
         },
     )
 
+    // ── 帮助与详细教程弹窗 ──
+    if (showHelpDialog) {
+        AlertDialog(
+            onDismissRequest = { showHelpDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.HelpOutline, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(8.dp))
+                    Text("墨阅云端使用指南", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
+                    Text("一、两大云端的定位分工", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "1. 墨阅自建云（默认）：专用于多设备间实时同步阅读进度、书签和划线高亮。\n" +
+                        "2. WebDAV 网盘：适合作为海量电子书大仓库，支持百度网盘、夸克网盘、阿里云盘、坚果云、群晖 NAS 等。",
+                        fontSize = 12.sp, lineHeight = 18.sp
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+                    Text("二、什么是 AList？如何对接网盘？", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "AList 是一款非常强大的开源网盘聚合挂载神器（官网：alist.nn.ci）。\n\n" +
+                        "它可以将您的百度网盘、阿里云盘、夸克网盘集中挂载起来，并一键开启 WebDAV 协议。\n\n" +
+                        "• 填写规范：在墨阅地址栏填写「http://服务器IP:端口/dav」（注意后面必须带 /dav）并输入 AList 账号密码即可打通。\n" +
+                        "• 如需了解如何搭建 AList，可访问官方文档：https://alist.nn.ci/zh/guide/",
+                        fontSize = 12.sp, lineHeight = 18.sp
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+                    Text("三、书签与高亮同步保证", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "当您选择上传书籍到 WebDAV 网盘时，墨阅不仅会上传 EPUB 原文件，还会自动生成一份同名的伴侣元数据文件（.moreader.json）。\n\n" +
+                        "日后在任何手机从网盘下载该书时，墨阅会自动识别并完整还原该书的阅读进度、所有书签和划线笔记！",
+                        fontSize = 12.sp, lineHeight = 18.sp
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showHelpDialog = false }) { Text("我知道了") }
+            }
+        )
+    }
+
     // ── 确认删除云端书籍 ──
     confirmDeleteBookId?.let { bookId ->
         val book = cloudBooks?.find { it.id == bookId }
@@ -496,7 +586,7 @@ fun SyncSettingsDialog(
             onDismissRequest = { confirmDeleteBookId = null },
             title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_delete_confirm)) },
             text = {
-Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_delete_book_confirm, book?.title ?: ""))
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_delete_book_confirm, book?.title ?: ""))
             },
             confirmButton = {
                 Button(
@@ -507,7 +597,6 @@ Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_delete_b
                             syncClient.deleteCloudBook(bookId).fold(
                                 onSuccess = { msg ->
                                     android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-                                    // 刷新书库列表
                                     syncClient.listBooks().fold(
                                         onSuccess = { cloudBooks = it },
                                         onFailure = {},

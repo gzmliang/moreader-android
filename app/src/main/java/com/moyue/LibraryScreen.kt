@@ -479,14 +479,23 @@ fun LibraryScreen(
                         )
                     } else {
                         val book = item.localBook!!
+                        val webDavClientForUpload = remember { WebDavClient(context) }
                         BookCard(
                             book = book,
                             onClick = { onOpenBook(book.id) },
                             onDelete = { viewModel.deleteBook(context, book) },
                             onUploadToCloud = {
                                 val client = SyncClient(context)
-                                viewModel.uploadSingleBook(context, client, book.id)
+                                val target = webDavClientForUpload.getDefaultCloudTarget()
+                                if (target == "WEBDAV" && webDavClientForUpload.isConfigured()) {
+                                    viewModel.uploadSingleBookToWebDav(context, webDavClientForUpload, book.id)
+                                } else {
+                                    viewModel.uploadSingleBook(context, client, book.id)
+                                }
                             },
+                            onUploadToWebDav = if (webDavClientForUpload.isConfigured()) {
+                                { viewModel.uploadSingleBookToWebDav(context, webDavClientForUpload, book.id) }
+                            } else null
                         )
                     }
                 }
@@ -503,21 +512,39 @@ private fun BookCard(
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onUploadToCloud: () -> Unit = {},
+    onUploadToWebDav: (() -> Unit)? = null,
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
     if (showMenu) {
         AlertDialog(
             onDismissRequest = { showMenu = false },
-            title = { Text(book.title) },
-            text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.select_action)) },
-            confirmButton = {
-                TextButton(onClick = { showMenu = false; onUploadToCloud() }) {
-                    Icon(Icons.Default.CloudUpload, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_to_cloud))
+            title = { Text(book.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            text = {
+                Column {
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.select_action))
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { showMenu = false; onUploadToCloud() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.CloudUpload, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("上传至云端 (按默认目标)", modifier = Modifier.weight(1f))
+                    }
+                    if (onUploadToWebDav != null) {
+                        TextButton(
+                            onClick = { showMenu = false; onUploadToWebDav() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Storage, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("上传至 WebDAV 网盘 (带书签)", modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             },
+            confirmButton = {},
             dismissButton = {
                 Row {
                     TextButton(onClick = { showMenu = false }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel)) }

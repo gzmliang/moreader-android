@@ -4,11 +4,15 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Log
+import com.moyue.app.data.BookRepository
+import com.moyue.app.data.models.Book
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.File
@@ -28,6 +32,8 @@ class WebDavClient(private val context: Context) {
         private const val KEY_SERVER_URL = "webdav_server_url"
         private const val KEY_USER = "webdav_user"
         private const val KEY_PASSWORD = "webdav_password"
+        private const val KEY_DEFAULT_UPLOAD_DIR = "webdav_default_upload_dir"
+        private const val KEY_DEFAULT_CLOUD_TARGET = "sync_default_cloud_target" // "MOYUE" or "WEBDAV"
     }
 
     data class DavItem(
@@ -52,6 +58,17 @@ class WebDavClient(private val context: Context) {
     fun getPassword(): String = prefs.getString(KEY_PASSWORD, "") ?: ""
     fun isConfigured(): Boolean = getServerUrl().isNotBlank() && getUser().isNotBlank()
 
+    fun getDefaultUploadDir(): String = prefs.getString(KEY_DEFAULT_UPLOAD_DIR, "") ?: ""
+    fun setDefaultUploadDir(dir: String) {
+        prefs.edit().putString(KEY_DEFAULT_UPLOAD_DIR, dir).apply()
+    }
+
+    /** 默认上传目标：MOYUE (自建云) 或 WEBDAV (网盘) */
+    fun getDefaultCloudTarget(): String = prefs.getString(KEY_DEFAULT_CLOUD_TARGET, "MOYUE") ?: "MOYUE"
+    fun setDefaultCloudTarget(target: String) {
+        prefs.edit().putString(KEY_DEFAULT_CLOUD_TARGET, target).apply()
+    }
+
     fun saveConfig(url: String, user: String, pass: String) {
         prefs.edit()
             .putString(KEY_SERVER_URL, url.trim().trimEnd('/'))
@@ -65,6 +82,7 @@ class WebDavClient(private val context: Context) {
             .remove(KEY_SERVER_URL)
             .remove(KEY_USER)
             .remove(KEY_PASSWORD)
+            .remove(KEY_DEFAULT_UPLOAD_DIR)
             .apply()
     }
 
@@ -77,7 +95,7 @@ class WebDavClient(private val context: Context) {
     }
 
     /**
-     * 规范化构建请求的完整 URL，彻底解决多加 /dav 或拼错路径导致的 404
+     * 规范化构建请求的完整 URL
      */
     fun buildFullUrl(subPath: String): String {
         val base = getServerUrl().trimEnd('/')
@@ -104,7 +122,6 @@ class WebDavClient(private val context: Context) {
 
     /**
      * 列出目录内容 (PROPFIND Depth: 1)
-     * @param subPath 相对路径，例如 "" 或 "/dav/media" 或 "media"
      */
     suspend fun listFiles(subPath: String = ""): Result<List<DavItem>> = withContext(Dispatchers.IO) {
         try {
@@ -168,12 +185,34 @@ class WebDavClient(private val context: Context) {
     }
 
     /**
-     * 上传文件到 WebDAV (PUT)
+     * 获取 WebDAV 上的文本内容（如伴侣元数据 JSON）
      */
-    suspend fun uploadFile(subPath: String, file: File): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun getTextFile(remoteItemPath: String): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val targetUrl = buildFullUrl(subPath)
+            val fullUrl = buildFullUrl(remoteItemPath)
+            val req = Request.Builder()
+                .url(fullUrl)
+                .get()
+                .addHeader("Authorization", getAuthHeader())
+                .build()
 
+            val resp = client.newCall(req).execute()
+            if (resp.isSuccessful) {
+                Result.success(resp.body?.string() ?: "")
+            } else {
+                Result.failure(Exception("HTTP ${resp.code}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 上传二进制文件到 WebDAV (PUT)
+     */
+    suspend fun uploadFile(remotePath: String, file: File): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val targetUrl = buildFullUrl(remotePath)
             val req = Request.Builder()
                 .url(targetUrl)
                 .put(file.asRequestBody())
@@ -188,6 +227,101 @@ class WebDavClient(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "WebDAV upload failed", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 上传文本内容（如伴侣元数据 JSON）到 WebDAV (PUT)
+     */
+    suspend fun uploadText(remotePath: String, content: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val targetUrl = buildFullUrl(remotePath)
+            val req = Request.Builder()
+                .url(targetUrl)
+                .put(content.toRequestBody())
+                .addHeader("Authorization", getAuthHeader())
+                .build()
+
+            val resp = client.newCall(req).execute()
+            if (resp.isSuccessful || resp.code == 201 || resp.code == 204) {
+                Result.success("上传成功")
+            } else {
+                Result.failure(Exception("HTTP " + resp.code))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 将电子书及所有元数据（书签、高亮、进度）打包上传至 WebDAV 指定目录
+     */
+    suspend fun uploadBookWithMetadata(
+        bookId: String,
+        repo: BookRepository,
+        destDirectory: String = getDefaultUploadDir()
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val book = repo.getBook(bookId) ?: return@withContext Result.failure(Exception("找不到本地书籍"))
+            val localFile = File(book.filePath)
+            if (!localFile.exists()) return@withContext Result.failure(Exception("EPUB 文件不存在"))
+
+            val dir = if (destDirectory.isBlank()) "" else destDirectory.trimEnd('/')
+            val epubRemotePath = if (dir.isBlank()) "${book.title}.epub" else "$dir/${book.title}.epub"
+            val metaRemotePath = if (dir.isBlank()) "${book.title}.moreader.json" else "$dir/${book.title}.moreader.json"
+
+            // 1. 上传 EPUB 文件
+            val epubRes = uploadFile(epubRemotePath, localFile)
+            if (epubRes.isFailure) {
+                return@withContext Result.failure(epubRes.exceptionOrNull() ?: Exception("上传 EPUB 失败"))
+            }
+
+            // 2. 生成伴侣元数据 JSON
+            val bookmarks = repo.getBookmarksOnce(bookId)
+            val highlights = repo.getHighlightsOnce(bookId)
+
+            val metaJson = JSONObject().apply {
+                put("title", book.title)
+                put("author", book.author)
+                put("progress", JSONObject().apply {
+                    put("chapter_index", book.currentChapterIndex)
+                    put("chapter_href", book.currentChapterHref ?: "")
+                    put("paragraph_index", book.currentParagraphIndex)
+                    put("percentage", book.currentProgress)
+                })
+                put("bookmarks", JSONArray(bookmarks.map { bm ->
+                    JSONObject().apply {
+                        put("chapter_index", bm.chapterIndex)
+                        put("chapter_title", bm.chapterTitle ?: "")
+                        put("paragraph_index", bm.paragraphIndex)
+                        put("paragraph_text", bm.paragraphText ?: "")
+                        put("progress", bm.progress)
+                        put("created_at", bm.createdAt)
+                    }
+                }))
+                put("highlights", JSONArray(highlights.map { hl ->
+                    JSONObject().apply {
+                        put("chapter_index", hl.chapterIndex)
+                        put("start_paragraph", hl.startParagraph)
+                        put("start_offset", hl.startOffset)
+                        put("end_paragraph", hl.endParagraph)
+                        put("end_offset", hl.endOffset)
+                        put("text", hl.text)
+                        put("note", hl.note ?: "")
+                        put("color", hl.color)
+                        put("created_at", hl.createdAt)
+                    }
+                }))
+            }
+
+            // 3. 上传伴侣元数据 JSON
+            uploadText(metaRemotePath, metaJson.toString(2))
+
+            val countMsg = "${bookmarks.size}个书签，${highlights.size}处高亮"
+            Result.success("已上传至 WebDAV ($countMsg)")
+        } catch (e: Exception) {
+            Log.e(TAG, "uploadBookWithMetadata failed", e)
             Result.failure(e)
         }
     }
@@ -249,7 +383,6 @@ class WebDavClient(private val context: Context) {
                     }
                     XmlPullParser.END_TAG -> {
                         if (tag == "response") {
-                            // 解码 href
                             val decodedHref = try {
                                 URLDecoder.decode(currentHref, "UTF-8")
                             } catch (e: Exception) {
