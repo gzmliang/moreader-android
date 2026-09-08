@@ -26,13 +26,23 @@ class SyncClient(private val context: Context) {
         private const val KEY_TOKEN = "sync_token"
         private const val KEY_EMAIL = "sync_email"
         private const val KEY_PASSWORD = "sync_password"
-        private const val DEFAULT_SERVER = "http://powerplus.blogsyte.com:5001"
+        private const val DEFAULT_SERVER = "http://p-plus.duckdns.org:5001"
+        private const val FALLBACK_SERVER = "http://powerplus.blogsyte.com:5001"
 
         private val JSON_MEDIA = "application/json".toMediaType()
     }
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+
+    private fun getCandidateServerUrls(): List<String> {
+        val current = getServerUrl().trimEnd('/')
+        return if (current == DEFAULT_SERVER || current == FALLBACK_SERVER) {
+            listOf(DEFAULT_SERVER, FALLBACK_SERVER)
+        } else {
+            listOf(current)
+        }
+    }
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -75,46 +85,53 @@ class SyncClient(private val context: Context) {
         auth: Boolean = true,
         canRetryAuth: Boolean = true,
     ): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            val url = getServerUrl().trimEnd('/') + path
-            val req = Request.Builder().url(url).method(method, body?.toRequestBody(JSON_MEDIA))
-            if (auth) {
-                var token = getToken()
-                if (token == null) {
-                    // 尝试用保存的密码静默重新登录
+        var lastException: Exception? = null
+        for (server in getCandidateServerUrls()) {
+            try {
+                val url = server.trimEnd('/') + path
+                val req = Request.Builder().url(url).method(method, body?.toRequestBody(JSON_MEDIA))
+                if (auth) {
+                    var token = getToken()
+                    if (token == null) {
+                        // 尝试用保存的密码静默重新登录
+                        val email = getEmail()
+                        val pass = getSavedPassword()
+                        if (!email.isNullOrBlank() && !pass.isNullOrBlank()) {
+                            val reloginResult = login(email, pass)
+                            token = reloginResult.getOrNull()
+                        }
+                    }
+                    if (token == null) return@withContext Result.failure(Exception("未登录"))
+                    req.addHeader("Authorization", "Bearer $token")
+                }
+                val resp = client.newCall(req.build()).execute()
+                val respBody = resp.body?.string() ?: ""
+
+                // 如果遇到 401 Unauthorized 且支持重试，尝试静默重新登录一次
+                if (resp.code == 401 && auth && canRetryAuth) {
                     val email = getEmail()
                     val pass = getSavedPassword()
                     if (!email.isNullOrBlank() && !pass.isNullOrBlank()) {
-                        val reloginResult = login(email, pass)
-                        token = reloginResult.getOrNull()
+                        val relogin = login(email, pass)
+                        if (relogin.isSuccess) {
+                            return@withContext api(method, path, body, auth, canRetryAuth = false)
+                        }
                     }
                 }
-                if (token == null) return@withContext Result.failure(Exception("未登录"))
-                req.addHeader("Authorization", "Bearer $token")
-            }
-            val resp = client.newCall(req.build()).execute()
-            val respBody = resp.body?.string() ?: ""
 
-            // 如果遇到 401 Unauthorized 且支持重试，尝试静默重新登录一次
-            if (resp.code == 401 && auth && canRetryAuth) {
-                val email = getEmail()
-                val pass = getSavedPassword()
-                if (!email.isNullOrBlank() && !pass.isNullOrBlank()) {
-                    val relogin = login(email, pass)
-                    if (relogin.isSuccess) {
-                        return@withContext api(method, path, body, auth, canRetryAuth = false)
-                    }
+                if (resp.isSuccessful) {
+                    return@withContext Result.success(respBody)
+                } else if (resp.code in 500..599) {
+                    lastException = Exception("HTTP ${resp.code}: $respBody")
+                    continue
+                } else {
+                    return@withContext Result.failure(Exception("HTTP ${resp.code}: $respBody"))
                 }
+            } catch (e: Exception) {
+                lastException = e
             }
-
-            if (resp.isSuccessful) {
-                Result.success(respBody)
-            } else {
-                Result.failure(Exception("HTTP ${resp.code}: $respBody"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
         }
+        Result.failure(lastException ?: Exception("Network request failed"))
     }
 
     // ── 登录 ──────────────────────────────────────────
@@ -158,37 +175,44 @@ class SyncClient(private val context: Context) {
 
     // ── 上传书籍 ──────────────────────────────────────
     suspend fun uploadBook(bookId: String): Result<Int> = withContext(Dispatchers.IO) {
-        try {
-            val book = com.moyue.app.data.BookDatabase.getInstance(context)
-                .bookDao().getBook(bookId) ?: return@withContext Result.failure(Exception("找不到书籍"))
-            val file = File(book.filePath)
-            if (!file.exists()) return@withContext Result.failure(Exception("文件不存在"))
+        val book = com.moyue.app.data.BookDatabase.getInstance(context)
+            .bookDao().getBook(bookId) ?: return@withContext Result.failure(Exception("找不到书籍"))
+        val file = File(book.filePath)
+        if (!file.exists()) return@withContext Result.failure(Exception("文件不存在"))
 
-            val url = "${getServerUrl().trimEnd('/')}/sync/books/upload"
-            val body = MultipartBody.Builder()
-                .setType(MultipartBody.FORM)
-                .addFormDataPart("file", "${book.title}.epub",
-                    file.asRequestBody("application/epub+zip".toMediaType()))
-                .addFormDataPart("title", book.title)
-                .addFormDataPart("author", book.author)
-                .build()
-            val req = Request.Builder().url(url)
-                .addHeader("Authorization", "Bearer ${getToken() ?: ""}")
-                .post(body)
-                .build()
-            val resp = client.newCall(req).execute()
-            val respBody = resp.body?.string() ?: ""
-            if (resp.isSuccessful) {
-                val serverId = JSONObject(respBody).optInt("id", -1)
-                Log.i("Sync", "上传成功: ${book.title} (server_id=$serverId)")
-                Result.success(serverId)
-            } else {
-                Result.failure(Exception("HTTP ${resp.code}: $respBody"))
+        var lastException: Exception? = null
+        for (server in getCandidateServerUrls()) {
+            try {
+                val url = "${server.trimEnd('/')}/sync/books/upload"
+                val body = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("file", "${book.title}.epub",
+                        file.asRequestBody("application/epub+zip".toMediaType()))
+                    .addFormDataPart("title", book.title)
+                    .addFormDataPart("author", book.author)
+                    .build()
+                val req = Request.Builder().url(url)
+                    .addHeader("Authorization", "Bearer ${getToken() ?: ""}")
+                    .post(body)
+                    .build()
+                val resp = client.newCall(req).execute()
+                val respBody = resp.body?.string() ?: ""
+                if (resp.isSuccessful) {
+                    val serverId = JSONObject(respBody).optInt("id", -1)
+                    Log.i("Sync", "上传成功: ${book.title} (server_id=$serverId)")
+                    return@withContext Result.success(serverId)
+                } else if (resp.code in 500..599) {
+                    lastException = Exception("HTTP ${resp.code}: $respBody")
+                    continue
+                } else {
+                    return@withContext Result.failure(Exception("HTTP ${resp.code}: $respBody"))
+                }
+            } catch (e: Exception) {
+                lastException = e
             }
-        } catch (e: Exception) {
-            Log.e("Sync", "上传失败", e)
-            Result.failure(e)
         }
+        Log.e("Sync", "上传失败", lastException)
+        Result.failure(lastException ?: Exception("上传失败"))
     }
 
     /** 上传书籍 + 推送元数据（书签+高亮+进度）一步完成 */
@@ -208,23 +232,28 @@ class SyncClient(private val context: Context) {
     }
 
     suspend fun downloadBook(bookId: Int, destFile: File): Result<File> = withContext(Dispatchers.IO) {
-        try {
-            val url = "${getServerUrl().trimEnd('/')}/sync/books/$bookId/download"
-            val req = Request.Builder().url(url)
-                .addHeader("Authorization", "Bearer ${getToken() ?: ""}")
-                .build()
-            val resp = client.newCall(req).execute()
-            if (!resp.isSuccessful) {
-                return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+        var lastException: Exception? = null
+        for (server in getCandidateServerUrls()) {
+            try {
+                val url = "${server.trimEnd('/')}/sync/books/$bookId/download"
+                val req = Request.Builder().url(url)
+                    .addHeader("Authorization", "Bearer ${getToken() ?: ""}")
+                    .build()
+                val resp = client.newCall(req).execute()
+                if (!resp.isSuccessful) {
+                    lastException = Exception("HTTP ${resp.code}")
+                    continue
+                }
+                val body = resp.body ?: continue
+                val bytes = body.bytes()
+                FileOutputStream(destFile).use { it.write(bytes) }
+                android.util.Log.i("Sync", "下载书籍: ${destFile.name} (${bytes.size} bytes)")
+                return@withContext Result.success(destFile)
+            } catch (e: Exception) {
+                lastException = e
             }
-            val body = resp.body ?: return@withContext Result.failure(Exception("空响应"))
-            val bytes = body.bytes()
-            FileOutputStream(destFile).use { it.write(bytes) }
-            android.util.Log.i("Sync", "下载书籍: ${destFile.name} (${bytes.size} bytes)")
-            Result.success(destFile)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
+        Result.failure(lastException ?: Exception("下载失败"))
     }
 
     suspend fun deleteCloudBook(bookId: Int): Result<String> = withContext(Dispatchers.IO) {

@@ -49,6 +49,34 @@ class EdgeTTSProvider(
         return json.toString().toRequestBody("application/json".toMediaType())
     }
 
+    private fun getCandidateEndpoints(): List<String> {
+        val clean = endpoint.removeSuffix("/")
+        val defaultServer = "http://p-plus.duckdns.org:5001"
+        val fallbackServer = "http://powerplus.blogsyte.com:5001"
+        return if (clean == defaultServer || clean == fallbackServer) {
+            listOf(clean, if (clean == defaultServer) fallbackServer else defaultServer)
+        } else {
+            listOf(clean)
+        }
+    }
+
+    private fun executeWithFallback(path: String, body: RequestBody): Response? {
+        for (ep in getCandidateEndpoints()) {
+            try {
+                val req = Request.Builder()
+                    .url("$ep/$path")
+                    .post(body)
+                    .apply { if (apiKey.isNotEmpty()) addHeader("X-API-Key", apiKey) }
+                    .build()
+                val resp = client.newCall(req).execute()
+                if (resp.isSuccessful) return resp
+            } catch (e: Exception) {
+                // try next candidate
+            }
+        }
+        return null
+    }
+
     private fun newRequest(path: String, body: RequestBody): Request =
         Request.Builder()
             .url("${endpoint.removeSuffix("/")}/$path")
@@ -65,8 +93,7 @@ class EdgeTTSProvider(
             val needsBounds = hasMultipleSentences(text)
             val apiPath = if (needsBounds) "tts_with_boundaries" else "tts"
             val body = makeJsonBody(text, rate)
-            val response = client.newCall(newRequest(apiPath, body)).execute()
-            if (!response.isSuccessful) return null
+            val response = executeWithFallback(apiPath, body) ?: return null
             val audio = response.body?.bytes() ?: return null
             val boundaries = if (needsBounds) {
                 parseWordBoundaries(response.header("X-Word-Boundaries") ?: "")
@@ -82,8 +109,7 @@ class EdgeTTSProvider(
     suspend fun fetchAudioWithBoundaries(text: String, rate: Float = 1.0f): PreloadResult? {
         return try {
             val body = makeJsonBody(text, rate)
-            val response = client.newCall(newRequest("tts_with_boundaries", body)).execute()
-            if (!response.isSuccessful) return null
+            val response = executeWithFallback("tts_with_boundaries", body) ?: return null
             val audio = response.body?.bytes() ?: return null
             val boundaries = parseWordBoundaries(response.header("X-Word-Boundaries") ?: "")
             PreloadResult(audio, boundaries)
@@ -97,8 +123,7 @@ class EdgeTTSProvider(
     suspend fun fetchBoundariesOnly(text: String, rate: Float): List<WordBoundary> {
         return try {
             val body = makeJsonBody(text, rate)
-            val response = client.newCall(newRequest("tts_boundaries_only", body)).execute()
-            if (!response.isSuccessful) return emptyList()
+            val response = executeWithFallback("tts_boundaries_only", body) ?: return emptyList()
             val json = response.body?.string() ?: "{}"
             val arr = org.json.JSONObject(json).optJSONArray("words") ?: return emptyList()
             parseWordBoundaries(arr.toString())
@@ -117,24 +142,59 @@ class EdgeTTSProvider(
         val apiPath = if (needsBounds) "tts_with_boundaries" else "tts"
         val body = makeJsonBody(text, rate)
 
-        currentCall = client.newCall(newRequest(apiPath, body))
-        currentCall?.enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                if (!call.isCanceled()) listener.onError("Edge TTS connection failed: ${e.message}")
+        val candidates = getCandidateEndpoints()
+        fun tryCall(idx: Int) {
+            if (idx >= candidates.size) {
+                listener.onError("Edge TTS all endpoints failed")
+                return
             }
-            override fun onResponse(call: Call, response: Response) {
-                if (!response.isSuccessful) { listener.onError("Edge TTS HTTP ${response.code}"); return }
-                val blob = response.body?.bytes() ?: run { listener.onError("Empty response"); return }
-
-                // Parse word boundaries BEFORE onStart (时序要求!)
-                if (needsBounds) {
-                    val wb = parseWordBoundaries(response.header("X-Word-Boundaries") ?: "")
-                    if (wb.isNotEmpty()) listener.onWordBoundaries(wb)
+            val ep = candidates[idx]
+            val req = Request.Builder()
+                .url("$ep/$apiPath")
+                .post(body)
+                .apply { if (apiKey.isNotEmpty()) addHeader("X-API-Key", apiKey) }
+                .build()
+            val call = client.newCall(req)
+            currentCall = call
+            call.enqueue(object : Callback {
+                override fun onFailure(c: Call, e: IOException) {
+                    if (!c.isCanceled()) {
+                        if (idx + 1 < candidates.size) {
+                            tryCall(idx + 1)
+                        } else {
+                            listener.onError("Edge TTS connection failed: ${e.message}")
+                        }
+                    }
                 }
-                listener.onStart()
-                playAudio(blob, listener)
-            }
-        })
+                override fun onResponse(c: Call, response: Response) {
+                    if (!response.isSuccessful) {
+                        if (idx + 1 < candidates.size) {
+                            tryCall(idx + 1)
+                        } else {
+                            listener.onError("Edge TTS HTTP ${response.code}")
+                        }
+                        return
+                    }
+                    val blob = response.body?.bytes() ?: run {
+                        if (idx + 1 < candidates.size) {
+                            tryCall(idx + 1)
+                        } else {
+                            listener.onError("Empty response")
+                        }
+                        return
+                    }
+
+                    // Parse word boundaries BEFORE onStart (时序要求!)
+                    if (needsBounds) {
+                        val wb = parseWordBoundaries(response.header("X-Word-Boundaries") ?: "")
+                        if (wb.isNotEmpty()) listener.onWordBoundaries(wb)
+                    }
+                    listener.onStart()
+                    playAudio(blob, listener)
+                }
+            })
+        }
+        tryCall(0)
     }
 
     /**

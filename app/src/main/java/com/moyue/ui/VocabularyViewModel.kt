@@ -208,7 +208,7 @@ class VocabularyViewModel(
                             return@withContext
                         }
                         TTSProviderType.EDGE_TTS -> {
-                            val endpoint = prefs.getString("edge_endpoint", "http://powerplus.blogsyte.com:5001") ?: "http://powerplus.blogsyte.com:5001"
+                            val endpoint = prefs.getString("edge_endpoint", "http://p-plus.duckdns.org:5001") ?: "http://p-plus.duckdns.org:5001"
                             var voice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural"
                             val isChinese = word.any { it in '一'..'鿿' }
                             if (isChinese && !voice.startsWith("zh-")) voice = "zh-CN-XiaoxiaoNeural"
@@ -277,23 +277,37 @@ class VocabularyViewModel(
     }
 
     private suspend fun fetchEdgeTTS(endpoint: String, voice: String, apiKey: String, text: String): ByteArray? {
-        return try {
-            val json = JSONObject().apply {
-                put("text", text)
-                put("voice", voice)
-                put("rate", "+0%")
-                put("pitch", "+0Hz")
-            }
-            val body = json.toString().toRequestBody("application/json".toMediaType())
-            val request = Request.Builder()
-                .url("${endpoint.removeSuffix("/")}/tts")
-                .post(body)
-                .apply { if (apiKey.isNotEmpty()) addHeader("X-API-Key", apiKey) }
-                .build()
-            val client = OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful) response.body?.bytes() else null
-        } catch (e: Exception) { null }
+        val clean = endpoint.removeSuffix("/")
+        val defaultServer = "http://p-plus.duckdns.org:5001"
+        val fallbackServer = "http://powerplus.blogsyte.com:5001"
+        val endpointsToTry = if (clean == defaultServer || clean == fallbackServer) {
+            listOf(clean, if (clean == defaultServer) fallbackServer else defaultServer)
+        } else {
+            listOf(clean)
+        }
+        val client = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
+        val json = JSONObject().apply {
+            put("text", text)
+            put("voice", voice)
+            put("rate", "+0%")
+            put("pitch", "+0Hz")
+        }
+        val body = json.toString().toRequestBody("application/json".toMediaType())
+        for (ep in endpointsToTry) {
+            try {
+                val request = Request.Builder()
+                    .url("$ep/tts")
+                    .post(body)
+                    .apply { if (apiKey.isNotEmpty()) addHeader("X-API-Key", apiKey) }
+                    .build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val bytes = response.body?.bytes()
+                    if (bytes != null && bytes.isNotEmpty()) return bytes
+                }
+            } catch (e: Exception) {}
+        }
+        return null
     }
 
     private suspend fun fetchCustomTTS(endpoint: String, apiKey: String, model: String, voice: String, text: String): ByteArray? {
