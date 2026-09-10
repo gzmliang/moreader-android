@@ -107,65 +107,77 @@ fun SummaryTabContent(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Controls Header
+        // 精简大气 Controls Header
         Surface(
-            color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-                .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp)) else Modifier)
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+                .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(12.dp)) else Modifier)
         ) {
-            Column(modifier = Modifier.padding(8.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 // Row 1: Scope & Ratio & Cached Badge
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Scope Selector
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(
-                            selected = (selectedScope == "chapter"),
-                            onClick = { selectedScope = "chapter" },
-                            label = { Text(stringResource(R.string.ai_scope_chapter), fontSize = 12.sp) }
-                        )
-                        FilterChip(
-                            selected = (selectedScope == "book"),
-                            onClick = { selectedScope = "book" },
-                            label = { Text(stringResource(R.string.ai_scope_book), fontSize = 12.sp) }
-                        )
+                    // Scope Selector (紧凑切换)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(
+                            "chapter" to stringResource(R.string.ai_scope_chapter),
+                            "book" to stringResource(R.string.ai_scope_book)
+                        ).forEach { (sKey, sLabel) ->
+                            val isSelected = (selectedScope == sKey)
+                            Text(
+                                text = sLabel,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier
+                                    .background(
+                                        if (isSelected) (if (isEink) Color.Black else MaterialTheme.colorScheme.primary)
+                                        else (if (isEink) Color.White else MaterialTheme.colorScheme.surface),
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .then(if (isEink && !isSelected) Modifier.border(1.dp, Color.Black, RoundedCornerShape(6.dp)) else Modifier)
+                                    .clickable { selectedScope = sKey }
+                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                color = if (isSelected) Color.White else (if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface)
+                            )
+                        }
                     }
 
-                    // Ratio Slider/Indicator
+                    // Ratio Selector (扁平精致胶囊)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "${stringResource(R.string.ai_summary_ratio_label)}: ${ratio}%",
+                            text = "${ratio}%",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
+                            color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(end = 6.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        // Quick ratio buttons
                         listOf(20, 30, 50).forEach { r ->
+                            val isSelected = (ratio == r)
                             Text(
                                 text = "${r}%",
                                 fontSize = 11.sp,
                                 modifier = Modifier
-                                    .padding(horizontal = 3.dp)
+                                    .padding(horizontal = 2.dp)
                                     .background(
-                                        if (ratio == r) (if (isEink) Color.Black else MaterialTheme.colorScheme.primary)
-                                        else (if (isEink) Color.LightGray else MaterialTheme.colorScheme.surfaceVariant),
+                                        if (isSelected) (if (isEink) Color.Black else MaterialTheme.colorScheme.primary)
+                                        else (if (isEink) Color.LightGray.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface),
                                         RoundedCornerShape(4.dp)
                                     )
                                     .clickable { ratio = r }
-                                    .padding(horizontal = 5.dp, vertical = 2.dp),
-                                color = if (ratio == r) Color.White else Color.Black
+                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                                color = if (isSelected) Color.White else Color.Black
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Row 2: Display Mode & Action Buttons
                 Row(
@@ -174,33 +186,38 @@ fun SummaryTabContent(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     // Display Mode Chips
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         val modes = listOf(
                             "bilingual" to stringResource(R.string.ai_display_mode_bilingual),
                             "orig" to stringResource(R.string.ai_display_mode_original),
                             "target" to stringResource(R.string.ai_display_mode_target)
                         )
                         modes.forEach { (m, label) ->
+                            val isSelected = (displayMode == m)
                             Text(
                                 text = label,
                                 fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                                 modifier = Modifier
                                     .background(
-                                        if (displayMode == m) (if (isEink) Color.Black else MaterialTheme.colorScheme.primary)
+                                        if (isSelected) (if (isEink) Color.Black else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
                                         else (if (isEink) Color.White else MaterialTheme.colorScheme.surface),
-                                        RoundedCornerShape(4.dp)
+                                        RoundedCornerShape(6.dp)
                                     )
-                                    .then(if (isEink && displayMode != m) Modifier.border(1.dp, Color.Black, RoundedCornerShape(4.dp)) else Modifier)
+                                    .then(if (isSelected && !isEink) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp)) else Modifier)
+                                    .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(6.dp)) else Modifier)
                                     .clickable { displayMode = m }
-                                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                                color = if (displayMode == m) Color.White else (if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = if (isSelected) (if (isEink) Color.White else MaterialTheme.colorScheme.primary)
+                                        else (if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface)
                             )
                         }
                     }
 
-                    // Listen & Save to Library
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Listen & Save to Bookshelf
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (summaryResult != null) {
+                            // Listen button
                             Text(
                                 text = if (isPlayingAudio) stringResource(R.string.ai_stop_listen_btn) else stringResource(R.string.ai_play_listen_btn),
                                 fontSize = 11.sp,
@@ -208,17 +225,18 @@ fun SummaryTabContent(
                                 modifier = Modifier
                                     .background(
                                         if (isPlayingAudio) Color(0xFFEF4444) else (if (isEink) Color.White else Color(0xFF10B981)),
-                                        RoundedCornerShape(4.dp)
+                                        RoundedCornerShape(6.dp)
                                     )
-                                    .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(4.dp)) else Modifier)
+                                    .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(6.dp)) else Modifier)
                                     .clickable {
                                         if (!isPlayingAudio) showAudioDialog = true
                                         else toggleAudio()
                                     }
-                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
                                 color = if (isPlayingAudio) Color.White else (if (isEink) Color.Black else Color.White)
                             )
 
+                            // Save to bookshelf button
                             val badgeText = stringResource(R.string.ai_summary_badge_text)
                             val bookSuffix = stringResource(R.string.ai_summary_book_suffix)
                             val chapterSuffix = stringResource(R.string.ai_summary_chapter_suffix)
@@ -228,9 +246,10 @@ fun SummaryTabContent(
                             Text(
                                 text = stringResource(R.string.ai_save_to_library_btn),
                                 fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
                                 modifier = Modifier
-                                    .background(if (isEink) Color.White else MaterialTheme.colorScheme.secondary, RoundedCornerShape(4.dp))
-                                    .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(4.dp)) else Modifier)
+                                    .background(if (isEink) Color.White else MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp))
+                                    .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(6.dp)) else Modifier)
                                     .clickable {
                                         scope.launch {
                                             val res = SummaryBookSaver.saveSummaryAsBook(
@@ -247,8 +266,8 @@ fun SummaryTabContent(
                                             )
                                         }
                                     }
-                                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSecondary
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     }
@@ -256,17 +275,17 @@ fun SummaryTabContent(
             }
         }
 
-        // Cache badge or status
+        // Cache badge or regenerate bar
         if (summaryResult != null) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stringResource(R.string.ai_cached_badge),
+                    text = "⚡ " + stringResource(R.string.ai_cached_badge),
                     fontSize = 11.sp,
                     color = if (isEink) Color.Black else Color(0xFF10B981),
                     fontWeight = FontWeight.SemiBold
@@ -276,6 +295,7 @@ fun SummaryTabContent(
                     text = stringResource(R.string.ai_regenerate_btn),
                     fontSize = 11.sp,
                     color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
                     modifier = Modifier.clickable {
                         isLoading = true
                         errorMessage = null
@@ -303,12 +323,12 @@ fun SummaryTabContent(
             }
         }
 
-        // Content Area
+        // Content Area (全屏呼吸感正文区域)
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp)
+                .padding(horizontal = 16.dp)
         ) {
             when {
                 isLoading -> {
@@ -316,11 +336,15 @@ fun SummaryTabContent(
                         modifier = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        CircularProgressIndicator(color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.height(12.dp))
+                        CircularProgressIndicator(
+                            strokeWidth = 3.dp,
+                            color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
                         Text(
                             text = stringResource(R.string.ai_generating),
                             fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
                             color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -341,17 +365,26 @@ fun SummaryTabContent(
                     val result = summaryResult!!
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(vertical = 10.dp)
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp)
                     ) {
                         if (result.title.isNotBlank()) {
                             item {
-                                Text(
-                                    text = result.title,
-                                    fontSize = (textSizeSp + 4).sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(bottom = 12.dp)
-                                )
+                                Surface(
+                                    color = if (isEink) Color.Transparent else MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 14.dp)
+                                ) {
+                                    Text(
+                                        text = result.title,
+                                        fontSize = (textSizeSp + 4).sp,
+                                        fontWeight = FontWeight.Bold,
+                                        lineHeight = (textSizeSp * 1.5f + 4).sp,
+                                        color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                                    )
+                                }
                             }
                         }
 
@@ -362,7 +395,7 @@ fun SummaryTabContent(
                                 textSizeSp = textSizeSp,
                                 isEink = isEink
                             )
-                            Spacer(modifier = Modifier.height(14.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
                         }
                     }
                 }
@@ -376,7 +409,7 @@ fun SummaryTabContent(
                             fontSize = 14.sp,
                             color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = {
                                 isLoading = true
@@ -401,10 +434,11 @@ fun SummaryTabContent(
                                     )
                                 }
                             },
+                            shape = RoundedCornerShape(8.dp),
                             colors = if (isEink) ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
                             else ButtonDefaults.buttonColors()
                         ) {
-                            Text(stringResource(R.string.ai_generate_btn))
+                            Text(stringResource(R.string.ai_generate_btn), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -465,38 +499,41 @@ private fun ParagraphItem(
     textSizeSp: Float,
     isEink: Boolean
 ) {
-    Column(
+    Surface(
+        color = if (isEink) Color.White else MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(8.dp),
+        shadowElevation = if (isEink) 0.dp else 0.5.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (isEink) Modifier
-                    .border(1.dp, Color.Black, RoundedCornerShape(6.dp))
-                    .padding(8.dp)
-                else Modifier
-            )
+            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp)) else Modifier)
     ) {
-        // Original text
-        if ((displayMode == "bilingual" || displayMode == "orig") && paragraph.original.isNotBlank()) {
-            Text(
-                text = paragraph.original,
-                fontSize = textSizeSp.sp,
-                fontWeight = if (isEink) FontWeight.Bold else FontWeight.Medium,
-                lineHeight = (textSizeSp * 1.55f).sp,
-                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
-            )
-        }
-
-        // Translation text
-        if ((displayMode == "bilingual" || displayMode == "target") && paragraph.translation.isNotBlank()) {
-            if (displayMode == "bilingual") {
-                Spacer(modifier = Modifier.height(4.dp))
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Original text
+            if ((displayMode == "bilingual" || displayMode == "orig") && paragraph.original.isNotBlank()) {
+                Text(
+                    text = paragraph.original,
+                    fontSize = textSizeSp.sp,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = (textSizeSp * 1.6f).sp,
+                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                )
             }
-            Text(
-                text = paragraph.translation,
-                fontSize = (textSizeSp * 0.92f).sp,
-                lineHeight = (textSizeSp * 1.5f).sp,
-                color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+
+            // Translation text
+            if ((displayMode == "bilingual" || displayMode == "target") && paragraph.translation.isNotBlank()) {
+                if (displayMode == "bilingual" && paragraph.original.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HorizontalDivider(color = if (isEink) Color.LightGray else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                Text(
+                    text = paragraph.translation,
+                    fontSize = (textSizeSp * 0.94f).sp,
+                    fontWeight = FontWeight.Normal,
+                    lineHeight = (textSizeSp * 1.55f).sp,
+                    color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

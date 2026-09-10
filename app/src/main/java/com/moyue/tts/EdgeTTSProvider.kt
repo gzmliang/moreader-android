@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 
 class EdgeTTSProvider(
     private val endpoint: String,
-    private val voice: String = "zh-CN-XiaoxiaoNeural",
+    val voice: String = "zh-CN-XiaoxiaoNeural",
     private val rate: String = "+0%",
     private val pitch: String = "+0Hz",
     private val apiKey: String = "",

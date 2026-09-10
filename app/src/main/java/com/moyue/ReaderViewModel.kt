@@ -809,15 +809,30 @@ class ReaderViewModel(
     // ===== TTS =====
 
     /** Get or create provider — only re-create when provider TYPE changes */
-    private fun recreateProvider(): TTSProvider? {
+    private fun recreateProvider(sampleText: String? = null): TTSProvider? {
         val s = _uiState.value
-        
-        // If same type and already created, reuse it (critical for System TTS!)
+
+        // 如果提供了文本，且当前是 Edge-TTS 引擎，则自动进行语言检测并匹配最合适的音色
+        val targetEdgeVoice = if (s.ttsProvider == TTSProviderType.EDGE_TTS && !sampleText.isNullOrBlank()) {
+            val detectedLang = com.moyue.tts.LanguageVoiceDetector.detectLanguage(sampleText)
+            com.moyue.tts.LanguageVoiceDetector.getMatchingEdgeVoice(detectedLang, s.edgeTtsVoice)
+        } else {
+            s.edgeTtsVoice
+        }
+
+        // If same type and already created with matching voice, reuse it (critical for System TTS!)
         if (s.ttsProvider == lastProviderType && currentTTSProvider != null) {
-            return currentTTSProvider
+            if (s.ttsProvider == TTSProviderType.EDGE_TTS && currentTTSProvider is EdgeTTSProvider) {
+                // 如果检测到语言需要变动音色，则重置创建匹配的新音色 provider
+                if ((currentTTSProvider as EdgeTTSProvider).voice == targetEdgeVoice) {
+                    return currentTTSProvider
+                }
+            } else {
+                return currentTTSProvider
+            }
         }
         
-        // Type changed — destroy old and create new
+        // Type changed or voice updated — destroy old and create new
         currentTTSProvider?.destroy()
         currentTTSProvider = null
         lastProviderType = s.ttsProvider
@@ -838,7 +853,7 @@ class ReaderViewModel(
                     }
                 }
             }
-            TTSProviderType.EDGE_TTS -> { EdgeTTSProvider(s.edgeTtsEndpoint, s.edgeTtsVoice).also { currentTTSProvider = it } }
+            TTSProviderType.EDGE_TTS -> { EdgeTTSProvider(s.edgeTtsEndpoint, targetEdgeVoice).also { currentTTSProvider = it } }
             TTSProviderType.AI_VOICE -> { AIVoiceTTSProvider(s.aiVoiceEndpoint, s.aiVoiceApiKey, s.aiVoiceModel, s.aiVoiceId).also { currentTTSProvider = it } }
             TTSProviderType.CUSTOM_TTS -> { CustomTTSProvider(s.customTtsEndpoint, s.customTtsApiKey, s.customTtsModel, s.customTtsVoice).also { currentTTSProvider = it } }
             else -> null
@@ -1157,7 +1172,7 @@ class ReaderViewModel(
                 is SystemTTSProvider -> p.speak(text, speed, listener)
             }
         } else {
-            val p = recreateProvider()
+            val p = recreateProvider(text)
             if (p == null) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }; return }
 
             if (p is SystemTTSProvider) {
@@ -1333,7 +1348,7 @@ class ReaderViewModel(
             }
         } else {
             // Cache miss — 对于 EdgeTTS 强制获取词边界（子段可能只有1句话但高亮同步需要）
-            val p = recreateProvider()
+            val p = recreateProvider(subText)
             if (p == null) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }; return }
             if (p is EdgeTTSProvider) {
                 viewModelScope.launch(Dispatchers.IO) {
@@ -1524,8 +1539,8 @@ class ReaderViewModel(
         val currentSession = playSessionId
 
         // Preload first paragraph from index, then next 5
-        recreateProvider()
         val firstText = paragraphs[index]
+        recreateProvider(firstText)
         if (firstText.length >= 2) {
             viewModelScope.launch(Dispatchers.IO) {
                 if (playSessionId != currentSession || !playChainActive) return@launch
