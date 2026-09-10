@@ -517,6 +517,11 @@ Just change the Base URL and API Key</string>
     <!-- E-Ink Mode -->
     <string name="ai_eink_mode">E-Ink</string>
     <string name="ai_eink_mode_desc">High contrast and ghost-free typography</string>
+    <string name="page_up">Up</string>
+    <string name="page_down">Down</string>
+    <string name="setting_eink_mode">E-Ink Mode</string>
+    <string name="setting_eink_mode_desc">Instant page turns and ghost-free typography</string>
+    <string name="text_brightness">Brightness</string>
 
     <!-- AI Common & Status -->
     <string name="ai_scope_chapter">Current Chapter</string>

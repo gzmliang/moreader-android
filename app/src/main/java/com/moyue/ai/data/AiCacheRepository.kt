@@ -10,9 +10,10 @@ import com.moyue.ai.model.AiQuizResult
 import com.moyue.ai.model.AiSummaryResult
 import com.moyue.ai.model.QuizReportRecord
 
-class AiCacheRepository(context: Context) {
+class AiCacheRepository(private val context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences("moreader_ai_prefs", Context.MODE_PRIVATE)
+    private val appPrefs: SharedPreferences = context.getSharedPreferences("moreader_config", Context.MODE_PRIVATE)
     private val gson = Gson()
 
     // Config
@@ -33,9 +34,12 @@ class AiCacheRepository(context: Context) {
         prefs.edit().putString("ai_config_json", gson.toJson(config)).apply()
     }
 
-    // E-Ink Mode state
-    fun isEinkMode(): Boolean = prefs.getBoolean("ai_eink_mode", false)
-    fun setEinkMode(enabled: Boolean) = prefs.edit().putBoolean("ai_eink_mode", enabled).apply()
+    // E-Ink Mode state (synchronized across app)
+    fun isEinkMode(): Boolean = prefs.getBoolean("ai_eink_mode", false) || appPrefs.getBoolean("eink_mode", false)
+    fun setEinkMode(enabled: Boolean) {
+        prefs.edit().putBoolean("ai_eink_mode", enabled).apply()
+        appPrefs.edit().putBoolean("eink_mode", enabled).apply()
+    }
 
     // Text Size (sp)
     fun getSummaryTextSize(): Float = prefs.getFloat("ai_summary_text_size", 16f)

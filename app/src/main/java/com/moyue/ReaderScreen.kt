@@ -267,6 +267,7 @@ fun ReaderScreen(
     var showNavHint by rememberSaveable { mutableStateOf(true) }
     var prevNavEntry by remember { mutableStateOf<NavHistoryEntry?>(null) }
     var prevNavHistorySize by remember { mutableStateOf(0) }
+    var webViewInstance by remember { mutableStateOf<android.webkit.WebView?>(null) }
     
     LaunchedEffect(state.navHistory) {
         if (state.navHistory.size > prevNavHistorySize && state.navHistory.isNotEmpty()) {
@@ -488,6 +489,10 @@ fun ReaderScreen(
                     onAnchorScrolled = { viewModel.clearScrollToParagraph() },
                     highlightsToRender = highlights.map { Triple(it.startParagraph, it.startOffset, it.endOffset) },
                     highlightToRemove = state.highlightToRemove?.let { Pair(it.startOffset, it.endOffset) },
+                    onPrevChapter = { viewModel.prevChapter() },
+                    onNextChapter = { viewModel.nextChapter() },
+                    isEinkMode = state.isEinkMode,
+                    onWebViewCreated = { webViewInstance = it },
                     modifier = Modifier.fillMaxSize().background(Color(android.graphics.Color.parseColor(state.theme.bgColor))),
                 )
                 
@@ -726,6 +731,81 @@ fun ReaderScreen(
                     }
                 }
 
+                // E-Ink Page-Turn Floating Island (方案一: 右下角极简翻页浮岛)
+                if (state.isEinkMode && !state.isLoading && state.error == null) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color.White,
+                        shadowElevation = 0.dp,
+                        border = BorderStroke(1.5.dp, Color.Black),
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 16.dp, bottom = if (state.isFullscreen) 36.dp else 96.dp)
+                            .width(52.dp)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            // Page Up Button
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        webViewInstance?.evaluateJavascript("window.pageUp()", null)
+                                    }
+                                    .padding(vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowUp,
+                                    contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.page_up),
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Text(
+                                    text = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.page_up),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+                            }
+
+                            // High-contrast Divider
+                            HorizontalDivider(
+                                thickness = 1.dp,
+                                color = Color.Black
+                            )
+
+                            // Page Down Button
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        webViewInstance?.evaluateJavascript("window.pageDown()", null)
+                                    }
+                                    .padding(vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.page_down),
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Text(
+                                    text = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.page_down),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // TOC overlay
             AnimatedVisibility(
                 visible = state.showTocPanel,
@@ -811,6 +891,8 @@ fun ReaderScreen(
                     onGpuLayersChange = { viewModel.setGpuLayers(it) },
                     onThemeChange = { viewModel.setTheme(it) },
                     onTextBrightnessChange = { viewModel.setTextBrightness(it) },
+                    isEinkMode = state.isEinkMode,
+                    onEinkModeChange = { viewModel.setEinkMode(it) },
                     onRecordingClick = { viewModel.showRecordingDialog() },
                     onBrowseRecordingsClick = { viewModel.showRecordingManager() },
                     onClose = { viewModel.toggleTtsSettingsPanel() },
@@ -923,7 +1005,10 @@ fun ReaderScreen(
                     chapterText = extractedText,
                     bookDao = repository.dao,
                     edgeTTS = currentEdgeTTS,
-                    onDismiss = { showAiCompanion = false }
+                    onDismiss = { 
+                        showAiCompanion = false 
+                        viewModel.refreshEinkMode()
+                    }
                 )
             }
         }

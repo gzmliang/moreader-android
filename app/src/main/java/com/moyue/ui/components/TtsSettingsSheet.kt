@@ -176,6 +176,8 @@ fun TtsSettingsSheet(
     onGpuLayersChange: (Int) -> Unit = {},
     onThemeChange: (ReaderTheme) -> Unit = {},
     onTextBrightnessChange: (Int) -> Unit = {},
+    isEinkMode: Boolean = false,
+    onEinkModeChange: (Boolean) -> Unit = {},
     onRecordingClick: () -> Unit = {},
     onBrowseRecordingsClick: () -> Unit = {},
     onClose: () -> Unit,
@@ -864,6 +866,31 @@ fun TtsSettingsSheet(
                 }
             }
 
+            // === E-Ink Mode ===
+            HorizontalDivider(Modifier.padding(vertical = 6.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.setting_eink_mode),
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.setting_eink_mode_desc),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                }
+                Switch(
+                    checked = isEinkMode,
+                    onCheckedChange = onEinkModeChange,
+                )
+            }
+
             // === Theme selection ===
             HorizontalDivider(Modifier.padding(vertical = 6.dp))
             Text(
@@ -914,7 +941,7 @@ fun TtsSettingsSheet(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        "亮度",
+                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.text_brightness),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                         modifier = Modifier.width(36.dp),

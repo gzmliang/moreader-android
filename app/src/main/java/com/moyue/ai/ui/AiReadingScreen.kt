@@ -114,8 +114,8 @@ fun AiReadingScreen(
 
                             // E-Ink Toggle Button
                             Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
                                 modifier = Modifier
                                     .padding(horizontal = 4.dp)
                                     .clickable {
@@ -125,9 +125,11 @@ fun AiReadingScreen(
                                     }
                             ) {
                                 Text(
-                                    text = if (isEink) "🖤" else "🤍",
-                                    fontSize = 12.sp,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                                    text = if (isEink) "E-Ink ✓" else "E-Ink",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isEink) Color.White else MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
 

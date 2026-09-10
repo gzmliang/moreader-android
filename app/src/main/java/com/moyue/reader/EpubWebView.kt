@@ -55,6 +55,9 @@ fun EpubWebView(
     onAnchorScrolled: (() -> Unit)? = null,
     highlightsToRender: List<Triple<Int, Int, Int>> = emptyList(),  // (startParagraph, startOffset, endOffset)
     highlightToRemove: Pair<Int, Int>? = null,  // (startOffset, endOffset)
+    onPrevChapter: (() -> Unit)? = null,
+    onNextChapter: (() -> Unit)? = null,
+    isEinkMode: Boolean = false,
     modifier: Modifier = Modifier,
     onWebViewCreated: ((WebView) -> Unit)? = null,
 ) {
@@ -63,10 +66,18 @@ fun EpubWebView(
     val linkCallbackRef = remember { mutableStateOf<(String) -> Unit>({}) }
     val paragraphCallbackRef = remember { mutableStateOf<(Int) -> Unit>({}) }
     val scrollCallbackRef = remember { mutableStateOf<(Int) -> Unit>({}) }
+    val prevChapterCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
+    val nextChapterCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
     LaunchedEffect(onTextSelected) { callbackRef.value = onTextSelected }
     LaunchedEffect(onLinkClicked) { linkCallbackRef.value = onLinkClicked }
     LaunchedEffect(onParagraphClicked) { paragraphCallbackRef.value = { idx -> onParagraphClicked?.invoke(idx) ?: Unit } }
     LaunchedEffect(onScrollToParagraph) { scrollCallbackRef.value = { idx -> onScrollToParagraph?.invoke(idx) ?: Unit } }
+    LaunchedEffect(onPrevChapter) { prevChapterCallbackRef.value = { onPrevChapter?.invoke() ?: Unit } }
+    LaunchedEffect(onNextChapter) { nextChapterCallbackRef.value = { onNextChapter?.invoke() ?: Unit } }
+
+    LaunchedEffect(isEinkMode) {
+        webView?.evaluateJavascript("window.isEink = $isEinkMode;", null)
+    }
 
     // TTS paragraph + sentence highlight: merged into one effect
     // (was two separate effects — async evaluateJavascript order was undefined,
@@ -325,10 +336,12 @@ fun EpubWebView(
                                     var s=window.getSelection();
                                     if(s&&!s.isCollapsed)s.removeAllRanges();
                                 });
+                                window.isEink = $isEinkMode;
+                                window.getScrollBehavior = function(){ return window.isEink ? 'instant' : 'smooth'; };
                                 window.ttsHL=function(idx){
                                     document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
-                                    if(idx>=0&&idx<all.length){all[idx].classList.add('tts-hl');all[idx].scrollIntoView({behavior:'smooth',block:'center'});}
+                                    if(idx>=0&&idx<all.length){all[idx].classList.add('tts-hl');all[idx].scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});}
                                 };
                                 window.ttsClear=function(){document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});};
                                 // Sentence-level highlight
@@ -343,7 +356,7 @@ fun EpubWebView(
                                     if(paraIdx<0||paraIdx>=all.length){MoreaderBridge.jsLog('[JS] initHL bad paraIdx');return;}
                                     var el=all[paraIdx];
                                     el.classList.add('tts-hl');
-                                    el.scrollIntoView({behavior:'smooth',block:'center'});
+                                    el.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
                                     window._ttsSentencePara=el;
                                     // 使用 Kotlin 传来的句子边界
                                     window.ttsSentEnds=sentEnds||[];
@@ -408,7 +421,7 @@ fun EpubWebView(
                                         range.insertNode(span);
                                     }
                                     // 滚动到屏幕中央
-                                    span.scrollIntoView({behavior:'smooth',block:'center'});
+                                    span.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
                                 };
                                 window.ttsSentenceClear=function(){
                                     document.querySelectorAll('span[data-tts-sentence=\"1\"]').forEach(function(s){
@@ -422,7 +435,7 @@ fun EpubWebView(
                                     if(idx===0){window.scrollTo(0,0);return;}
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
                                     if(idx>=0&&idx<all.length){
-                                        all[idx].scrollIntoView({behavior:'smooth',block:'center'});
+                                        all[idx].scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
                                         all[idx].style.backgroundColor='rgba(59,130,246,0.15)';
                                         setTimeout(function(){all[idx].style.backgroundColor='';},2000);
                                     }
@@ -564,9 +577,24 @@ fun EpubWebView(
                                     }
                                 });
                                 
-                                // For page-tap scrolling via scrollBy
-                                window.pageUp=function(){window.scrollBy(0,-window.innerHeight*0.85);};
-                                window.pageDown=function(){window.scrollBy(0,window.innerHeight*0.85);};
+                                // For instant page-tap scrolling
+                                window.pageUp=function(){
+                                    if(window.scrollY<=2){
+                                        MoreaderBridge.onPrevChapter();
+                                        return;
+                                    }
+                                    var step=Math.round(window.innerHeight*0.85);
+                                    window.scrollBy({top:-step,left:0,behavior:'instant'});
+                                };
+                                window.pageDown=function(){
+                                    var maxScroll=Math.max(0,document.body.scrollHeight-window.innerHeight);
+                                    if(window.scrollY>=maxScroll-4){
+                                        MoreaderBridge.onNextChapter();
+                                        return;
+                                    }
+                                    var step=Math.round(window.innerHeight*0.85);
+                                    window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:'instant'});
+                                };
                                 // Get current visible paragraph index
                                 window.getVisiblePara=function(){
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
@@ -599,6 +627,14 @@ fun EpubWebView(
                         fun onParagraphClicked(index: Int) { paragraphCallbackRef.value(index) }
                         @JavascriptInterface
                         fun onScrollToParagraph(index: Int) { scrollCallbackRef.value(index) }
+                        @JavascriptInterface
+                        fun onPrevChapter() {
+                            android.os.Handler(android.os.Looper.getMainLooper()).post { prevChapterCallbackRef.value() }
+                        }
+                        @JavascriptInterface
+                        fun onNextChapter() {
+                            android.os.Handler(android.os.Looper.getMainLooper()).post { nextChapterCallbackRef.value() }
+                        }
                         @JavascriptInterface
                         fun jsLog(msg: String) { android.util.Log.d("TTS-JS", msg) }
                     }, "MoreaderBridge")

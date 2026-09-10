@@ -640,6 +640,11 @@ AI Voice（云端 TTS）：
     <!-- E-Ink Mode -->
     <string name="ai_eink_mode">墨水屏</string>
     <string name="ai_eink_mode_desc">高对比度与零残影排版</string>
+    <string name="page_up">上页</string>
+    <string name="page_down">下页</string>
+    <string name="setting_eink_mode">墨水屏模式</string>
+    <string name="setting_eink_mode_desc">瞬时翻页与高对比无残影优化</string>
+    <string name="text_brightness">亮度</string>
 
     <!-- AI Common & Status -->
     <string name="ai_scope_chapter">当前章节</string>

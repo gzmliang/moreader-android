@@ -133,6 +133,7 @@ data class ReaderUiState(
     val showRecordingManager: Boolean = false,
     val recordingsList: List<com.moyue.app.ui.components.RecordingItem> = emptyList(),
     val textBrightness: Int = 100,            // 0-100 text brightness
+    val isEinkMode: Boolean = false,
 ) {
     val canGoBack: Boolean get() = navHistory.isNotEmpty()
     
@@ -195,6 +196,8 @@ class ReaderViewModel(
             translateEngine = TranslateEngine.valueOf(prefs.getString("translate_engine", "CLOUD") ?: "CLOUD"),
             localAiModelName = localAiEngine.getModelName(application),
             localAiGpuLayers = localAiEngine.getGpuLayers(application),
+            isEinkMode = prefs.getBoolean("eink_mode", false) ||
+                application.getSharedPreferences("moreader_ai_prefs", Context.MODE_PRIVATE).getBoolean("ai_eink_mode", false),
         )
     )
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
@@ -462,6 +465,25 @@ class ReaderViewModel(
         val book = _uiState.value.book ?: return
         viewModelScope.launch {
             repository.updateBookTheme(book.id, t.id)
+        }
+    }
+
+    fun setEinkMode(enabled: Boolean) {
+        prefs.edit().putBoolean("eink_mode", enabled).apply()
+        getApplication<Application>().getSharedPreferences("moreader_ai_prefs", Context.MODE_PRIVATE)
+            .edit().putBoolean("ai_eink_mode", enabled).apply()
+        _uiState.update { it.copy(isEinkMode = enabled) }
+    }
+
+    fun toggleEinkMode() {
+        setEinkMode(!_uiState.value.isEinkMode)
+    }
+
+    fun refreshEinkMode() {
+        val eink = prefs.getBoolean("eink_mode", false) ||
+            getApplication<Application>().getSharedPreferences("moreader_ai_prefs", Context.MODE_PRIVATE).getBoolean("ai_eink_mode", false)
+        if (_uiState.value.isEinkMode != eink) {
+            _uiState.update { it.copy(isEinkMode = eink) }
         }
     }
     fun setFontSize(s: Int) { 
