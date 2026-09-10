@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">墨阅测试版</string>
+    <string name="app_name">Moreader</string>
 
     <!-- General -->
     <string name="loading">正在加载...</string>
@@ -629,4 +629,91 @@ AI Voice（云端 TTS）：
     <string name="voice_picker_preview_text_english">Hello, this is my voice.</string>
     <string name="voice_picker_preview_text_japanese">こんにちは、これが私の声です。</string>
     <string name="voice_picker_preview_text_korean">안녕하세요, 제 목소리입니다.</string>
+
+    <!-- AI Companion (AI 伴读与深度自测) -->
+    <string name="ai_companion_title">AI 伴读</string>
+    <string name="ai_companion_tab_summary">📚 简读</string>
+    <string name="ai_companion_tab_plot">🕸️ 图谱</string>
+    <string name="ai_companion_tab_quiz">✍️ 自测</string>
+    <string name="ai_companion_tab_reports">📊 战报</string>
+
+    <!-- E-Ink Mode -->
+    <string name="ai_eink_mode">墨水屏</string>
+    <string name="ai_eink_mode_desc">高对比度与零残影排版</string>
+
+    <!-- AI Common & Status -->
+    <string name="ai_scope_chapter">当前章节</string>
+    <string name="ai_scope_book">全书宏观</string>
+    <string name="ai_generate_btn">✨ 开始提炼</string>
+    <string name="ai_regenerate_btn">🔄 重新生成</string>
+    <string name="ai_generating">AI 正在深度思考与提炼中…</string>
+    <string name="ai_cached_badge">⚡ 已缓存 (0 Token)</string>
+    <string name="ai_empty_hint">点击下方按钮，让 AI 为您梳理精华！</string>
+    <string name="ai_error_format">AI 请求失败: %1$s</string>
+    <string name="ai_copy_success">已复制到剪贴板</string>
+
+    <!-- Summary Tab -->
+    <string name="ai_summary_ratio_label">浓缩比例</string>
+    <string name="ai_summary_ratio_format">%1$d%%</string>
+    <string name="ai_display_mode_bilingual">🔄 双语对照</string>
+    <string name="ai_display_mode_original">📄 仅原著</string>
+    <string name="ai_display_mode_target">🌐 仅译文</string>
+    <string name="ai_play_listen_btn">▶ 听精读</string>
+    <string name="ai_stop_listen_btn">⏹ 停止</string>
+    <string name="ai_listen_mode_title">朗读语言模式</string>
+    <string name="ai_listen_mode_orig">只听原文</string>
+    <string name="ai_listen_mode_trans">只听译文</string>
+    <string name="ai_listen_mode_both">双语穿插</string>
+    <string name="ai_save_to_library_btn">📚 存入书架</string>
+    <string name="ai_save_to_library_success">已存入书架：%1$s</string>
+    <string name="ai_save_to_library_failed">存入书架失败: %1$s</string>
+    <string name="ai_summary_book_suffix">(全书精读版)</string>
+    <string name="ai_summary_chapter_suffix">(精读速览)</string>
+    <string name="ai_summary_badge_text">AI 精读</string>
+
+    <!-- Plot Tab -->
+    <string name="ai_plot_core_title">📌 叙事格局与推进核心</string>
+    <string name="ai_plot_relations_title">🔗 角色关系网络</string>
+    <string name="ai_plot_timeline_title">⏳ 关键情节推进线</string>
+
+    <!-- Quiz Tab -->
+    <string name="ai_quiz_count_label">题数</string>
+    <string name="ai_quiz_count_format">%1$d 题</string>
+    <string name="ai_quiz_difficulty_label">难度</string>
+    <string name="ai_quiz_diff_basic">基础理解</string>
+    <string name="ai_quiz_diff_intermediate">深度情节</string>
+    <string name="ai_quiz_diff_advanced">主旨与思辨</string>
+    <string name="ai_quiz_mode_label">模式</string>
+    <string name="ai_quiz_mode_instant">即时揭晓</string>
+    <string name="ai_quiz_mode_submit">完卷提交</string>
+    <string name="ai_quiz_submit_btn">📝 提交全卷并查看得分</string>
+    <string name="ai_quiz_score_summary">测验得分：%1$d / %2$d (%3$d%%)</string>
+    <string name="ai_quiz_analysis_title">💡 深度解析</string>
+    <string name="ai_quiz_your_choice">您的选择: %1$s</string>
+    <string name="ai_quiz_correct_choice">标准答案: %1$s</string>
+    <string name="ai_quiz_unanswered_warning">还有未作答题目，请完成所有题目后再提交。</string>
+
+    <!-- Reports Tab -->
+    <string name="ai_reports_title">答题成绩单</string>
+    <string name="ai_reports_empty">暂无答题记录，快去完成一次自测吧！</string>
+    <string name="ai_reports_review_btn">逐题复盘</string>
+    <string name="ai_reports_back_btn">⬅️ 返回列表</string>
+    <string name="ai_reports_time_format">%1$s</string>
+
+    <!-- AI Settings Dialog -->
+    <string name="ai_settings_title">🤖 AI 模型服务设置</string>
+    <string name="ai_settings_provider_label">服务提供商</string>
+    <string name="ai_settings_base_url">API Base URL</string>
+    <string name="ai_settings_api_key">API Key</string>
+    <string name="ai_settings_model">Model 模型名称</string>
+    <string name="ai_settings_source_lang">原著语言</string>
+    <string name="ai_settings_target_lang">目标译文语言</string>
+    <string name="ai_settings_test_btn">⚡ 测试连接</string>
+    <string name="ai_settings_testing">正在测试中…</string>
+    <string name="ai_settings_test_success">连接成功！模型响应正常。</string>
+    <string name="ai_settings_test_failed">连接失败: %1$s</string>
+    <string name="ai_settings_save_btn">💾 保存设置</string>
+    <string name="ai_settings_saved">设置已保存！</string>
+    <string name="ai_settings_guide_tip">请先配置 AI 服务的 API Key 才能开始深度伴读。</string>
+    <string name="ai_settings_guide_btn">去配置</string>
 </resources>

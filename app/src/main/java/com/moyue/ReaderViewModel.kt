@@ -822,7 +822,7 @@ class ReaderViewModel(
     }
 
     /** Get current provider without re-creating */
-    private fun getProvider(): TTSProvider? = currentTTSProvider
+    fun getProvider(): TTSProvider? = currentTTSProvider
 
     /**
      * 将长段落按句号切成 2-3 个子段，每段 150-250 字。

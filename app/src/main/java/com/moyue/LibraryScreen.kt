@@ -41,6 +41,8 @@ import com.moyue.app.sync.WebDavClient
 import com.moyue.app.ui.components.SyncSettingsDialog
 import com.moyue.app.ui.components.WebDavBrowserDialog
 import com.moyue.app.util.LocaleHelper
+import com.moyue.ai.ui.AiSettingsDialog
+import com.moyue.ai.data.AiCacheRepository
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -372,6 +374,20 @@ fun LibraryScreen(
                                 viewModel.downloadFromCloud(context,
                                     syncClientForSync, onResult)
                             },
+                        )
+                    }
+
+                    // AI Settings
+                    var showAiSettings by remember { mutableStateOf(false) }
+                    IconButton(onClick = { showAiSettings = true }, modifier = Modifier.size(32.dp)) {
+                        Text("🤖", fontSize = 16.sp)
+                    }
+                    if (showAiSettings) {
+                        val aiRepo = remember { AiCacheRepository(context) }
+                        AiSettingsDialog(
+                            repository = aiRepo,
+                            onDismiss = { showAiSettings = false },
+                            onSaved = { /* updated */ }
                         )
                     }
                 }

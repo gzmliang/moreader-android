@@ -27,7 +27,7 @@ class BookRepository(private val context: Context) {
     }
 
     private val db = BookDatabase.getInstance(context)
-    private val dao = db.bookDao()
+    val dao = db.bookDao()
     private val bookDir = File(context.filesDir, "epubs").also { it.mkdirs() }
 
     /** importBook 返回已存在的书时为 true（用于 UI 显示跳过提示） */

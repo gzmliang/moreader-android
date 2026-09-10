@@ -43,6 +43,9 @@ import com.moyue.app.data.models.*
 import com.moyue.app.reader.EpubWebView
 import com.moyue.app.reader.repositoryRef
 import com.moyue.app.ui.components.TtsSettingsSheet
+import com.moyue.ai.ui.AiReadingScreen
+import com.moyue.ai.service.BookTextExtractor
+import com.moyue.app.tts.EdgeTTSProvider
 import java.lang.ref.WeakReference
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,6 +93,7 @@ fun ReaderScreen(
 
     // Fullscreen: hide system status bar and navigation bar
     var showFullscreenHint by remember { mutableStateOf(false) }
+    var showAiCompanion by remember { mutableStateOf(false) }
     val view = LocalView.current
     LaunchedEffect(state.isFullscreen) {
         val window = (view.context as? android.app.Activity)?.window
@@ -292,6 +296,9 @@ fun ReaderScreen(
                     },
                     navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.back)) } },
                     actions = {
+                        IconButton(onClick = { showAiCompanion = true }) { 
+                            Text("🤖", fontSize = 18.sp)
+                        }
                         IconButton(onClick = { viewModel.toggleFullscreen() }) { Icon(Icons.Default.Fullscreen, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_fullscreen)) }
                         IconButton(onClick = { viewModel.toggleBookmarkPanel() }) { Icon(Icons.Outlined.BookmarkBorder, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title)) }
                         IconButton(onClick = { viewModel.toggleHighlightPanel() }) { Icon(Icons.Default.Star, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_list_title)) }
@@ -893,6 +900,31 @@ fun ReaderScreen(
                         onBack = { viewModel.hideRecordingManager() },
                     )
                 }
+            }
+
+            // AI Companion Screen
+            if (showAiCompanion) {
+                var extractedText by remember { mutableStateOf("") }
+                LaunchedEffect(state.currentHtml) {
+                    extractedText = BookTextExtractor.extractChapterText(
+                        html = state.currentHtml ?: "",
+                        fallbackText = state.ttsParagraphs.joinToString("\n\n")
+                    )
+                }
+
+                val currentChTitle = "Chapter ${state.currentChapterIndex + 1}"
+                val currentEdgeTTS = (viewModel.getProvider() as? EdgeTTSProvider)
+
+                AiReadingScreen(
+                    bookId = bookId,
+                    bookTitle = state.book?.title ?: "Book",
+                    chapterIndex = state.currentChapterIndex,
+                    chapterTitle = currentChTitle,
+                    chapterText = extractedText,
+                    bookDao = repository.dao,
+                    edgeTTS = currentEdgeTTS,
+                    onDismiss = { showAiCompanion = false }
+                )
             }
         }
     }

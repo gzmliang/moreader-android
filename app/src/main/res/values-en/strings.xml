@@ -2,7 +2,7 @@
     <string name="ai_translate">🤖 Translate</string>
     <string name="ai_translate_settings">🤖 AI Translation Settings</string>
     <string name="ai_translate_title">AI Translation</string>
-    <string name="app_name">MoYue Reader</string>
+    <string name="app_name">Moreader</string>
     <string name="back">Back</string>
     <string name="bookmark_added">Bookmark added</string>
     <string name="bookmark_added_at">Added at %1$s</string>
@@ -506,4 +506,91 @@ Just change the Base URL and API Key</string>
     <string name="voice_picker_preview_text_english">Hello, this is my voice.</string>
     <string name="voice_picker_preview_text_japanese">こんにちは、これが私の声です。</string>
     <string name="voice_picker_preview_text_korean">안녕하세요, 제 목소리입니다.</string>
+
+    <!-- AI Companion (AI Companion and Quiz System) -->
+    <string name="ai_companion_title">AI Companion</string>
+    <string name="ai_companion_tab_summary">📚 Summary</string>
+    <string name="ai_companion_tab_plot">🕸️ Plot Map</string>
+    <string name="ai_companion_tab_quiz">✍️ Quiz</string>
+    <string name="ai_companion_tab_reports">📊 Reports</string>
+
+    <!-- E-Ink Mode -->
+    <string name="ai_eink_mode">E-Ink</string>
+    <string name="ai_eink_mode_desc">High contrast and ghost-free typography</string>
+
+    <!-- AI Common & Status -->
+    <string name="ai_scope_chapter">Current Chapter</string>
+    <string name="ai_scope_book">Entire Book</string>
+    <string name="ai_generate_btn">✨ Generate Summary</string>
+    <string name="ai_regenerate_btn">🔄 Regenerate</string>
+    <string name="ai_generating">AI is analyzing and condensing…</string>
+    <string name="ai_cached_badge">⚡ Cached (0 Token)</string>
+    <string name="ai_empty_hint">Tap button below to extract insights with AI!</string>
+    <string name="ai_error_format">AI Request failed: %1$s</string>
+    <string name="ai_copy_success">Copied to clipboard</string>
+
+    <!-- Summary Tab -->
+    <string name="ai_summary_ratio_label">Ratio</string>
+    <string name="ai_summary_ratio_format">%1$d%%</string>
+    <string name="ai_display_mode_bilingual">🔄 Bilingual</string>
+    <string name="ai_display_mode_original">📄 Original</string>
+    <string name="ai_display_mode_target">🌐 Translated</string>
+    <string name="ai_play_listen_btn">▶ Listen</string>
+    <string name="ai_stop_listen_btn">⏹ Stop</string>
+    <string name="ai_listen_mode_title">Audio Mode</string>
+    <string name="ai_listen_mode_orig">Original Only</string>
+    <string name="ai_listen_mode_trans">Translation Only</string>
+    <string name="ai_listen_mode_both">Bilingual Alternate</string>
+    <string name="ai_save_to_library_btn">📚 Save to Library</string>
+    <string name="ai_save_to_library_success">Saved to library: %1$s</string>
+    <string name="ai_save_to_library_failed">Failed to save: %1$s</string>
+    <string name="ai_summary_book_suffix">(Full Summary)</string>
+    <string name="ai_summary_chapter_suffix">(Summary)</string>
+    <string name="ai_summary_badge_text">AI Summary</string>
+
+    <!-- Plot Tab -->
+    <string name="ai_plot_core_title">📌 Narrative Core and Dynamics</string>
+    <string name="ai_plot_relations_title">🔗 Character Relationship Network</string>
+    <string name="ai_plot_timeline_title">⏳ Chronological Plotline</string>
+
+    <!-- Quiz Tab -->
+    <string name="ai_quiz_count_label">Questions</string>
+    <string name="ai_quiz_count_format">%1$d Questions</string>
+    <string name="ai_quiz_difficulty_label">Difficulty</string>
+    <string name="ai_quiz_diff_basic">Basic</string>
+    <string name="ai_quiz_diff_intermediate">Intermediate</string>
+    <string name="ai_quiz_diff_advanced">Advanced</string>
+    <string name="ai_quiz_mode_label">Mode</string>
+    <string name="ai_quiz_mode_instant">Instant</string>
+    <string name="ai_quiz_mode_submit">On Submit</string>
+    <string name="ai_quiz_submit_btn">📝 Submit and Review Score</string>
+    <string name="ai_quiz_score_summary">Score: %1$d / %2$d (%3$d%%)</string>
+    <string name="ai_quiz_analysis_title">💡 In-depth Explanation</string>
+    <string name="ai_quiz_your_choice">Your Choice: %1$s</string>
+    <string name="ai_quiz_correct_choice">Correct Answer: %1$s</string>
+    <string name="ai_quiz_unanswered_warning">Please answer all questions before submitting.</string>
+
+    <!-- Reports Tab -->
+    <string name="ai_reports_title">History and Reports</string>
+    <string name="ai_reports_empty">No quiz records yet. Take a quiz now!</string>
+    <string name="ai_reports_review_btn">Review Details</string>
+    <string name="ai_reports_back_btn">⬅️ Back to Reports</string>
+    <string name="ai_reports_time_format">%1$s</string>
+
+    <!-- AI Settings Dialog -->
+    <string name="ai_settings_title">🤖 AI Provider Settings</string>
+    <string name="ai_settings_provider_label">Provider</string>
+    <string name="ai_settings_base_url">API Base URL</string>
+    <string name="ai_settings_api_key">API Key</string>
+    <string name="ai_settings_model">Model Name</string>
+    <string name="ai_settings_source_lang">Source Language</string>
+    <string name="ai_settings_target_lang">Target Language</string>
+    <string name="ai_settings_test_btn">⚡ Test Connection</string>
+    <string name="ai_settings_testing">Testing connection…</string>
+    <string name="ai_settings_test_success">Connected successfully!</string>
+    <string name="ai_settings_test_failed">Connection failed: %1$s</string>
+    <string name="ai_settings_save_btn">💾 Save Settings</string>
+    <string name="ai_settings_saved">Settings saved!</string>
+    <string name="ai_settings_guide_tip">Please configure your AI Provider API Key first.</string>
+    <string name="ai_settings_guide_btn">Configure Now</string>
 </resources>
