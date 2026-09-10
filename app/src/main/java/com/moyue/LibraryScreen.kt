@@ -10,6 +10,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -112,7 +113,9 @@ fun LibraryScreen(
     }
 
     // App dark mode toggle for UI screens (independent of reader theme)
-    var isAppDark by remember { mutableStateOf(com.moyue.app.ui.theme.getDarkModePreference(context) ?: false) }
+    val systemInDark = isSystemInDarkTheme()
+    val manualPref = com.moyue.app.ui.theme.getDarkModePreference(context)
+    var isAppDark by remember { mutableStateOf(systemInDark || manualPref == true) }
 
     Scaffold(
         topBar = {

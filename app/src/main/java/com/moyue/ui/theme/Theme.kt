@@ -41,12 +41,15 @@ private val DarkColors = darkColorScheme(
 private const val PREF_NAME = "moreader_theme"
 private const val KEY_DARK_MODE = "app_dark_mode"
 
-/** Save the app-wide dark mode preference */
-fun saveDarkModePreference(context: Context, isDark: Boolean) {
-    context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        .edit()
-        .putBoolean(KEY_DARK_MODE, isDark)
-        .apply()
+/** Save the app-wide dark mode preference (pass null to follow system) */
+fun saveDarkModePreference(context: Context, isDark: Boolean?) {
+    val editor = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit()
+    if (isDark == null) {
+        editor.remove(KEY_DARK_MODE)
+    } else {
+        editor.putBoolean(KEY_DARK_MODE, isDark)
+    }
+    editor.apply()
 }
 
 /** Read the app-wide dark mode preference (default: follow system) */
@@ -61,7 +64,10 @@ fun MoreaderTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val isDark = darkTheme ?: getDarkModePreference(context) ?: isSystemInDarkTheme()
+    val systemInDark = isSystemInDarkTheme()
+    val manualPref = getDarkModePreference(context)
+    // Always honor system dark mode if system is set to dark mode; otherwise honor manual preference
+    val isDark = darkTheme ?: (systemInDark || manualPref == true)
     val colorScheme = if (isDark) DarkColors else LightColors
 
     MaterialTheme(
