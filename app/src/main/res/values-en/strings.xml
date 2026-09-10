@@ -234,7 +234,7 @@ Just change the Base URL and API Key</string>
     <string name="lang_en">English</string>
     <string name="lang_zh">Chinese</string>
     <string name="large_book_hint">Large books may take a while to load</string>
-    <string name="library_title">MoYue</string>
+    <string name="library_title">Moreader</string>
     <string name="search_hint">Search books…</string>
     <string name="search_no_results">No matching books found</string>
     <string name="load_book">Loading book...</string>

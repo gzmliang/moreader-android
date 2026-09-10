@@ -19,7 +19,7 @@ class AiCacheRepository(private val context: Context) {
     // Config
     fun getAiConfig(): AiConfig {
         val json = prefs.getString("ai_config_json", null)
-        return if (json != null) {
+        val config = if (json != null) {
             try {
                 gson.fromJson(json, AiConfig::class.java)
             } catch (e: Exception) {
@@ -28,10 +28,52 @@ class AiCacheRepository(private val context: Context) {
         } else {
             AiConfig()
         }
+
+        // 统一模型互通：如果 AI 伴读未配置 Key，但翻译设置里已配置了 Key，则无缝继承翻译设置
+        if (config.apiKey.isBlank()) {
+            val transProvider = appPrefs.getString("llm_provider", "custom") ?: "custom"
+            val transApiKey = appPrefs.getString("llm_apikey", "") ?: ""
+            val transEndpoint = appPrefs.getString("llm_endpoint", "") ?: ""
+            val transModel = appPrefs.getString("llm_model", "") ?: ""
+            if (transApiKey.isNotBlank()) {
+                val mappedProvider = when (transProvider.lowercase()) {
+                    "deepseek" -> "DeepSeek"
+                    "siliconflow" -> "SiliconFlow"
+                    "openrouter" -> "OpenRouter"
+                    "openai" -> "OpenAI"
+                    else -> "Custom"
+                }
+                val fallbackBaseUrl = if (transEndpoint.isNotBlank()) transEndpoint else when (mappedProvider) {
+                    "DeepSeek" -> "https://api.deepseek.com/v1"
+                    "SiliconFlow" -> "https://api.siliconflow.cn/v1"
+                    "OpenRouter" -> "https://openrouter.ai/api/v1"
+                    else -> "https://api.openai.com/v1"
+                }
+                val fallbackModel = if (transModel.isNotBlank()) transModel else when (mappedProvider) {
+                    "DeepSeek" -> "deepseek-chat"
+                    "SiliconFlow" -> "Qwen/Qwen2.5-72B-Instruct"
+                    else -> "gpt-4o-mini"
+                }
+                return config.copy(
+                    provider = mappedProvider,
+                    baseUrl = fallbackBaseUrl,
+                    apiKey = transApiKey,
+                    model = fallbackModel
+                )
+            }
+        }
+        return config
     }
 
     fun saveAiConfig(config: AiConfig) {
         prefs.edit().putString("ai_config_json", gson.toJson(config)).apply()
+        // 双向同步写入翻译设置，保证一次配置处处生效
+        appPrefs.edit()
+            .putString("llm_provider", config.provider.lowercase())
+            .putString("llm_apikey", config.apiKey)
+            .putString("llm_endpoint", config.cleanBaseUrl())
+            .putString("llm_model", config.model)
+            .apply()
     }
 
     // E-Ink Mode state (synchronized across app)

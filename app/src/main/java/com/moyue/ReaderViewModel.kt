@@ -209,6 +209,8 @@ class ReaderViewModel(
     private val audioCache = mutableMapOf<Int, ByteArray>()
     // Flag to stop the current play chain
     private var playChainActive = false
+    // 严密播放代际计数器，任何过期的异步网络请求或旧播放器回调直接自毁抛弃
+    private var playSessionId = 0L
     // Consecutive error counter — if TTS engine is broken, stop retrying
     private var consecutiveErrors = 0
     // ======== 句子级高亮 ========
@@ -1043,6 +1045,7 @@ class ReaderViewModel(
 
         val speed = s.ttsSpeed
         val cached = audioCache.remove(idx)
+        val currentSession = playSessionId
 
         val listener = object : TTSListener {
             private var rangesReceived = false
@@ -1050,6 +1053,7 @@ class ReaderViewModel(
             private var paraStartMs = 0L
 
             override fun onStart() {
+                if (playSessionId != currentSession || !playChainActive) return
                 paraStartMs = System.currentTimeMillis()
                 log("[TIME] ⏱ Para${idx + 1} START @${paraStartMs}ms")
                 // 重置每个段落的检测状态
@@ -1085,7 +1089,7 @@ class ReaderViewModel(
                 if (sentenceEnds.size > 1 && wb == null) {
                     detectJob = viewModelScope.launch {
                         delay(2500L)
-                        if (!rangesReceived && playChainActive) {
+                        if (!rangesReceived && playChainActive && playSessionId == currentSession) {
                             log("[SENT:est] P${idx + 1} — fallback estimation")
                             startEstimation(text, idx)
                         }
@@ -1093,9 +1097,11 @@ class ReaderViewModel(
                 }
             }
             override fun onWordBoundaries(boundaries: List<com.moyue.app.tts.WordBoundary>) {
+                if (playSessionId != currentSession || !playChainActive) return
                 pendingBoundaries = boundaries  // 暂存，onStart 中消费
             }
             override fun onRange(start: Int, end: Int) {
+                if (playSessionId != currentSession || !playChainActive) return
                 if (!rangesReceived) {
                     rangesReceived = true
                     detectJob?.cancel()
@@ -1111,6 +1117,7 @@ class ReaderViewModel(
                 }
             }
             override fun onDone() {
+                if (playSessionId != currentSession || !playChainActive) return
                 val now = System.currentTimeMillis()
                 val elapsed = now - paraStartMs
                 log("[TIME] ⏱ Para${idx + 1} DONE @${now}ms (+${elapsed}ms)")
@@ -1121,6 +1128,7 @@ class ReaderViewModel(
                 playOne(idx + 1)
             }
             override fun onError(msg: String) {
+                if (playSessionId != currentSession || !playChainActive) return
                 estJob?.cancel()
                 _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1, ttsSentenceEnds = "") }
                 log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg))
@@ -1189,6 +1197,7 @@ class ReaderViewModel(
         val speed = s.ttsSpeed
         val cacheKey = "$paraIdx:$subIdx"
         val cached = subSegCache.remove(cacheKey)
+        val currentSession = playSessionId
         log("[SUBSEG] P${paraIdx + 1} sub${subIdx + 1}/${currentSubSegs.size} (${subText.length}字, offset=$charOffset) ${if (cached != null) "cached" else "fetch"}")
 
         val listener = object : TTSListener {
@@ -1197,6 +1206,7 @@ class ReaderViewModel(
             private var paraStartMs = 0L
 
             override fun onStart() {
+                if (playSessionId != currentSession || !playChainActive) return
                 paraStartMs = System.currentTimeMillis()
                 log("[TIME] ⏱ P${paraIdx + 1} sub${subIdx + 1} START @${paraStartMs}ms")
                 rangesReceived = false
@@ -1244,7 +1254,7 @@ class ReaderViewModel(
                 if (sentenceEnds.size > 1 && wb == null) {
                     detectJob = viewModelScope.launch {
                         delay(2500L)
-                        if (!rangesReceived && playChainActive) {
+                        if (!rangesReceived && playChainActive && playSessionId == currentSession) {
                             log("[SENT:est] P${paraIdx + 1} sub${subIdx + 1} - fallback estimation")
                             startSubSegmentEstimation(fullText, paraIdx, charOffset, subText.length)
                         }
@@ -1252,9 +1262,11 @@ class ReaderViewModel(
                 }
             }
             override fun onWordBoundaries(boundaries: List<com.moyue.app.tts.WordBoundary>) {
+                if (playSessionId != currentSession || !playChainActive) return
                 pendingBoundaries = boundaries
             }
             override fun onRange(start: Int, end: Int) {
+                if (playSessionId != currentSession || !playChainActive) return
                 if (!rangesReceived) {
                     rangesReceived = true
                     detectJob?.cancel()
@@ -1272,6 +1284,7 @@ class ReaderViewModel(
                 }
             }
             override fun onDone() {
+                if (playSessionId != currentSession || !playChainActive) return
                 val now = System.currentTimeMillis()
                 val elapsed = now - paraStartMs
                 log("[TIME] ⏱ P${paraIdx + 1} sub${subIdx + 1} DONE @${now}ms (+${elapsed}ms)")
@@ -1293,6 +1306,7 @@ class ReaderViewModel(
                 advanceSubSegment(paraIdx, subIdx, highlightIdx)
             }
             override fun onError(msg: String) {
+                if (playSessionId != currentSession || !playChainActive) return
                 estJob?.cancel()
                 _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1, ttsSentenceEnds = "") }
                 log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, paraIdx, msg))
@@ -1477,10 +1491,18 @@ class ReaderViewModel(
         playOne(0)
     }
 
+    private var lastReadClickTime = 0L
+
     /** Read from a specific paragraph index */
     fun readFromParagraph(index: Int) {
+        val now = System.currentTimeMillis()
+        if (now - lastReadClickTime < 500L) {
+            log("[TTS] 🛡️ 快速连击防抖忽略 (500ms 内重复点击)")
+            return
+        }
+        lastReadClickTime = now
+
         log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_read_from_paragraph, index + 1))
-        playChainActive = true
         val s = _uiState.value
         val paragraphs = if (s.ttsParagraphs.isEmpty()) {
             val html = s.currentHtml ?: run { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_empty_html)); return }
@@ -1499,12 +1521,14 @@ class ReaderViewModel(
         _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = index) }
         consecutiveErrors = 0
         playChainActive = true
+        val currentSession = playSessionId
 
         // Preload first paragraph from index, then next 5
         recreateProvider()
         val firstText = paragraphs[index]
         if (firstText.length >= 2) {
             viewModelScope.launch(Dispatchers.IO) {
+                if (playSessionId != currentSession || !playChainActive) return@launch
                 val p = getProvider() ?: return@launch
                 val spd = _uiState.value.ttsSpeed
                 if (firstText.length > LONG_PARAGRAPH_THRESHOLD && p is EdgeTTSProvider) {
@@ -1517,13 +1541,17 @@ class ReaderViewModel(
                     when (p) {
                         is EdgeTTSProvider -> {
                             val result = p.fetchAudio(firstText, spd)
-                            if (result != null) {
+                            if (playSessionId == currentSession && result != null) {
                                 audioCache[index] = result.audio
                                 if (result.boundaries.isNotEmpty()) boundariesCache[index] = result.boundaries
                             }
                         }
-                        is AIVoiceTTSProvider -> p.fetchAudio(firstText, spd)?.let { audioCache[index] = it }
-                        is CustomTTSProvider -> p.fetchAudio(firstText, spd)?.let { audioCache[index] = it }
+                        is AIVoiceTTSProvider -> p.fetchAudio(firstText, spd)?.let {
+                            if (playSessionId == currentSession) audioCache[index] = it
+                        }
+                        is CustomTTSProvider -> p.fetchAudio(firstText, spd)?.let {
+                            if (playSessionId == currentSession) audioCache[index] = it
+                        }
                     }
                 }
             }
@@ -1748,7 +1776,18 @@ class ReaderViewModel(
         _uiState.update { it.copy(ttsLocked = !it.ttsLocked) }
         log("[TTS] ${if (!_uiState.value.ttsLocked) "解锁" else "锁定"}防误触模式")
     }
-    private fun killPlayChain() { playChainActive = false; currentTTSProvider?.stop(); audioCache.clear(); boundariesCache.clear(); subSegCache.clear(); currentSubSegParaIdx = -1; currentSubSegs = emptyList(); currentSubSegOffsets = emptyList(); estJob?.cancel() }
+    private fun killPlayChain() {
+        playSessionId++
+        playChainActive = false
+        currentTTSProvider?.stop()
+        audioCache.clear()
+        boundariesCache.clear()
+        subSegCache.clear()
+        currentSubSegParaIdx = -1
+        currentSubSegs = emptyList()
+        currentSubSegOffsets = emptyList()
+        estJob?.cancel()
+    }
 
     // ======== 句子追踪 ========
     /** Edge TTS 词边界驱动 — 每个句子定位第一个词的时间偏移精确调度 */
@@ -1844,7 +1883,43 @@ class ReaderViewModel(
             repository.updateBookTtsConfig(book.id, s.ttsProvider.name, voice, s.ttsSpeed)
         }
     }
-    fun updateLLMConfig(c: LLMConfig) { _uiState.update { it.copy(llmConfig = c) }; prefs.edit().putString("llm_provider", c.provider).putString("llm_apikey", c.apiKey).putString("llm_endpoint", c.endpoint).putString("llm_model", c.model).apply() }
+    fun updateLLMConfig(c: LLMConfig) {
+        _uiState.update { it.copy(llmConfig = c) }
+        prefs.edit()
+            .putString("llm_provider", c.provider)
+            .putString("llm_apikey", c.apiKey)
+            .putString("llm_endpoint", c.endpoint)
+            .putString("llm_model", c.model)
+            .apply()
+
+        // 统一模型互通：同步更新 AI 伴读设置 (moreader_ai_prefs)
+        val aiPrefs = getApplication<android.app.Application>().getSharedPreferences("moreader_ai_prefs", Context.MODE_PRIVATE)
+        val existingJson = aiPrefs.getString("ai_config_json", null)
+        val mappedProvider = when (c.provider.lowercase()) {
+            "deepseek" -> "DeepSeek"
+            "siliconflow" -> "SiliconFlow"
+            "openrouter" -> "OpenRouter"
+            "openai" -> "OpenAI"
+            else -> "Custom"
+        }
+        val cleanEndpoint = c.endpoint.trim().removeSuffix("/").removeSuffix("/chat/completions")
+        val updatedAiConfig = com.moyue.ai.model.AiConfig(
+            provider = mappedProvider,
+            baseUrl = if (cleanEndpoint.isNotBlank()) cleanEndpoint else when (mappedProvider) {
+                "DeepSeek" -> "https://api.deepseek.com/v1"
+                "SiliconFlow" -> "https://api.siliconflow.cn/v1"
+                "OpenRouter" -> "https://openrouter.ai/api/v1"
+                else -> "https://api.openai.com/v1"
+            },
+            apiKey = c.apiKey,
+            model = if (c.model.isNotBlank()) c.model else when (mappedProvider) {
+                "DeepSeek" -> "deepseek-chat"
+                "SiliconFlow" -> "Qwen/Qwen2.5-72B-Instruct"
+                else -> "gpt-4o-mini"
+            }
+        )
+        aiPrefs.edit().putString("ai_config_json", com.google.gson.Gson().toJson(updatedAiConfig)).apply()
+    }
 
     // === Local AI engine management ===
     fun setTranslateEngine(engine: TranslateEngine) {
