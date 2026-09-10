@@ -92,7 +92,17 @@ class AiCacheRepository(private val context: Context) {
         val key = "summary_${bookId}_${chapterIndex}_${scope}_${ratio}"
         val json = prefs.getString(key, null) ?: return null
         return try {
-            gson.fromJson(json, AiSummaryResult::class.java)
+            val res = gson.fromJson(json, AiSummaryResult::class.java) ?: return null
+            res.copy(
+                title = res.title ?: "",
+                paragraphs = (res.paragraphs ?: emptyList()).map { p ->
+                    p.copy(
+                        original = p.original ?: "",
+                        translation = p.translation ?: ""
+                    )
+                },
+                rawMarkdown = res.rawMarkdown ?: ""
+            )
         } catch (e: Exception) {
             null
         }
@@ -108,7 +118,13 @@ class AiCacheRepository(private val context: Context) {
         val key = "plot_${bookId}_${chapterIndex}_${scope}"
         val json = prefs.getString(key, null) ?: return null
         return try {
-            gson.fromJson(json, AiPlotResult::class.java)
+            val res = gson.fromJson(json, AiPlotResult::class.java) ?: return null
+            res.copy(
+                coreDynamicsOriginal = res.coreDynamicsOriginal ?: "",
+                coreDynamicsTranslation = res.coreDynamicsTranslation ?: "",
+                characters = res.characters ?: emptyList(),
+                timeline = res.timeline ?: emptyList()
+            )
         } catch (e: Exception) {
             null
         }
@@ -124,7 +140,10 @@ class AiCacheRepository(private val context: Context) {
         val key = "quiz_${bookId}_${chapterIndex}_${scope}_${count}_${difficulty}"
         val json = prefs.getString(key, null) ?: return null
         return try {
-            gson.fromJson(json, AiQuizResult::class.java)
+            val res = gson.fromJson(json, AiQuizResult::class.java) ?: return null
+            res.copy(
+                questions = res.questions ?: emptyList()
+            )
         } catch (e: Exception) {
             null
         }

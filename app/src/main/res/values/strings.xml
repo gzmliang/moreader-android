@@ -721,4 +721,9 @@ AI Voice（云端 TTS）：
     <string name="ai_settings_saved">设置已保存！</string>
     <string name="ai_settings_guide_tip">请先配置 AI 服务的 API Key 才能开始深度伴读。</string>
     <string name="ai_settings_guide_btn">去配置</string>
+
+    <!-- Top Bar Actions -->
+    <string name="action_more">更多功能</string>
+    <string name="theme_light_mode">浅色模式</string>
+    <string name="theme_dark_mode">深色模式</string>
 </resources>

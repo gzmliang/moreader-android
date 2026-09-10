@@ -598,4 +598,9 @@ Just change the Base URL and API Key</string>
     <string name="ai_settings_saved">Settings saved!</string>
     <string name="ai_settings_guide_tip">Please configure your AI Provider API Key first.</string>
     <string name="ai_settings_guide_btn">Configure Now</string>
+
+    <!-- Top Bar Actions -->
+    <string name="action_more">More options</string>
+    <string name="theme_light_mode">Light Mode</string>
+    <string name="theme_dark_mode">Dark Mode</string>
 </resources>

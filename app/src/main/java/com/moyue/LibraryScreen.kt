@@ -74,8 +74,12 @@ fun LibraryScreen(
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     val coroutineScope = rememberCoroutineScope()
 
-    var showSortMenu by remember { mutableStateOf(false) }
+    var showMoreMenu by remember { mutableStateOf(false) }
+    var showSortDialog by remember { mutableStateOf(false) }
+    var showUploadAllConfirm by remember { mutableStateOf(false) }
     var showWebDavDialog by remember { mutableStateOf(false) }
+    val uploadScope = rememberCoroutineScope()
+    val syncClientForUpload = remember { SyncClient(context) }
 
     // Handle shared files from other apps
     LaunchedEffect(sharedUris) {
@@ -137,7 +141,12 @@ fun LibraryScreen(
                             textStyle = androidx.compose.ui.text.TextStyle(fontSize = 16.sp),
                         )
                     } else {
-                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.library_title), fontWeight = FontWeight.Bold)
+                        Text(
+                            text = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.library_title),
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 },
                 navigationIcon = {
@@ -150,129 +159,121 @@ fun LibraryScreen(
                     }
                 },
                 actions = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(0.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (!isSearchActive) {
-                            IconButton(onClick = { viewModel.setSearchActive(true) }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
+                    if (!isSearchActive) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // 1. 搜索
+                            IconButton(onClick = { viewModel.setSearchActive(true) }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Search, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.search_hint), modifier = Modifier.size(22.dp))
                             }
-                        }
 
-                        // 排序按钮
-                        Box {
-                            IconButton(onClick = { showSortMenu = true }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.SwapVert, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_title), modifier = Modifier.size(20.dp))
+                            // 2. 添加图书
+                            IconButton(onClick = {
+                                importLauncher.launch(arrayOf("application/epub+zip"))
+                            }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.import_book), modifier = Modifier.size(22.dp))
                             }
-                            DropdownMenu(
-                                expanded = showSortMenu,
-                                onDismissRequest = { showSortMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text((if (sortOrder == BookSortOrder.RECENT) "✓ " else "") + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_recent), fontSize = 13.sp) },
-                                    onClick = {
-                                        viewModel.setSortOrder(BookSortOrder.RECENT)
-                                        showSortMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text((if (sortOrder == BookSortOrder.TITLE) "✓ " else "") + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_name), fontSize = 13.sp) },
-                                    onClick = {
-                                        viewModel.setSortOrder(BookSortOrder.TITLE)
-                                        showSortMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text((if (sortOrder == BookSortOrder.AUTHOR) "✓ " else "") + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_author), fontSize = 13.sp) },
-                                    onClick = {
-                                        viewModel.setSortOrder(BookSortOrder.AUTHOR)
-                                        showSortMenu = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text((if (sortOrder == BookSortOrder.PROGRESS) "✓ " else "") + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_progress), fontSize = 13.sp) },
-                                    onClick = {
-                                        viewModel.setSortOrder(BookSortOrder.PROGRESS)
-                                        showSortMenu = false
-                                    }
-                                )
-                            }
-                        }
 
-                        // Dark/Light mode toggle for app UI
-                        IconButton(onClick = {
-                            val newDark = !isAppDark
-                            isAppDark = newDark
-                            com.moyue.app.ui.theme.saveDarkModePreference(context, newDark)
-                            (context as? androidx.activity.ComponentActivity)?.recreate()
-                        }, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                if (isAppDark) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.dark_mode_toggle),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                        IconButton(onClick = onOpenBookmarks, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Bookmark, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title), modifier = Modifier.size(20.dp))
-                        }
-                        IconButton(onClick = onOpenVocabulary, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.MenuBook, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_title), modifier = Modifier.size(20.dp))
-                        }
-                        IconButton(onClick = onOpenFlashcards, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Bolt, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.flashcard_title), modifier = Modifier.size(20.dp))
-                        }
-                        // Upload all to cloud button (only when logged in)
-                        val uploadScope = rememberCoroutineScope()
-                        val syncClientForUpload = remember { SyncClient(context) }
-                        if (syncClientForUpload.isLoggedIn()) {
-                            var showUploadAllConfirm by remember { mutableStateOf(false) }
-                            IconButton(onClick = { showUploadAllConfirm = true }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.CloudUpload, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_desc),
-                                    modifier = Modifier.size(20.dp))
-                            }
-                            if (showUploadAllConfirm) {
-                                AlertDialog(
-                                    onDismissRequest = { if (!isUploading) showUploadAllConfirm = false },
-                                    title = { Text(if (isUploading) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_uploading) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_title)) },
-                                    text = {
-                                        if (isUploading) {
-                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$uploadProgress / $uploadTotal")
-                                                Spacer(Modifier.height(8.dp))
-                                                LinearProgressIndicator(
-                                                    progress = { if (uploadTotal > 0) uploadProgress.toFloat() / uploadTotal else 0f },
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                )
+                            // 3. 更多菜单（方案 A）
+                            Box {
+                                IconButton(onClick = { showMoreMenu = true }, modifier = Modifier.size(36.dp)) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.action_more), modifier = Modifier.size(22.dp))
+                                }
+
+                                DropdownMenu(
+                                    expanded = showMoreMenu,
+                                    onDismissRequest = { showMoreMenu = false }
+                                ) {
+                                    // 排序
+                                    val currentSortLabel = when (sortOrder) {
+                                        BookSortOrder.RECENT -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_recent)
+                                        BookSortOrder.TITLE -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_name)
+                                        BookSortOrder.AUTHOR -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_author)
+                                        BookSortOrder.PROGRESS -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_progress)
+                                    }
+                                    DropdownMenuItem(
+                                        text = { Text("${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_title)} ($currentSortLabel)", fontSize = 13.sp) },
+                                        leadingIcon = { Icon(Icons.Default.SwapVert, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            showSortDialog = true
+                                        }
+                                    )
+
+                                    HorizontalDivider()
+
+                                    // 书签
+                                    DropdownMenuItem(
+                                        text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title), fontSize = 13.sp) },
+                                        leadingIcon = { Icon(Icons.Default.Bookmark, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            onOpenBookmarks()
+                                        }
+                                    )
+
+                                    // 生词本
+                                    DropdownMenuItem(
+                                        text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_title), fontSize = 13.sp) },
+                                        leadingIcon = { Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            onOpenVocabulary()
+                                        }
+                                    )
+
+                                    // 闪卡
+                                    DropdownMenuItem(
+                                        text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.flashcard_title), fontSize = 13.sp) },
+                                        leadingIcon = { Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            onOpenFlashcards()
+                                        }
+                                    )
+
+                                    HorizontalDivider()
+
+                                    // 深色/浅色模式切换
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                if (isAppDark) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.theme_light_mode)
+                                                else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.theme_dark_mode),
+                                                fontSize = 13.sp
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                if (isAppDark) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            val newDark = !isAppDark
+                                            isAppDark = newDark
+                                            com.moyue.app.ui.theme.saveDarkModePreference(context, newDark)
+                                            (context as? androidx.activity.ComponentActivity)?.recreate()
+                                        }
+                                    )
+
+                                    // 云端同步全部上传
+                                    if (syncClientForUpload.isLoggedIn()) {
+                                        DropdownMenuItem(
+                                            text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_desc), fontSize = 13.sp) },
+                                            leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                            onClick = {
+                                                showMoreMenu = false
+                                                showUploadAllConfirm = true
                                             }
-                                        } else {
-                                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_confirm))
-                                        }
-                                    },
-                                    confirmButton = {
-                                        if (!isUploading) {
-                                            TextButton(onClick = {
-                                                val client = SyncClient(context)
-                                                uploadScope.launch {
-                                                    viewModel.uploadAllToCloud(context, client)
-                                                }
-                                            }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload), color = MaterialTheme.colorScheme.primary) }
-                                        }
-                                    },
-                                    dismissButton = {
-                                        if (!isUploading) {
-                                            TextButton(onClick = { showUploadAllConfirm = false }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel)) }
-                                        } else {
-                                            TextButton(onClick = { showUploadAllConfirm = false }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_background)) }
-                                        }
-                                    },
-                                )
+                                        )
+                                    }
+                                }
                             }
-                        }
-                        IconButton(onClick = {
-                            importLauncher.launch(arrayOf("application/epub+zip"))
-                        }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.import_book), modifier = Modifier.size(20.dp))
                         }
                     }
                 },
@@ -397,6 +398,88 @@ fun LibraryScreen(
             }
         }
     ) { padding ->
+        // 排序选择对话框
+        if (showSortDialog) {
+            AlertDialog(
+                onDismissRequest = { showSortDialog = false },
+                title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_title)) },
+                text = {
+                    Column {
+                        listOf(
+                            BookSortOrder.RECENT to androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_recent),
+                            BookSortOrder.TITLE to androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_name),
+                            BookSortOrder.AUTHOR to androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_author),
+                            BookSortOrder.PROGRESS to androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sort_progress),
+                        ).forEach { (order, label) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.setSortOrder(order)
+                                        showSortDialog = false
+                                    }
+                                    .padding(vertical = 10.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = (sortOrder == order),
+                                    onClick = {
+                                        viewModel.setSortOrder(order)
+                                        showSortDialog = false
+                                    }
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(text = label, fontSize = 15.sp)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showSortDialog = false }) {
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        // 云端全部上传确认对话框
+        if (showUploadAllConfirm) {
+            AlertDialog(
+                onDismissRequest = { if (!isUploading) showUploadAllConfirm = false },
+                title = { Text(if (isUploading) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_uploading) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_title)) },
+                text = {
+                    if (isUploading) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$uploadProgress / $uploadTotal")
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { if (uploadTotal > 0) uploadProgress.toFloat() / uploadTotal else 0f },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    } else {
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_confirm))
+                    }
+                },
+                confirmButton = {
+                    if (!isUploading) {
+                        TextButton(onClick = {
+                            val client = SyncClient(context)
+                            uploadScope.launch {
+                                viewModel.uploadAllToCloud(context, client)
+                            }
+                        }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload), color = MaterialTheme.colorScheme.primary) }
+                    }
+                },
+                dismissButton = {
+                    if (!isUploading) {
+                        TextButton(onClick = { showUploadAllConfirm = false }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel)) }
+                    } else {
+                        TextButton(onClick = { showUploadAllConfirm = false }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_background)) }
+                    }
+                },
+            )
+        }
         // Load cloud books when logged in
         val syncClient = remember { SyncClient(context) }
         LaunchedEffect(syncClient.isLoggedIn()) {

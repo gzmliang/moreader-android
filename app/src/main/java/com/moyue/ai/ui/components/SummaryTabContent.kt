@@ -367,7 +367,7 @@ fun SummaryTabContent(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp)
                     ) {
-                        if (result.title.isNotBlank()) {
+                        if (!result.title.isNullOrBlank()) {
                             item {
                                 Surface(
                                     color = if (isEink) Color.Transparent else MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
@@ -377,7 +377,7 @@ fun SummaryTabContent(
                                         .padding(bottom = 14.dp)
                                 ) {
                                     Text(
-                                        text = result.title,
+                                        text = result.title ?: "",
                                         fontSize = (textSizeSp + 4).sp,
                                         fontWeight = FontWeight.Bold,
                                         lineHeight = (textSizeSp * 1.5f + 4).sp,
@@ -388,7 +388,7 @@ fun SummaryTabContent(
                             }
                         }
 
-                        items(result.paragraphs) { p ->
+                        items(result.paragraphs ?: emptyList()) { p ->
                             ParagraphItem(
                                 paragraph = p,
                                 displayMode = displayMode,
@@ -485,7 +485,7 @@ fun SummaryTabContent(
             },
             dismissButton = {
                 TextButton(onClick = { showAudioDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(com.moyue.app.R.string.cancel))
                 }
             }
         )
@@ -509,9 +509,9 @@ private fun ParagraphItem(
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             // Original text
-            if ((displayMode == "bilingual" || displayMode == "orig") && paragraph.original.isNotBlank()) {
+            if ((displayMode == "bilingual" || displayMode == "orig") && !paragraph.original.isNullOrBlank()) {
                 Text(
-                    text = paragraph.original,
+                    text = paragraph.original ?: "",
                     fontSize = textSizeSp.sp,
                     fontWeight = FontWeight.Medium,
                     lineHeight = (textSizeSp * 1.6f).sp,
@@ -520,14 +520,14 @@ private fun ParagraphItem(
             }
 
             // Translation text
-            if ((displayMode == "bilingual" || displayMode == "target") && paragraph.translation.isNotBlank()) {
-                if (displayMode == "bilingual" && paragraph.original.isNotBlank()) {
+            if ((displayMode == "bilingual" || displayMode == "target") && !paragraph.translation.isNullOrBlank()) {
+                if (displayMode == "bilingual" && !paragraph.original.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     HorizontalDivider(color = if (isEink) Color.LightGray else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 Text(
-                    text = paragraph.translation,
+                    text = paragraph.translation ?: "",
                     fontSize = (textSizeSp * 0.94f).sp,
                     fontWeight = FontWeight.Normal,
                     lineHeight = (textSizeSp * 1.55f).sp,
