@@ -297,8 +297,27 @@ fun ReaderScreen(
                     },
                     navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.back)) } },
                     actions = {
-                        IconButton(onClick = { showAiCompanion = true }) { 
-                            Text("🤖", fontSize = 18.sp)
+                        IconButton(onClick = { showAiCompanion = true }) {
+                            val textColor = Color(android.graphics.Color.parseColor(state.theme.textColor))
+                            Surface(
+                                shape = RoundedCornerShape(5.dp),
+                                color = if (state.isEinkMode) Color.Transparent else textColor.copy(alpha = 0.08f),
+                                border = BorderStroke(
+                                    width = 1.2.dp,
+                                    color = if (state.isEinkMode) Color.Black else textColor.copy(alpha = 0.65f)
+                                ),
+                                modifier = Modifier.padding(horizontal = 2.dp)
+                            ) {
+                                Text(
+                                    text = "AI",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
+                                    letterSpacing = 0.8.sp,
+                                    color = if (state.isEinkMode) Color.Black else textColor,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                         IconButton(onClick = { viewModel.toggleFullscreen() }) { Icon(Icons.Default.Fullscreen, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_fullscreen)) }
                         IconButton(onClick = { viewModel.toggleBookmarkPanel() }) { Icon(Icons.Outlined.BookmarkBorder, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title)) }
@@ -1005,6 +1024,7 @@ fun ReaderScreen(
                     chapterText = extractedText,
                     bookDao = repository.dao,
                     edgeTTS = currentEdgeTTS,
+                    isEinkMode = state.isEinkMode,
                     onDismiss = { 
                         showAiCompanion = false 
                         viewModel.refreshEinkMode()

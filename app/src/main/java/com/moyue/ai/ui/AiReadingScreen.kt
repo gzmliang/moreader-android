@@ -41,13 +41,14 @@ fun AiReadingScreen(
     chapterText: String,
     bookDao: BookDao,
     edgeTTS: EdgeTTSProvider?,
+    isEinkMode: Boolean = false,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val repository = remember { AiCacheRepository(context) }
 
     var aiConfig by remember { mutableStateOf(repository.getAiConfig()) }
-    var isEink by remember { mutableStateOf(repository.isEinkMode()) }
+    val isEink = isEinkMode || repository.isEinkMode()
     var textSizeSp by remember { mutableFloatStateOf(repository.getSummaryTextSize()) }
 
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Summary, 1: Plot, 2: Quiz, 3: Reports
@@ -89,7 +90,7 @@ fun AiReadingScreen(
                             IconButton(onClick = onDismiss) {
                                 Icon(
                                     imageVector = Icons.Default.ArrowBack,
-                                    contentDescription = "Back",
+                                    contentDescription = stringResource(R.string.back),
                                     tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                                 )
                             }
@@ -109,27 +110,6 @@ fun AiReadingScreen(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            // E-Ink Toggle Button
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .padding(horizontal = 4.dp)
-                                    .clickable {
-                                        val newMode = !isEink
-                                        isEink = newMode
-                                        repository.setEinkMode(newMode)
-                                    }
-                            ) {
-                                Text(
-                                    text = if (isEink) "E-Ink ✓" else "E-Ink",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isEink) Color.White else MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
 
@@ -171,7 +151,7 @@ fun AiReadingScreen(
                             IconButton(onClick = { showSettingsDialog = true }) {
                                 Icon(
                                     imageVector = Icons.Default.Settings,
-                                    contentDescription = "Settings",
+                                    contentDescription = stringResource(R.string.ai_settings_title),
                                     tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                                 )
                             }
@@ -180,7 +160,7 @@ fun AiReadingScreen(
                             IconButton(onClick = onDismiss) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "Close",
+                                    contentDescription = stringResource(R.string.close),
                                     tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                                 )
                             }
