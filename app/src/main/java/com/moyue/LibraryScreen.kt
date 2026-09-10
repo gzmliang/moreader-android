@@ -115,7 +115,7 @@ fun LibraryScreen(
     // App dark mode toggle for UI screens (independent of reader theme)
     val systemInDark = isSystemInDarkTheme()
     val manualPref = com.moyue.app.ui.theme.getDarkModePreference(context)
-    var isAppDark by remember { mutableStateOf(systemInDark || manualPref == true) }
+    var isAppDark by remember { mutableStateOf(manualPref ?: systemInDark) }
 
     Scaffold(
         topBar = {

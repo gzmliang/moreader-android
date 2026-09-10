@@ -66,8 +66,8 @@ fun MoreaderTheme(
     val context = LocalContext.current
     val systemInDark = isSystemInDarkTheme()
     val manualPref = getDarkModePreference(context)
-    // Always honor system dark mode if system is set to dark mode; otherwise honor manual preference
-    val isDark = darkTheme ?: (systemInDark || manualPref == true)
+    // Manual preference takes top priority. When not set (null), follow system dark theme.
+    val isDark = darkTheme ?: (manualPref ?: systemInDark)
     val colorScheme = if (isDark) DarkColors else LightColors
 
     MaterialTheme(
