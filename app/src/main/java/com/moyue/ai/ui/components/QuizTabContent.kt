@@ -181,6 +181,8 @@ fun QuizTabContent(
                                 text = if (selectedScope == "book") stringResource(R.string.ai_scope_book_short) else stringResource(R.string.ai_scope_chapter_short),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.width(2.dp))
@@ -232,6 +234,8 @@ fun QuizTabContent(
                                 text = stringResource(R.string.ai_quiz_count_format, questionCount),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.width(2.dp))
@@ -285,6 +289,8 @@ fun QuizTabContent(
                                 text = diffShortLabel,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.width(2.dp))
@@ -342,6 +348,8 @@ fun QuizTabContent(
                                 text = modeShortLabel,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.width(2.dp))
@@ -618,6 +626,8 @@ fun QuizTabContent(
                                                         text = badge,
                                                         fontSize = 12.sp,
                                                         fontWeight = FontWeight.Medium,
+                                                        maxLines = 1,
+                                                        softWrap = false,
                                                         color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
                                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                                                     )

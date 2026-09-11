@@ -10,11 +10,11 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.gzmliang.moreader"
+        applicationId = "com.moyue.app.tingshu"
         minSdk = 26
         targetSdk = 36
-        versionCode = 20122
-        versionName = "2.9.36"
+        versionCode = 20123
+        versionName = "2.9.37"
 
         // Local AI NDK config (disabled — no NDK in test env)
         /*externalNativeBuild {
