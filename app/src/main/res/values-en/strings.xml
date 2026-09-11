@@ -526,10 +526,13 @@ Just change the Base URL and API Key</string>
     <!-- AI Common & Status -->
     <string name="ai_scope_chapter">Current Chapter</string>
     <string name="ai_scope_book">Entire Book</string>
+    <string name="ai_scope_chapter_short">Chapter</string>
+    <string name="ai_scope_book_short">Book</string>
     <string name="ai_generate_btn">✨ Generate Summary</string>
     <string name="ai_regenerate_btn">🔄 Regenerate</string>
     <string name="ai_generating">AI is analyzing and condensing…</string>
     <string name="ai_cached_badge">⚡ Cached (0 Token)</string>
+    <string name="ai_cached_short">Cached</string>
     <string name="ai_empty_hint">Tap button below to extract insights with AI!</string>
     <string name="ai_error_format">AI Request failed: %1$s</string>
     <string name="ai_copy_success">Copied to clipboard</string>
@@ -540,6 +543,9 @@ Just change the Base URL and API Key</string>
     <string name="ai_display_mode_bilingual">🔄 Bilingual</string>
     <string name="ai_display_mode_original">📄 Original</string>
     <string name="ai_display_mode_target">🌐 Translated</string>
+    <string name="ai_display_mode_bilingual_short">Bilingual</string>
+    <string name="ai_display_mode_orig_short">Original</string>
+    <string name="ai_display_mode_trans_short">Translated</string>
     <string name="ai_play_listen_btn">▶ Listen</string>
     <string name="ai_stop_listen_btn">⏹ Stop</string>
     <string name="ai_listen_mode_title">Audio Mode</string>

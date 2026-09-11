@@ -649,10 +649,13 @@ AI Voice（云端 TTS）：
     <!-- AI Common & Status -->
     <string name="ai_scope_chapter">当前章节</string>
     <string name="ai_scope_book">全书宏观</string>
+    <string name="ai_scope_chapter_short">当前章</string>
+    <string name="ai_scope_book_short">全书</string>
     <string name="ai_generate_btn">✨ 开始提炼</string>
     <string name="ai_regenerate_btn">🔄 重新生成</string>
     <string name="ai_generating">AI 正在深度思考与提炼中…</string>
     <string name="ai_cached_badge">⚡ 已缓存 (0 Token)</string>
+    <string name="ai_cached_short">已缓存</string>
     <string name="ai_empty_hint">点击下方按钮，让 AI 为您梳理精华！</string>
     <string name="ai_error_format">AI 请求失败: %1$s</string>
     <string name="ai_copy_success">已复制到剪贴板</string>
@@ -663,6 +666,9 @@ AI Voice（云端 TTS）：
     <string name="ai_display_mode_bilingual">🔄 双语对照</string>
     <string name="ai_display_mode_original">📄 仅原著</string>
     <string name="ai_display_mode_target">🌐 仅译文</string>
+    <string name="ai_display_mode_bilingual_short">双语</string>
+    <string name="ai_display_mode_orig_short">原文</string>
+    <string name="ai_display_mode_trans_short">译文</string>
     <string name="ai_play_listen_btn">▶ 听精读</string>
     <string name="ai_stop_listen_btn">⏹ 停止</string>
     <string name="ai_listen_mode_title">朗读语言模式</string>

@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,7 +45,11 @@ fun SummaryTabContent(
     isEink: Boolean,
     textSizeSp: Float,
     bookDao: BookDao,
-    edgeTTS: EdgeTTSProvider?
+    edgeTTS: EdgeTTSProvider?,
+    onHasResultChange: (Boolean) -> Unit = {},
+    onAudioPlayingChange: (Boolean) -> Unit = {},
+    onRegisterAudioAction: (() -> Unit) -> Unit = {},
+    onRegisterSaveAction: (() -> Unit) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -61,6 +68,22 @@ fun SummaryTabContent(
     var isPlayingAudio by remember { mutableStateOf(false) }
     var audioMode by remember { mutableStateOf("orig") } // "orig", "trans", "both"
     var showAudioDialog by remember { mutableStateOf(false) }
+
+    // Synchronize result and audio states to parent top bar
+    LaunchedEffect(summaryResult) {
+        onHasResultChange(summaryResult != null)
+    }
+    LaunchedEffect(isPlayingAudio) {
+        onAudioPlayingChange(isPlayingAudio)
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            if (isPlayingAudio) {
+                edgeTTS?.stop()
+                isPlayingAudio = false
+            }
+        }
+    }
 
     // When parameters change, reload cache
     LaunchedEffect(bookId, chapterIndex, selectedScope, ratio) {
@@ -81,11 +104,11 @@ fun SummaryTabContent(
         val textToRead = StringBuilder()
         for (p in paragraphs) {
             when (audioMode) {
-                "orig" -> if (p.original.isNotBlank()) textToRead.append(p.original).append("\n\n")
-                "trans" -> if (p.translation.isNotBlank()) textToRead.append(p.translation).append("\n\n")
+                "orig" -> if (!p.original.isNullOrBlank()) textToRead.append(p.original).append("\n\n")
+                "trans" -> if (!p.translation.isNullOrBlank()) textToRead.append(p.translation).append("\n\n")
                 "both" -> {
-                    if (p.original.isNotBlank()) textToRead.append(p.original).append("\n")
-                    if (p.translation.isNotBlank()) textToRead.append(p.translation).append("\n\n")
+                    if (!p.original.isNullOrBlank()) textToRead.append(p.original).append("\n")
+                    if (!p.translation.isNullOrBlank()) textToRead.append(p.translation).append("\n\n")
                 }
             }
         }
@@ -106,220 +129,269 @@ fun SummaryTabContent(
         }
     }
 
+    // Register top bar actions for Audio and Save to Library
+    val badgeText = stringResource(R.string.ai_summary_badge_text)
+    val bookSuffix = stringResource(R.string.ai_summary_book_suffix)
+    val chapterSuffix = stringResource(R.string.ai_summary_chapter_suffix)
+    val saveSuccessMsg = stringResource(R.string.ai_save_to_library_success)
+    val saveFailedMsg = stringResource(R.string.ai_save_to_library_failed)
+
+    LaunchedEffect(summaryResult, isPlayingAudio, audioMode, selectedScope) {
+        onRegisterAudioAction {
+            if (isPlayingAudio) {
+                edgeTTS?.stop()
+                isPlayingAudio = false
+            } else {
+                showAudioDialog = true
+            }
+        }
+        onRegisterSaveAction {
+            val resToSave = summaryResult ?: return@onRegisterSaveAction
+            scope.launch {
+                val res = SummaryBookSaver.saveSummaryAsBook(
+                    context = context,
+                    bookDao = bookDao,
+                    summary = resToSave,
+                    sourceBookTitle = bookTitle,
+                    badgeText = badgeText,
+                    suffixText = if (selectedScope == "book") bookSuffix else chapterSuffix
+                )
+                res.fold(
+                    onSuccess = { Toast.makeText(context, saveSuccessMsg.format(it.title), Toast.LENGTH_SHORT).show() },
+                    onFailure = { Toast.makeText(context, saveFailedMsg.format(it.localizedMessage), Toast.LENGTH_SHORT).show() }
+                )
+            }
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        // 精简大气 Controls Header
-        Surface(
-            color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-            shape = RoundedCornerShape(12.dp),
+        // Compact single-line controls bar (height ~34dp)
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 6.dp)
-                .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(12.dp)) else Modifier)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                // Row 1: Scope & Ratio & Cached Badge
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Scope Selector (紧凑切换)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf(
-                            "chapter" to stringResource(R.string.ai_scope_chapter),
-                            "book" to stringResource(R.string.ai_scope_book)
-                        ).forEach { (sKey, sLabel) ->
-                            val isSelected = (selectedScope == sKey)
+            // Dropdown Capsules
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Scope Capsule: [ 当前章 ▾ ] / [ 全书 ▾ ]
+                var scopeMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    Surface(
+                        color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .clickable { scopeMenuExpanded = true }
+                            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        ) {
                             Text(
-                                text = sLabel,
+                                text = if (selectedScope == "book") stringResource(R.string.ai_scope_book_short) else stringResource(R.string.ai_scope_chapter_short),
                                 fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                modifier = Modifier
-                                    .background(
-                                        if (isSelected) (if (isEink) Color.Black else MaterialTheme.colorScheme.primary)
-                                        else (if (isEink) Color.White else MaterialTheme.colorScheme.surface),
-                                        RoundedCornerShape(6.dp)
-                                    )
-                                    .then(if (isEink && !isSelected) Modifier.border(1.dp, Color.Black, RoundedCornerShape(6.dp)) else Modifier)
-                                    .clickable { selectedScope = sKey }
-                                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                                color = if (isSelected) Color.White else (if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface)
+                                fontWeight = FontWeight.Medium,
+                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
-
-                    // Ratio Selector (扁平精致胶囊)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "${ratio}%",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(end = 6.dp)
+                    DropdownMenu(
+                        expanded = scopeMenuExpanded,
+                        onDismissRequest = { scopeMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.ai_scope_chapter), fontSize = 13.sp) },
+                            onClick = {
+                                selectedScope = "chapter"
+                                scopeMenuExpanded = false
+                            }
                         )
-                        listOf(20, 30, 50).forEach { r ->
-                            val isSelected = (ratio == r)
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.ai_scope_book), fontSize = 13.sp) },
+                            onClick = {
+                                selectedScope = "book"
+                                scopeMenuExpanded = false
+                            }
+                        )
+                    }
+                }
+
+                // Ratio Capsule: [ 30% ▾ ]
+                var ratioMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    Surface(
+                        color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .clickable { ratioMenuExpanded = true }
+                            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        ) {
                             Text(
-                                text = "${r}%",
-                                fontSize = 11.sp,
-                                modifier = Modifier
-                                    .padding(horizontal = 2.dp)
-                                    .background(
-                                        if (isSelected) (if (isEink) Color.Black else MaterialTheme.colorScheme.primary)
-                                        else (if (isEink) Color.LightGray.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface),
-                                        RoundedCornerShape(4.dp)
+                                text = "${ratio}%",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = ratioMenuExpanded,
+                        onDismissRequest = { ratioMenuExpanded = false }
+                    ) {
+                        listOf(20, 30, 50).forEach { r ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = "${r}%",
+                                        fontSize = 13.sp,
+                                        fontWeight = if (ratio == r) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (ratio == r) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                     )
-                                    .clickable { ratio = r }
-                                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                                color = if (isSelected) Color.White else Color.Black
+                                },
+                                onClick = {
+                                    ratio = r
+                                    ratioMenuExpanded = false
+                                }
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Row 2: Display Mode & Action Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Display Mode Chips
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val modes = listOf(
-                            "bilingual" to stringResource(R.string.ai_display_mode_bilingual),
-                            "orig" to stringResource(R.string.ai_display_mode_original),
-                            "target" to stringResource(R.string.ai_display_mode_target)
-                        )
-                        modes.forEach { (m, label) ->
-                            val isSelected = (displayMode == m)
+                // Display Mode Capsule: [ 双语 ▾ ] / [ 原文 ▾ ] / [ 译文 ▾ ]
+                var modeMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    Surface(
+                        color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .clickable { modeMenuExpanded = true }
+                            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        ) {
+                            val modeLabel = when (displayMode) {
+                                "orig" -> stringResource(R.string.ai_display_mode_orig_short)
+                                "target" -> stringResource(R.string.ai_display_mode_trans_short)
+                                else -> stringResource(R.string.ai_display_mode_bilingual_short)
+                            }
                             Text(
-                                text = label,
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                modifier = Modifier
-                                    .background(
-                                        if (isSelected) (if (isEink) Color.Black else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                                        else (if (isEink) Color.White else MaterialTheme.colorScheme.surface),
-                                        RoundedCornerShape(6.dp)
-                                    )
-                                    .then(if (isSelected && !isEink) Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp)) else Modifier)
-                                    .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(6.dp)) else Modifier)
-                                    .clickable { displayMode = m }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                color = if (isSelected) (if (isEink) Color.White else MaterialTheme.colorScheme.primary)
-                                        else (if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface)
+                                text = modeLabel,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
-
-                    // Listen & Save to Bookshelf
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (summaryResult != null) {
-                            // Listen button
-                            Text(
-                                text = if (isPlayingAudio) stringResource(R.string.ai_stop_listen_btn) else stringResource(R.string.ai_play_listen_btn),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier
-                                    .background(
-                                        if (isPlayingAudio) Color(0xFFEF4444) else (if (isEink) Color.White else Color(0xFF10B981)),
-                                        RoundedCornerShape(6.dp)
+                    DropdownMenu(
+                        expanded = modeMenuExpanded,
+                        onDismissRequest = { modeMenuExpanded = false }
+                    ) {
+                        listOf(
+                            "bilingual" to stringResource(R.string.ai_display_mode_bilingual),
+                            "orig" to stringResource(R.string.ai_display_mode_original),
+                            "target" to stringResource(R.string.ai_display_mode_target)
+                        ).forEach { (mKey, mLabel) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = mLabel,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (displayMode == mKey) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (displayMode == mKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                     )
-                                    .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(6.dp)) else Modifier)
-                                    .clickable {
-                                        if (!isPlayingAudio) showAudioDialog = true
-                                        else toggleAudio()
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                color = if (isPlayingAudio) Color.White else (if (isEink) Color.Black else Color.White)
-                            )
-
-                            // Save to bookshelf button
-                            val badgeText = stringResource(R.string.ai_summary_badge_text)
-                            val bookSuffix = stringResource(R.string.ai_summary_book_suffix)
-                            val chapterSuffix = stringResource(R.string.ai_summary_chapter_suffix)
-                            val saveSuccessMsg = stringResource(R.string.ai_save_to_library_success)
-                            val saveFailedMsg = stringResource(R.string.ai_save_to_library_failed)
-
-                            Text(
-                                text = stringResource(R.string.ai_save_to_library_btn),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier
-                                    .background(if (isEink) Color.White else MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp))
-                                    .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(6.dp)) else Modifier)
-                                    .clickable {
-                                        scope.launch {
-                                            val res = SummaryBookSaver.saveSummaryAsBook(
-                                                context = context,
-                                                bookDao = bookDao,
-                                                summary = summaryResult!!,
-                                                sourceBookTitle = bookTitle,
-                                                badgeText = badgeText,
-                                                suffixText = if (selectedScope == "book") bookSuffix else chapterSuffix
-                                            )
-                                            res.fold(
-                                                onSuccess = { Toast.makeText(context, saveSuccessMsg.format(it.title), Toast.LENGTH_SHORT).show() },
-                                                onFailure = { Toast.makeText(context, saveFailedMsg.format(it.localizedMessage), Toast.LENGTH_SHORT).show() }
-                                            )
-                                        }
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onPrimary
+                                },
+                                onClick = {
+                                    displayMode = mKey
+                                    modeMenuExpanded = false
+                                }
                             )
                         }
                     }
                 }
             }
-        }
 
-        // Cache badge or regenerate bar
-        if (summaryResult != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "⚡ " + stringResource(R.string.ai_cached_badge),
-                    fontSize = 11.sp,
-                    color = if (isEink) Color.Black else Color(0xFF10B981),
-                    fontWeight = FontWeight.SemiBold
-                )
+            // Right side: ⚡已缓存 & 🔄重新生成
+            if (summaryResult != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "⚡" + stringResource(R.string.ai_cached_short),
+                        fontSize = 11.sp,
+                        color = if (isEink) Color.Black else Color(0xFF10B981),
+                        fontWeight = FontWeight.SemiBold
+                    )
 
-                Text(
-                    text = stringResource(R.string.ai_regenerate_btn),
-                    fontSize = 11.sp,
-                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clickable {
-                        isLoading = true
-                        errorMessage = null
-                        scope.launch {
-                            val (sys, usr) = AiPromptBuilder.buildSummaryPrompt(
-                                config = config,
-                                title = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle",
-                                text = chapterText,
-                                ratio = ratio,
-                                scope = selectedScope
-                            )
-                            val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
-                            isLoading = false
-                            res.fold(
-                                onSuccess = { json ->
-                                    val parsed = AiPromptBuilder.parseSummaryResponse(json, bookId, chapterIndex, selectedScope, ratio)
-                                    repository.saveSummary(parsed)
-                                    summaryResult = parsed
-                                },
-                                onFailure = { errorMessage = it.localizedMessage }
-                            )
-                        }
+                    IconButton(
+                        onClick = {
+                            isLoading = true
+                            errorMessage = null
+                            scope.launch {
+                                val (sys, usr) = AiPromptBuilder.buildSummaryPrompt(
+                                    config = config,
+                                    title = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle",
+                                    text = chapterText,
+                                    ratio = ratio,
+                                    scope = selectedScope
+                                )
+                                val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
+                                isLoading = false
+                                res.fold(
+                                    onSuccess = { json ->
+                                        val parsed = AiPromptBuilder.parseSummaryResponse(json, bookId, chapterIndex, selectedScope, ratio)
+                                        repository.saveSummary(parsed)
+                                        summaryResult = parsed
+                                    },
+                                    onFailure = { errorMessage = it.localizedMessage }
+                                )
+                            }
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = stringResource(R.string.ai_regenerate_btn),
+                            tint = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
-                )
+                }
             }
         }
 

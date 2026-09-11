@@ -7,8 +7,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -54,6 +57,18 @@ fun AiReadingScreen(
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Summary, 1: Plot, 2: Quiz, 3: Reports
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(!aiConfig.isConfigured) }
+
+    // Summary tab actions & state
+    var summaryHasResult by remember { mutableStateOf(false) }
+    var isSummaryAudioPlaying by remember { mutableStateOf(false) }
+    var onSummaryAudioClick by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var onSummarySaveClick by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            edgeTTS?.stop()
+        }
+    }
 
     val tabs = listOf(
         stringResource(R.string.ai_companion_tab_summary),
@@ -121,6 +136,29 @@ fun AiReadingScreen(
                                 )
                             }
 
+                            // Summary actions: 🎧 Listen & 📥 Save to Library (shown when summary is ready)
+                            if (selectedTab == 0 && summaryHasResult) {
+                                IconButton(
+                                    onClick = { onSummaryAudioClick?.invoke() }
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSummaryAudioPlaying) Icons.Default.Stop else Icons.Default.Headphones,
+                                        contentDescription = if (isSummaryAudioPlaying) stringResource(R.string.ai_stop_listen_btn) else stringResource(R.string.ai_play_listen_btn),
+                                        tint = if (isSummaryAudioPlaying) Color(0xFFEF4444) else (if (isEink) Color.Black else Color(0xFF10B981))
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { onSummarySaveClick?.invoke() }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.BookmarkAdd,
+                                        contentDescription = stringResource(R.string.ai_save_to_library_btn),
+                                        tint = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+
                             // A- / A+ Text size controls
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
@@ -160,15 +198,6 @@ fun AiReadingScreen(
                                 Icon(
                                     imageVector = Icons.Default.Settings,
                                     contentDescription = stringResource(R.string.ai_settings_title),
-                                    tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            // Close
-                            IconButton(onClick = onDismiss) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = stringResource(R.string.close),
                                     tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                                 )
                             }
@@ -214,7 +243,11 @@ fun AiReadingScreen(
                             isEink = isEink,
                             textSizeSp = textSizeSp,
                             bookDao = bookDao,
-                            edgeTTS = edgeTTS
+                            edgeTTS = edgeTTS,
+                            onHasResultChange = { summaryHasResult = it },
+                            onAudioPlayingChange = { isSummaryAudioPlaying = it },
+                            onRegisterAudioAction = { action -> onSummaryAudioClick = action },
+                            onRegisterSaveAction = { action -> onSummarySaveClick = action }
                         )
                         1 -> PlotMapTabContent(
                             bookId = bookId,
