@@ -282,68 +282,6 @@ fun SummaryTabContent(
                         }
                     }
                 }
-
-                // Display Mode Capsule: [ 双语 ▾ ] / [ 原文 ▾ ] / [ 译文 ▾ ]
-                var modeMenuExpanded by remember { mutableStateOf(false) }
-                Box {
-                    Surface(
-                        color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .height(32.dp)
-                            .clickable { modeMenuExpanded = true }
-                            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp)
-                        ) {
-                            val modeLabel = when (displayMode) {
-                                "orig" -> stringResource(R.string.ai_display_mode_orig_short)
-                                "target" -> stringResource(R.string.ai_display_mode_trans_short)
-                                else -> stringResource(R.string.ai_display_mode_bilingual_short)
-                            }
-                            Text(
-                                text = modeLabel,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                    DropdownMenu(
-                        expanded = modeMenuExpanded,
-                        onDismissRequest = { modeMenuExpanded = false }
-                    ) {
-                        listOf(
-                            "bilingual" to stringResource(R.string.ai_display_mode_bilingual),
-                            "orig" to stringResource(R.string.ai_display_mode_original),
-                            "target" to stringResource(R.string.ai_display_mode_target)
-                        ).forEach { (mKey, mLabel) ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = mLabel,
-                                        fontSize = 13.sp,
-                                        fontWeight = if (displayMode == mKey) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (displayMode == mKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                    )
-                                },
-                                onClick = {
-                                    onDisplayModeChange(mKey)
-                                    modeMenuExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
             }
 
             // Right side: ⚡已缓存 & 🔄重新生成

@@ -276,7 +276,7 @@ fun AiReadingScreen(
                             }
                         }
 
-                        // 4 Tabs
+                        // 4 Tabs (Enforce single-line compact layout)
                         TabRow(
                             selectedTabIndex = selectedTab,
                             containerColor = if (isEink) Color.White else MaterialTheme.colorScheme.surface,
@@ -287,16 +287,26 @@ fun AiReadingScreen(
                                 Tab(
                                     selected = (selectedTab == index),
                                     onClick = { selectedTab = index },
-                                    text = {
+                                    modifier = Modifier.height(44.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 4.dp),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Text(
                                             text = title,
                                             fontSize = 12.sp,
+                                            maxLines = 1,
+                                            softWrap = false,
                                             fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal,
                                             color = if (isEink) (if (selectedTab == index) Color.Black else Color.Gray)
                                             else (if (selectedTab == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                                         )
                                     }
-                                )
+                                }
                             }
                         }
                     }

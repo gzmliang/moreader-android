@@ -510,7 +510,7 @@ Just change the Base URL and API Key</string>
     <!-- AI Companion (AI Companion and Quiz System) -->
     <string name="ai_companion_title">AI Companion</string>
     <string name="ai_companion_tab_summary">📚 Summary</string>
-    <string name="ai_companion_tab_plot">🕸️ Plot Map</string>
+    <string name="ai_companion_tab_plot">🕸️ Plot</string>
     <string name="ai_companion_tab_quiz">✍️ Quiz</string>
     <string name="ai_companion_tab_reports">📊 Reports</string>
 
