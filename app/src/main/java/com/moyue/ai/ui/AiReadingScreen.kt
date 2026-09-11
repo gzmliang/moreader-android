@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Headphones
@@ -53,6 +54,12 @@ fun AiReadingScreen(
     var aiConfig by remember { mutableStateOf(repository.getAiConfig()) }
     val isEink = isEinkMode || repository.isEinkMode()
     var textSizeSp by remember { mutableFloatStateOf(repository.getSummaryTextSize()) }
+    var displayMode by remember { mutableStateOf(repository.getLanguageDisplayMode()) }
+
+    val onDisplayModeChange: (String) -> Unit = { mode ->
+        displayMode = mode
+        repository.setLanguageDisplayMode(mode)
+    }
 
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Summary, 1: Plot, 2: Quiz, 3: Reports
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -159,6 +166,72 @@ fun AiReadingScreen(
                                 }
                             }
 
+                            // Global Language Mode Dropdown: 🌐 [双语 ▾] / [原文 ▾] / [译文 ▾]
+                            var langMenuExpanded by remember { mutableStateOf(false) }
+                            Box {
+                                Surface(
+                                    color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .height(28.dp)
+                                        .clickable { langMenuExpanded = true }
+                                        .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(12.dp)) else Modifier)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 6.dp)
+                                    ) {
+                                        val langLabel = when (displayMode) {
+                                            "orig" -> stringResource(R.string.ai_display_mode_orig_short)
+                                            "target" -> stringResource(R.string.ai_display_mode_trans_short)
+                                            else -> stringResource(R.string.ai_display_mode_bilingual_short)
+                                        }
+                                        Text(
+                                            text = "🌐 $langLabel",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowDropDown,
+                                            contentDescription = null,
+                                            tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                                DropdownMenu(
+                                    expanded = langMenuExpanded,
+                                    onDismissRequest = { langMenuExpanded = false }
+                                ) {
+                                    listOf(
+                                        "bilingual" to stringResource(R.string.ai_display_mode_bilingual),
+                                        "orig" to stringResource(R.string.ai_display_mode_original),
+                                        "target" to stringResource(R.string.ai_display_mode_target)
+                                    ).forEach { (mKey, mLabel) ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = mLabel,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (displayMode == mKey) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (displayMode == mKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                                )
+                                            },
+                                            onClick = {
+                                                onDisplayModeChange(mKey)
+                                                langMenuExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(4.dp))
+
                             // A- / A+ Text size controls
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
@@ -244,6 +317,8 @@ fun AiReadingScreen(
                             textSizeSp = textSizeSp,
                             bookDao = bookDao,
                             edgeTTS = edgeTTS,
+                            displayMode = displayMode,
+                            onDisplayModeChange = onDisplayModeChange,
                             onHasResultChange = { summaryHasResult = it },
                             onAudioPlayingChange = { isSummaryAudioPlaying = it },
                             onRegisterAudioAction = { action -> onSummaryAudioClick = action },
@@ -270,6 +345,8 @@ fun AiReadingScreen(
                             config = aiConfig,
                             isEink = isEink,
                             textSizeSp = textSizeSp,
+                            displayMode = displayMode,
+                            onDisplayModeChange = onDisplayModeChange,
                             onQuizCompleted = {
                                 // switch to reports or stay
                             }
@@ -278,7 +355,8 @@ fun AiReadingScreen(
                             bookId = bookId,
                             repository = repository,
                             isEink = isEink,
-                            textSizeSp = textSizeSp
+                            textSizeSp = textSizeSp,
+                            displayMode = displayMode
                         )
                     }
                 }

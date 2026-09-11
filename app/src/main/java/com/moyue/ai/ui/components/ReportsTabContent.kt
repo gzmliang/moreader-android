@@ -29,7 +29,8 @@ fun ReportsTabContent(
     bookId: String,
     repository: AiCacheRepository,
     isEink: Boolean,
-    textSizeSp: Float
+    textSizeSp: Float,
+    displayMode: String = "bilingual"
 ) {
     var reports by remember { mutableStateOf(repository.getQuizReports(bookId)) }
     var selectedReport by remember { mutableStateOf<QuizReportRecord?>(null) }
@@ -83,7 +84,8 @@ fun ReportsTabContent(
                         question = q,
                         userAnswer = report.userAnswers[q.id],
                         isEink = isEink,
-                        textSizeSp = textSizeSp
+                        textSizeSp = textSizeSp,
+                        displayMode = displayMode
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                 }
@@ -193,9 +195,13 @@ private fun ReviewQuestionItem(
     question: QuizQuestion,
     userAnswer: String?,
     isEink: Boolean,
-    textSizeSp: Float
+    textSizeSp: Float,
+    displayMode: String = "bilingual"
 ) {
     val isCorrect = userAnswer != null && (userAnswer.equals(question.correctAnswer, ignoreCase = true) || question.correctAnswer.startsWith(userAnswer, ignoreCase = true))
+
+    val showOrig = displayMode == "bilingual" || displayMode == "orig" || question.questionTranslation.isBlank()
+    val showTrans = (displayMode == "bilingual" || displayMode == "target") && question.questionTranslation.isNotBlank()
 
     Surface(
         shape = RoundedCornerShape(8.dp),
@@ -207,18 +213,21 @@ private fun ReviewQuestionItem(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             // Title
-            Text(
-                text = "${question.id}. ${question.questionOriginal}",
-                fontSize = (textSizeSp).sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
-            )
-            if (question.questionTranslation.isNotBlank()) {
-                Spacer(modifier = Modifier.height(2.dp))
+            if (showOrig) {
                 Text(
-                    text = question.questionTranslation,
-                    fontSize = (textSizeSp * 0.9f).sp,
-                    color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "${question.id}. ${question.questionOriginal}",
+                    fontSize = (textSizeSp).sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                )
+            }
+            if (showTrans) {
+                if (showOrig) Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (!showOrig) "${question.id}. ${question.questionTranslation}" else question.questionTranslation,
+                    fontSize = (if (!showOrig) textSizeSp else textSizeSp * 0.9f).sp,
+                    fontWeight = if (!showOrig) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isEink) (if (!showOrig) Color.Black else Color.DarkGray) else (if (!showOrig) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                 )
             }
 
@@ -290,7 +299,10 @@ private fun ReviewQuestionItem(
                             fontWeight = FontWeight.Bold,
                             color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
                         )
-                        if (question.analysisOriginal.isNotBlank()) {
+                        val showAnalysisOrig = displayMode == "bilingual" || displayMode == "orig" || question.analysisTranslation.isBlank()
+                        val showAnalysisTrans = (displayMode == "bilingual" || displayMode == "target") && question.analysisTranslation.isNotBlank()
+
+                        if (showAnalysisOrig && question.analysisOriginal.isNotBlank()) {
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = question.analysisOriginal,
@@ -298,11 +310,11 @@ private fun ReviewQuestionItem(
                                 color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                             )
                         }
-                        if (question.analysisTranslation.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(2.dp))
+                        if (showAnalysisTrans && question.analysisTranslation.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(if (showAnalysisOrig) 2.dp else 4.dp))
                             Text(
                                 text = question.analysisTranslation,
-                                fontSize = (textSizeSp * 0.82f).sp,
+                                fontSize = (if (!showAnalysisOrig) textSizeSp * 0.88f else textSizeSp * 0.82f).sp,
                                 color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }

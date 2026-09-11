@@ -46,6 +46,8 @@ fun SummaryTabContent(
     textSizeSp: Float,
     bookDao: BookDao,
     edgeTTS: EdgeTTSProvider?,
+    displayMode: String = "bilingual",
+    onDisplayModeChange: (String) -> Unit = {},
     onHasResultChange: (Boolean) -> Unit = {},
     onAudioPlayingChange: (Boolean) -> Unit = {},
     onRegisterAudioAction: (() -> Unit) -> Unit = {},
@@ -56,7 +58,6 @@ fun SummaryTabContent(
 
     var selectedScope by remember { mutableStateOf("chapter") } // "chapter" or "book"
     var ratio by remember { mutableIntStateOf(30) }
-    var displayMode by remember { mutableStateOf("bilingual") } // "bilingual", "orig", "target"
 
     var summaryResult by remember {
         mutableStateOf(repository.getSummary(bookId, chapterIndex, selectedScope, ratio))
@@ -336,7 +337,7 @@ fun SummaryTabContent(
                                     )
                                 },
                                 onClick = {
-                                    displayMode = mKey
+                                    onDisplayModeChange(mKey)
                                     modeMenuExpanded = false
                                 }
                             )

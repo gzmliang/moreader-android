@@ -577,13 +577,13 @@ fun EpubWebView(
                                     }
                                 });
                                 
-                                // For instant page-tap scrolling
+                                // For instant page-tap scrolling (step retains ~1 line for smooth reading anchor)
                                 window.pageUp=function(){
                                     if(window.scrollY<=2){
                                         MoreaderBridge.onPrevChapter();
                                         return;
                                     }
-                                    var step=Math.round(window.innerHeight*0.85);
+                                    var step=Math.max(200,window.innerHeight-40);
                                     window.scrollBy({top:-step,left:0,behavior:'instant'});
                                 };
                                 window.pageDown=function(){
@@ -592,9 +592,30 @@ fun EpubWebView(
                                         MoreaderBridge.onNextChapter();
                                         return;
                                     }
-                                    var step=Math.round(window.innerHeight*0.85);
+                                    var step=Math.max(200,window.innerHeight-40);
                                     window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:'instant'});
                                 };
+
+                                // E-Ink edge-tap paging: left 25% for page-up, right 25% for page-down, middle 50% for menu/paragraph
+                                document.addEventListener('click',function(e){
+                                    if(!window.isEink)return;
+                                    var s=window.getSelection();
+                                    if(s&&!s.isCollapsed)return;
+                                    var t=e.target;
+                                    if(t&&(t.tagName==='A'||t.closest('a')))return;
+
+                                    var x=e.clientX;
+                                    var w=window.innerWidth;
+                                    if(x<w*0.25){
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        window.pageUp();
+                                    }else if(x>w*0.75){
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        window.pageDown();
+                                    }
+                                },true);
                                 // Get current visible paragraph index
                                 window.getVisiblePara=function(){
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');

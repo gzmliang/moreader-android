@@ -87,6 +87,10 @@ class AiCacheRepository(private val context: Context) {
     fun getSummaryTextSize(): Float = prefs.getFloat("ai_summary_text_size", 16f)
     fun setSummaryTextSize(size: Float) = prefs.edit().putFloat("ai_summary_text_size", size).apply()
 
+    // Global AI Language Display Mode ("bilingual", "orig", "target")
+    fun getLanguageDisplayMode(): String = prefs.getString("ai_language_display_mode", "bilingual") ?: "bilingual"
+    fun setLanguageDisplayMode(mode: String) = prefs.edit().putString("ai_language_display_mode", mode).apply()
+
     // Summary Cache (Strict bookId + chapterIndex + scope + ratio key)
     fun getSummary(bookId: String, chapterIndex: Int, scope: String, ratio: Int): AiSummaryResult? {
         val key = "summary_${bookId}_${chapterIndex}_${scope}_${ratio}"

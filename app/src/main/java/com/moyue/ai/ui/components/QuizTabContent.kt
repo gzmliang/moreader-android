@@ -46,6 +46,8 @@ fun QuizTabContent(
     config: AiConfig,
     isEink: Boolean,
     textSizeSp: Float,
+    displayMode: String = "bilingual",
+    onDisplayModeChange: (String) -> Unit = {},
     onQuizCompleted: () -> Unit
 ) {
     val context = LocalContext.current
@@ -386,6 +388,70 @@ fun QuizTabContent(
                         }
                     }
                 }
+
+                // Display Mode Capsule: [ 双语 ▾ ] / [ 原文 ▾ ] / [ 译文 ▾ ]
+                var langMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    Surface(
+                        color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .clickable { langMenuExpanded = true }
+                            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        ) {
+                            val langLabel = when (displayMode) {
+                                "orig" -> stringResource(R.string.ai_display_mode_orig_short)
+                                "target" -> stringResource(R.string.ai_display_mode_trans_short)
+                                else -> stringResource(R.string.ai_display_mode_bilingual_short)
+                            }
+                            Text(
+                                text = langLabel,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
+                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = langMenuExpanded,
+                        onDismissRequest = { langMenuExpanded = false }
+                    ) {
+                        listOf(
+                            "bilingual" to stringResource(R.string.ai_display_mode_bilingual),
+                            "orig" to stringResource(R.string.ai_display_mode_original),
+                            "target" to stringResource(R.string.ai_display_mode_target)
+                        ).forEach { (mKey, mLabel) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = mLabel,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (displayMode == mKey) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (displayMode == mKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                onClick = {
+                                    onDisplayModeChange(mKey)
+                                    langMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
 
             // Right side: ⚡已缓存 & 🔄重新生成
@@ -472,6 +538,7 @@ fun QuizTabContent(
                                 isSubmitted = isSubmitted,
                                 isEink = isEink,
                                 textSizeSp = textSizeSp,
+                                displayMode = displayMode,
                                 onSelectOption = { opt ->
                                     if (feedbackMode == "submit" && isSubmitted) return@QuizQuestionItem
                                     userAnswers[question.id] = opt
@@ -672,9 +739,13 @@ private fun QuizQuestionItem(
     isSubmitted: Boolean,
     isEink: Boolean,
     textSizeSp: Float,
+    displayMode: String,
     onSelectOption: (String) -> Unit
 ) {
     val showFeedback = (feedbackMode == "instant" && selectedOption != null) || (feedbackMode == "submit" && isSubmitted)
+
+    val showOrig = displayMode == "bilingual" || displayMode == "orig" || question.questionTranslation.isBlank()
+    val showTrans = (displayMode == "bilingual" || displayMode == "target") && question.questionTranslation.isNotBlank()
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -685,19 +756,22 @@ private fun QuizQuestionItem(
             .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(12.dp)) else Modifier)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Question Title (Orig + Trans)
-            Text(
-                text = "${question.id}. ${question.questionOriginal}",
-                fontSize = (textSizeSp).sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
-            )
-            if (question.questionTranslation.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
+            // Question Title (Orig + Trans based on displayMode)
+            if (showOrig) {
                 Text(
-                    text = question.questionTranslation,
-                    fontSize = (textSizeSp * 0.9f).sp,
-                    color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "${question.id}. ${question.questionOriginal}",
+                    fontSize = (textSizeSp).sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                )
+            }
+            if (showTrans) {
+                if (showOrig) Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (!showOrig) "${question.id}. ${question.questionTranslation}" else question.questionTranslation,
+                    fontSize = (if (!showOrig) textSizeSp else textSizeSp * 0.9f).sp,
+                    fontWeight = if (!showOrig) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isEink) (if (!showOrig) Color.Black else Color.DarkGray) else (if (!showOrig) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                 )
             }
 
@@ -770,6 +844,9 @@ private fun QuizQuestionItem(
 
             // Explanation & Feedback
             if (showFeedback && (question.analysisOriginal.isNotBlank() || question.analysisTranslation.isNotBlank())) {
+                val showAnalysisOrig = displayMode == "bilingual" || displayMode == "orig" || question.analysisTranslation.isBlank()
+                val showAnalysisTrans = (displayMode == "bilingual" || displayMode == "target") && question.analysisTranslation.isNotBlank()
+
                 Spacer(modifier = Modifier.height(12.dp))
                 Surface(
                     shape = RoundedCornerShape(8.dp),
@@ -785,7 +862,7 @@ private fun QuizQuestionItem(
                             fontWeight = FontWeight.Bold,
                             color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
                         )
-                        if (question.analysisOriginal.isNotBlank()) {
+                        if (showAnalysisOrig && question.analysisOriginal.isNotBlank()) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = question.analysisOriginal,
@@ -793,11 +870,11 @@ private fun QuizQuestionItem(
                                 color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                             )
                         }
-                        if (question.analysisTranslation.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(2.dp))
+                        if (showAnalysisTrans && question.analysisTranslation.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(if (showAnalysisOrig) 2.dp else 4.dp))
                             Text(
                                 text = question.analysisTranslation,
-                                fontSize = (textSizeSp * 0.85f).sp,
+                                fontSize = (if (!showAnalysisOrig) textSizeSp * 0.9f else textSizeSp * 0.85f).sp,
                                 color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
