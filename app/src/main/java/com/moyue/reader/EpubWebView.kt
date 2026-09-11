@@ -51,13 +51,14 @@ fun EpubWebView(
     ttsSentenceIdx: Int = -1,
     ttsSentenceEnds: String = "",
     scrollToParagraph: Int? = null,
+    onParagraphScrolled: (() -> Unit)? = null,
     scrollToAnchor: String? = null,
     onAnchorScrolled: (() -> Unit)? = null,
     scrollToPixel: Int? = null,
     onPixelScrolled: (() -> Unit)? = null,
     scrollToNavEntry: com.moyue.app.ui.NavHistoryEntry? = null,
     onNavEntryRestored: (() -> Unit)? = null,
-    onShowFootnote: ((String, String) -> Unit)? = null,
+    onShowFootnote: ((String, String, Int, Int) -> Unit)? = null,
     highlightsToRender: List<Triple<Int, Int, Int>> = emptyList(),  // (startParagraph, startOffset, endOffset)
     highlightToRemove: Pair<Int, Int>? = null,  // (startOffset, endOffset)
     onPrevChapter: (() -> Unit)? = null,
@@ -72,14 +73,14 @@ fun EpubWebView(
     val linkCallbackRef = remember { mutableStateOf<(String) -> Unit>({}) }
     val paragraphCallbackRef = remember { mutableStateOf<(Int) -> Unit>({}) }
     val scrollCallbackRef = remember { mutableStateOf<(Int) -> Unit>({}) }
-    val footnoteCallbackRef = remember { mutableStateOf<(String, String) -> Unit>({ _, _ -> }) }
+    val footnoteCallbackRef = remember { mutableStateOf<(String, String, Int, Int) -> Unit>({ _, _, _, _ -> }) }
     val prevChapterCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
     val nextChapterCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
     LaunchedEffect(onTextSelected) { callbackRef.value = onTextSelected }
     LaunchedEffect(onLinkClicked) { linkCallbackRef.value = onLinkClicked }
     LaunchedEffect(onParagraphClicked) { paragraphCallbackRef.value = { idx -> onParagraphClicked?.invoke(idx) ?: Unit } }
     LaunchedEffect(onScrollToParagraph) { scrollCallbackRef.value = { idx -> onScrollToParagraph?.invoke(idx) ?: Unit } }
-    LaunchedEffect(onShowFootnote) { footnoteCallbackRef.value = { text, href -> onShowFootnote?.invoke(text, href) ?: Unit } }
+    LaunchedEffect(onShowFootnote) { footnoteCallbackRef.value = { text, href, p, sy -> onShowFootnote?.invoke(text, href, p, sy) ?: Unit } }
     LaunchedEffect(onPrevChapter) { prevChapterCallbackRef.value = { onPrevChapter?.invoke() ?: Unit } }
     LaunchedEffect(onNextChapter) { nextChapterCallbackRef.value = { onNextChapter?.invoke() ?: Unit } }
 
@@ -117,11 +118,13 @@ fun EpubWebView(
         }
     }
 
-    // Scroll to paragraph for bookmark navigation
-    LaunchedEffect(scrollToParagraph) {
+    // Scroll to paragraph for bookmark navigation & jump back (with highlight)
+    LaunchedEffect(scrollToParagraph, scrollToNavEntry) {
         if (scrollToParagraph != null && scrollToParagraph >= 0) {
-            kotlinx.coroutines.delay(500)
-            webView?.evaluateJavascript("window.scrollToPara($scrollToParagraph)", null)
+            val linkHref = (scrollToNavEntry?.linkHref ?: "").replace("'", "\\'")
+            kotlinx.coroutines.delay(400)
+            webView?.evaluateJavascript("window.scrollToPara($scrollToParagraph, '$linkHref')", null)
+            onParagraphScrolled?.invoke()
         }
     }
 
@@ -158,61 +161,6 @@ fun EpubWebView(
                 null
             )
             onPixelScrolled?.invoke()
-        }
-    }
-
-    // 精准原位恢复（方案 A+B 深度融合：首选根据原被点击链接元素坐标还原，次选绝对像素）
-    LaunchedEffect(scrollToNavEntry, lastLoadedContent) {
-        val entry = scrollToNavEntry ?: return@LaunchedEffect
-        if (lastLoadedContent == null) return@LaunchedEffect
-        val targetY = entry.scrollY
-        val linkHref = entry.linkHref.replace("'", "\\'")
-        val elTop = entry.elementTop
-
-        val js = """
-            (function(){
-                var targetY = $targetY;
-                var linkHref = '$linkHref';
-                var elTop = $elTop;
-                
-                function doRestore() {
-                    // 1. 首选：精确查找被点击的链接元素 a[href]
-                    if (linkHref) {
-                        var el = null;
-                        try {
-                            el = document.querySelector('a[href="' + CSS.escape(linkHref) + '"]');
-                        } catch(e){}
-                        if (!el) {
-                            try {
-                                var shortHref = linkHref.indexOf('#') >= 0 ? linkHref.substring(linkHref.indexOf('#')) : linkHref;
-                                el = document.querySelector('a[href*="' + CSS.escape(shortHref) + '"]');
-                            } catch(e){}
-                        }
-                        if (el && elTop >= 0) {
-                            var curAbsTop = el.getBoundingClientRect().top + window.scrollY;
-                            var idealY = Math.round(curAbsTop - elTop);
-                            window.scrollTo({ top: Math.max(0, idealY), behavior: 'instant' });
-                            return true;
-                        }
-                    }
-                    // 2. 次选：按离开时的绝对像素高度瞬时归位
-                    if (targetY >= 0) {
-                        window.scrollTo({ top: targetY, behavior: 'instant' });
-                        return true;
-                    }
-                    return false;
-                }
-
-                doRestore();
-                requestAnimationFrame(doRestore);
-                setTimeout(doRestore, 80);
-                setTimeout(doRestore, 250);
-                setTimeout(doRestore, 500);
-            })()
-        """.trimIndent()
-
-        webView?.evaluateJavascript(js) { _ ->
-            onNavEntryRestored?.invoke()
         }
     }
 
@@ -507,13 +455,49 @@ fun EpubWebView(
                                         p.normalize();
                                     });
                                 };
-                                window.scrollToPara=function(idx){
-                                    if(idx===0){window.scrollTo(0,0);return;}
-                                    var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
-                                    if(idx>=0&&idx<all.length){
-                                        all[idx].scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
-                                        all[idx].style.backgroundColor='rgba(59,130,246,0.15)';
-                                        setTimeout(function(){all[idx].style.backgroundColor='';},2000);
+                                window.scrollToPara=function(idx, linkHref){
+                                    if(idx===0 && !linkHref){window.scrollTo(0,0);return;}
+                                    function doHighlightAndScroll(){
+                                        var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
+                                        if(idx>=0&&idx<all.length){
+                                            var el=all[idx];
+                                            var targetA=null;
+                                            if(linkHref){
+                                                var shortHref=linkHref.indexOf('#')>=0?linkHref.substring(linkHref.indexOf('#')):linkHref;
+                                                try{
+                                                    targetA=el.querySelector('a[href*="'+CSS.escape(shortHref)+'"]') ||
+                                                            document.querySelector('a[href*="'+CSS.escape(shortHref)+'"]');
+                                                }catch(e){}
+                                                if(!targetA){
+                                                    try{targetA=el.querySelector('a');}catch(e){}
+                                                }
+                                            }
+                                            if(targetA){
+                                                targetA.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
+                                                targetA.style.backgroundColor='#FFE082';
+                                                targetA.style.borderRadius='3px';
+                                                targetA.style.padding='0 3px';
+                                                targetA.style.boxShadow='0 0 0 2px #FFB300';
+                                                setTimeout(function(){
+                                                    targetA.style.transition='all 1s ease';
+                                                    targetA.style.backgroundColor='';
+                                                    targetA.style.boxShadow='';
+                                                    targetA.style.padding='';
+                                                },3000);
+                                            }else{
+                                                el.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
+                                            }
+                                            el.style.backgroundColor='rgba(59,130,246,0.18)';
+                                            el.style.borderRadius='4px';
+                                            el.style.transition='background-color 0.8s ease';
+                                            setTimeout(function(){el.style.backgroundColor='';},2500);
+                                            return true;
+                                        }
+                                        return false;
+                                    }
+                                    if(!doHighlightAndScroll()){
+                                        setTimeout(doHighlightAndScroll,150);
+                                        setTimeout(doHighlightAndScroll,400);
                                     }
                                 };
                                 
@@ -640,16 +624,36 @@ fun EpubWebView(
                                         var href=a.getAttribute('href');
                                         if(href && !href.startsWith('http') && !href.startsWith('mailto:') && !href.startsWith('tel:')){
                                             e.preventDefault();
-                                            // Get current visible paragraph index, exact scrollY and element viewport top before navigating
+                                            // Get current clicked paragraph index, exact scrollY and element viewport top before navigating
                                             var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
                                             var scrollY=Math.round(window.scrollY);
                                             var rect=a.getBoundingClientRect();
                                             var elementTop=Math.round(rect.top);
-                                            var visibleIdx=0;
-                                            for(var i=0;i<all.length;i++){
-                                                if(all[i].offsetTop>scrollY+window.innerHeight*0.3)break;
-                                                visibleIdx=i;
+                                            var clickedPara=a.closest('p,h1,h2,h3,h4,h5,h6');
+                                            var clickedIdx=-1;
+                                            if(clickedPara){
+                                                for(var i=0;i<all.length;i++){
+                                                    if(all[i]===clickedPara){
+                                                        clickedIdx=i;
+                                                        break;
+                                                    }
+                                                }
                                             }
+                                            if(clickedIdx<0){
+                                                for(var i=0;i<all.length;i++){
+                                                    if(all[i].contains(a)){
+                                                        clickedIdx=i;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            if(clickedIdx<0){
+                                                for(var i=0;i<all.length;i++){
+                                                    if(all[i].offsetTop>scrollY+window.innerHeight*0.3)break;
+                                                    clickedIdx=i;
+                                                }
+                                            }
+                                            if(clickedIdx<0) clickedIdx=0;
 
                                             // 方案 B：尝试在当前 DOM 嗅探注释内容（Footnote Preview）
                                             var anchorIdx = href.indexOf('#');
@@ -668,7 +672,7 @@ fun EpubWebView(
                                                         var noteText = (noteContainer.textContent || '').trim();
                                                         noteText = noteText.replace(/[\u21A9\u2191\u21E7\^]/g, '').trim();
                                                         if (noteText.length > 0 && noteText.length < 1500) {
-                                                            MoreaderBridge.onShowFootnote(noteText, href);
+                                                            MoreaderBridge.onShowFootnote(noteText, href, clickedIdx, scrollY);
                                                             return;
                                                         }
                                                     }
@@ -676,7 +680,7 @@ fun EpubWebView(
                                             }
 
                                             // 方案 A：直接触发精准跳转
-                                            MoreaderBridge.onLinkClicked(href, visibleIdx, scrollY, elementTop);
+                                            MoreaderBridge.onLinkClicked(href, clickedIdx, scrollY, elementTop);
                                         }
                                     }
                                 });
@@ -751,9 +755,9 @@ fun EpubWebView(
                             linkCallbackRef.value("$url|$visibleParaIdx|$scrollY|$elementTop") 
                         }
                         @JavascriptInterface
-                        fun onShowFootnote(text: String, href: String) {
+                        fun onShowFootnote(text: String, href: String, visibleParaIdx: Int, scrollY: Int) {
                             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                footnoteCallbackRef.value(text, href)
+                                footnoteCallbackRef.value(text, href, visibleParaIdx, scrollY)
                             }
                         }
                         @JavascriptInterface

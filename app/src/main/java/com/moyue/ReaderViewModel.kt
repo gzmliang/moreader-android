@@ -49,6 +49,8 @@ data class NavHistoryEntry(
 data class FootnotePreview(
     val text: String,
     val targetHref: String,
+    val originParaIdx: Int = 0,
+    val originScrollY: Int = 0,
 )
 
 data class ReaderUiState(
@@ -295,14 +297,15 @@ class ReaderViewModel(
     // ===== Navigation History =====
     
     /** Push current reading position onto the history stack (max 20 entries) */
-    private fun pushToHistory(scrollY: Int = 0, linkHref: String = "", elementTop: Int = -1) {
+    private fun pushToHistory(scrollY: Int = 0, linkHref: String = "", elementTop: Int = -1, paragraphIndex: Int = -1) {
         val s = _uiState.value
         val chapter = s.chapters.getOrNull(s.currentChapterIndex) ?: return
+        val paraIdx = if (paragraphIndex >= 0) paragraphIndex else s.currentParagraphIndex
         val entry = NavHistoryEntry(
             chapterIndex = s.currentChapterIndex,
             chapterHref = chapter.href,
             chapterLabel = chapter.id,
-            paragraphIndex = s.currentParagraphIndex,
+            paragraphIndex = paraIdx,
             scrollY = scrollY,
             linkHref = linkHref,
             elementTop = elementTop,
@@ -318,26 +321,33 @@ class ReaderViewModel(
         
         val prev = s.navHistory.last()
         val newHistory = s.navHistory.dropLast(1)
+        val targetChapter = prev.chapterIndex
+        val targetPara = prev.paragraphIndex
         
         killPlayChain()
 
-        // 同章节瞬时原位定格回跳：0 毫秒、零闪烁、0 误差
-        if (prev.chapterIndex == s.currentChapterIndex) {
+        // 同章节瞬时原位定格回跳：重置后快速定位并高亮标注
+        if (targetChapter == s.currentChapterIndex) {
             _uiState.update { 
                 it.copy(
                     navHistory = newHistory,
-                    scrollToNavEntry = prev,
                     scrollToParagraph = -1,
                     scrollToAnchor = null,
+                    scrollToPixel = -1,
+                    scrollToNavEntry = prev,
                 ) 
+            }
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(80)
+                _uiState.update { it.copy(scrollToParagraph = targetPara) }
             }
             return
         }
 
-        // 跨章节回跳
+        // 跨章节回跳：完全复用书签定位标准流程，页面加载完成后精准定位并高亮
         _uiState.update { 
             it.copy(
-                currentChapterIndex = prev.chapterIndex,
+                currentChapterIndex = targetChapter,
                 isLoading = true,
                 currentHtml = null,
                 navHistory = newHistory,
@@ -352,8 +362,10 @@ class ReaderViewModel(
             )
         }
         viewModelScope.launch {
-            loadChapterContent(skipScrollRestore = true)
+            loadChapterContent()
             _uiState.update { it.copy(isChapterSwitching = false) }
+            kotlinx.coroutines.delay(200)
+            _uiState.update { it.copy(scrollToParagraph = targetPara) }
             saveProgress()
         }
     }
@@ -366,8 +378,8 @@ class ReaderViewModel(
         _uiState.update { it.copy(scrollToPixel = -1) }
     }
 
-    fun showFootnotePreview(text: String, href: String) {
-        _uiState.update { it.copy(footnotePreview = FootnotePreview(text = text.trim(), targetHref = href)) }
+    fun showFootnotePreview(text: String, href: String, originParaIdx: Int = 0, originScrollY: Int = 0) {
+        _uiState.update { it.copy(footnotePreview = FootnotePreview(text = text.trim(), targetHref = href, originParaIdx = originParaIdx, originScrollY = originScrollY)) }
     }
 
     fun dismissFootnotePreview() {
@@ -375,8 +387,11 @@ class ReaderViewModel(
     }
 
     fun onFootnoteGoTo(href: String) {
+        val preview = _uiState.value.footnotePreview
+        val para = preview?.originParaIdx ?: 0
+        val sy = preview?.originScrollY ?: 0
         dismissFootnotePreview()
-        onLinkClicked(href)
+        onLinkClicked(href, visibleParaIdx = para, scrollY = sy)
     }
 
     // ===== Book =====
@@ -422,7 +437,7 @@ class ReaderViewModel(
         // 首次打开书本时，批量修复跨平台高亮的章节/偏移量
         repairAllCrossPlatformHighlights(book.id)
     } }
-    private suspend fun loadChapterContent(forceStart: Boolean = false, skipScrollRestore: Boolean = false) {
+    private suspend fun loadChapterContent(forceStart: Boolean = false) {
         val s = _uiState.value; val b = s.book ?: return; if (s.chapters.isEmpty()) return
         _uiState.update { it.copy(isLoading = true, loadingMessage = getApplication<android.app.Application>().getString(com.moyue.app.R.string.load_content)) }
         val ch = s.chapters.getOrNull(s.currentChapterIndex) ?: run { _uiState.update { it.copy(isLoading = false, error = getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_chapter_out_of_range)) }; return }
@@ -431,10 +446,10 @@ class ReaderViewModel(
         
         // Restore paragraph position: use saved position only when reopening the same chapter,
         // not when explicitly navigating via TOC or links
-        val restorePara = if (forceStart || skipScrollRestore) 0
+        val restorePara = if (forceStart) 0
             else if (ch.href == b.currentChapterHref) b.currentParagraphIndex.coerceIn(0, maxOf(0, pl.size - 1))
             else 0
-        log("ChapterNav: ch=${ch.href} forceStart=$forceStart skipScrollRestore=$skipScrollRestore curCHref=${b.currentChapterHref} restorePara=$restorePara idx=${s.currentChapterIndex}")
+        log("ChapterNav: ch=${ch.href} forceStart=$forceStart curCHref=${b.currentChapterHref} restorePara=$restorePara idx=${s.currentChapterIndex}")
         
         _uiState.update { 
             it.copy(
@@ -446,17 +461,12 @@ class ReaderViewModel(
                 currentParagraphIndex = restorePara,
             ) 
         }
-        
-        if (skipScrollRestore) {
-            // 回跳由 scrollToNavEntry 接管，禁止默认滚到顶部或恢复段落
-            return
-        }
 
         // Scroll to restored paragraph after a short delay
         if (restorePara > 0) {
             kotlinx.coroutines.delay(300)
             _uiState.update { it.copy(scrollToParagraph = restorePara) }
-        } else {
+        } else if (forceStart) {
             // forceStart 或新章节：显式滚到顶部，防止 WebView 保留旧滚动位置
             kotlinx.coroutines.delay(300)
             _uiState.update { it.copy(scrollToParagraph = 0) }
@@ -578,12 +588,12 @@ class ReaderViewModel(
         }
     }
     fun onLinkClicked(url: String, visibleParaIdx: Int = 0, scrollY: Int = 0, elementTop: Int = -1) { 
-        // Update current paragraph to visible position before pushing to history
+        // Update current paragraph to clicked position before pushing to history
         _uiState.update { it.copy(currentParagraphIndex = visibleParaIdx) }
         // Handle internal EPUB link clicks
-        pushToHistory(scrollY = scrollY, linkHref = url.trim(), elementTop = elementTop)
+        pushToHistory(scrollY = scrollY, linkHref = url.trim(), elementTop = elementTop, paragraphIndex = visibleParaIdx)
         val cleanUrl = url.trim()
-        log("Link clicked: $cleanUrl (scrollY=$scrollY, elementTop=$elementTop)")
+        log("Link clicked: $cleanUrl (paraIdx=$visibleParaIdx, scrollY=$scrollY, elementTop=$elementTop)")
         
         // Extract path and anchor
         val path = cleanUrl.substringBefore('#')
@@ -2296,7 +2306,7 @@ class ReaderViewModel(
         }
     }
 
-    fun clearScrollToParagraph() { _uiState.update { it.copy(scrollToParagraph = -1, scrollToAnchor = null) } }
+    fun clearScrollToParagraph() { _uiState.update { it.copy(scrollToParagraph = -1, scrollToAnchor = null, scrollToNavEntry = null) } }
 
     // ===== Highlight =====
     private val _highlights = MutableStateFlow<List<Highlight>>(emptyList())
