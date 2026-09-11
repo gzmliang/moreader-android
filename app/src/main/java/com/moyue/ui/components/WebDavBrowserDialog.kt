@@ -1,5 +1,6 @@
 package com.moyue.app.ui.components
 import android.util.Log
+import androidx.compose.ui.res.stringResource
 
 import android.content.Context
 import android.net.Uri
@@ -76,7 +77,7 @@ fun WebDavBrowserDialog(
                     isLoading = false
                 },
                 onFailure = { e ->
-                    errorMessage = e.message ?: "加载失败"
+                    errorMessage = e.message ?: context.getString(com.moyue.app.R.string.error_parse_failed)
                     isLoading = false
                 }
             )
@@ -96,11 +97,11 @@ fun WebDavBrowserDialog(
                 Icon(Icons.Default.Storage, contentDescription = null, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(8.dp))
                 val displayTitle = if (isConfigured) {
-                    if (isAtRoot(currentPath)) "WebDAV 网盘" else {
+                    if (isAtRoot(currentPath)) stringResource(com.moyue.app.R.string.webdav_title) else {
                         val decoded = try { URLDecoder.decode(currentPath, "UTF-8") } catch (e: Exception) { currentPath }
                         "..." + decoded.trimEnd('/').substringAfterLast('/')
                     }
-                } else "连接 WebDAV 网盘"
+                } else stringResource(com.moyue.app.R.string.webdav_title)
                 Text(
                     displayTitle,
                     fontSize = 18.sp,
@@ -111,7 +112,7 @@ fun WebDavBrowserDialog(
                 )
                 // 帮助按钮
                 IconButton(onClick = { showHelpDialog = true }, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.HelpOutline, contentDescription = "帮助教程", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.HelpOutline, contentDescription = stringResource(com.moyue.app.R.string.help_title), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 }
             }
         },
@@ -119,14 +120,13 @@ fun WebDavBrowserDialog(
             Column(modifier = Modifier.fillMaxWidth()) {
                 if (!isConfigured) {
                     // 配置界面
-                    Text("支持对接 AList、坚果云、群晖、InfiniCloud 等网盘", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    Text(stringResource(com.moyue.app.R.string.webdav_desc_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                     Spacer(Modifier.height(12.dp))
 
                     OutlinedTextField(
                         value = serverUrl,
                         onValueChange = { serverUrl = it; errorMessage = null },
-                        label = { Text("WebDAV 服务器地址") },
-                        placeholder = { Text("如 http://IP:6355/dav") },
+                        label = { Text(stringResource(com.moyue.app.R.string.webdav_server_url)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -135,7 +135,7 @@ fun WebDavBrowserDialog(
                     OutlinedTextField(
                         value = user,
                         onValueChange = { user = it; errorMessage = null },
-                        label = { Text("账号") },
+                        label = { Text(stringResource(com.moyue.app.R.string.webdav_user)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -144,7 +144,7 @@ fun WebDavBrowserDialog(
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it; errorMessage = null },
-                        label = { Text("密码") },
+                        label = { Text(stringResource(com.moyue.app.R.string.webdav_pass)) },
                         singleLine = true,
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
@@ -165,7 +165,7 @@ fun WebDavBrowserDialog(
                     Button(
                         onClick = {
                             if (serverUrl.isBlank() || user.isBlank()) {
-                                errorMessage = "请填写服务器地址和账号"
+                                errorMessage = context.getString(com.moyue.app.R.string.webdav_fill_url_and_user)
                                 return@Button
                             }
                             webDavClient.saveConfig(serverUrl, user, password)
@@ -173,7 +173,7 @@ fun WebDavBrowserDialog(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("保存并连接")
+                        Text(stringResource(com.moyue.app.R.string.webdav_save))
                     }
                 } else {
                     // 已配置，文件浏览界面
@@ -196,10 +196,10 @@ fun WebDavBrowserDialog(
                             ) {
                                 Icon(Icons.Default.ArrowBack, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("上一级", fontSize = 12.sp)
+                                Text(stringResource(com.moyue.app.R.string.webdav_parent_dir), fontSize = 12.sp)
                             }
                         } else {
-                            Text("根目录", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text(stringResource(com.moyue.app.R.string.webdav_root_dir), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -209,12 +209,12 @@ fun WebDavBrowserDialog(
                                 onClick = {
                                     webDavClient.setDefaultUploadDir(currentPath)
                                     defaultUploadDir = currentPath
-                                    android.widget.Toast.makeText(context, "已将当前目录设为默认上传目录", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.webdav_set_upload_dir_success), android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             ) {
                                 Icon(if (isCurrentDefault) Icons.Default.CheckCircle else Icons.Default.DriveFolderUpload, null, Modifier.size(14.dp))
                                 Spacer(Modifier.width(2.dp))
-                                Text(if (isCurrentDefault) "已设为上传目录" else "设为上传目录", fontSize = 11.sp)
+                                Text(if (isCurrentDefault) stringResource(com.moyue.app.R.string.webdav_is_upload_dir) else stringResource(com.moyue.app.R.string.webdav_set_upload_dir), fontSize = 11.sp)
                             }
 
                             IconButton(
@@ -241,14 +241,14 @@ fun WebDavBrowserDialog(
                             Text(errorMessage ?: "", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
                             Spacer(Modifier.height(8.dp))
                             OutlinedButton(onClick = { refreshList(currentPath) }) {
-                                Text("重试")
+                                Text(stringResource(com.moyue.app.R.string.retry))
                             }
                         }
                     } else {
                         val list = items ?: emptyList()
                         if (list.isEmpty()) {
                             Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
-                                Text("此文件夹为空", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                Text(stringResource(com.moyue.app.R.string.webdav_empty_folder_retry), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                             }
                         } else {
                             Column(
@@ -342,16 +342,16 @@ fun WebDavBrowserDialog(
                                                                             }
                                                                         }
                                                                     } catch (e: Exception) {
-                                                                        Log.e("WebDAV", "恢复伴侣数据失败", e)
+                                                                        Log.e("WebDAV", "Failed to restore companion metadata", e)
                                                                     }
                                                                 }
 
-                                                                val extraMsg = if (restoredBm > 0 || restoredHl > 0) " (已恢复${restoredBm}书签+${restoredHl}高亮)" else ""
-                                                                android.widget.Toast.makeText(context, "已导入: ${imported.title}$extraMsg", android.widget.Toast.LENGTH_SHORT).show()
+                                                                val extraMsg = if (restoredBm > 0 || restoredHl > 0) context.getString(com.moyue.app.R.string.webdav_import_restored_meta, restoredBm, restoredHl) else ""
+                                                                android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.webdav_imported_success, imported.title, extraMsg), android.widget.Toast.LENGTH_SHORT).show()
                                                                 onBookImported()
                                                             },
                                                             onFailure = { err ->
-                                                                android.widget.Toast.makeText(context, "下载失败: ${err.message}", android.widget.Toast.LENGTH_LONG).show()
+                                                                android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.webdav_download_failed_fmt, err.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
                                                             }
                                                         )
                                                         downloadingPath = null
@@ -393,7 +393,7 @@ fun WebDavBrowserDialog(
                                             }
 
                                             if (isEpub && !isDownloadingThis) {
-                                                Icon(Icons.Default.Download, contentDescription = "下载", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                                Icon(Icons.Default.Download, contentDescription = stringResource(com.moyue.app.R.string.sync_download), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                                             }
                                         }
                                     }
@@ -415,13 +415,13 @@ fun WebDavBrowserDialog(
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) {
-                        Text("断开 WebDAV", fontSize = 12.sp)
+                        Text(stringResource(com.moyue.app.R.string.webdav_disconnect_btn), fontSize = 12.sp)
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            TextButton(onClick = onDismiss) { Text(stringResource(com.moyue.app.R.string.close)) }
         }
     )
 
@@ -433,42 +433,37 @@ fun WebDavBrowserDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.HelpOutline, null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
-                    Text("墨阅云端与网盘使用指南", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(com.moyue.app.R.string.sync_help_guide_title), fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             },
             text = {
                 Column(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
-                    Text("一、两大云端的定位分工", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(com.moyue.app.R.string.sync_help_section1_title), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "1. 墨阅自建云（默认）：专用于多设备间实时同步阅读进度、书签和划线高亮。\n" +
-                        "2. WebDAV 网盘：适合作为海量电子书大仓库，支持百度网盘、夸克网盘、阿里云盘、坚果云、群晖 NAS 等。",
+                        stringResource(com.moyue.app.R.string.sync_help_section1_body),
                         fontSize = 12.sp, lineHeight = 18.sp
                     )
 
                     Spacer(Modifier.height(12.dp))
-                    Text("二、什么是 AList？如何对接百度网盘？", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(com.moyue.app.R.string.sync_help_section2_title), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "AList 是一款非常强大的开源网盘聚合挂载神器（官网：alist.nn.ci）。\n\n" +
-                        "它可以将您的百度网盘、阿里云盘、夸克网盘集中挂载起来，并一键开启 WebDAV 协议。\n\n" +
-                        "• 填写规范：在墨阅地址栏填写「http://服务器IP:端口/dav」（注意后面必须带 /dav）并输入 AList 账号密码即可打通。\n" +
-                        "• 如需了解如何搭建 AList，可访问官方文档：https://alist.nn.ci/zh/guide/",
+                        stringResource(com.moyue.app.R.string.sync_help_section2_body),
                         fontSize = 12.sp, lineHeight = 18.sp
                     )
 
                     Spacer(Modifier.height(12.dp))
-                    Text("三、书签与高亮同步保证", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(com.moyue.app.R.string.sync_help_section3_title), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "当您选择上传书籍到 WebDAV 网盘时，墨阅不仅会上传 EPUB 原文件，还会自动生成一份同名的伴侣元数据文件（.moreader.json）。\n\n" +
-                        "日后在任何手机从网盘下载该书时，墨阅会自动识别并完整还原该书的阅读进度、所有书签和划线笔记！",
+                        stringResource(com.moyue.app.R.string.sync_help_section3_body),
                         fontSize = 12.sp, lineHeight = 18.sp
                     )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showHelpDialog = false }) { Text("我知道了") }
+                TextButton(onClick = { showHelpDialog = false }) { Text(stringResource(com.moyue.app.R.string.help_close)) }
             }
         )
     }

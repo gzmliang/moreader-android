@@ -80,6 +80,7 @@ fun LibraryScreen(
     var showWebDavDialog by remember { mutableStateOf(false) }
     val uploadScope = rememberCoroutineScope()
     val syncClientForUpload = remember { SyncClient(context) }
+    val webDavClient = remember { WebDavClient(context) }
 
     // Handle shared files from other apps
     LaunchedEffect(sharedUris) {
@@ -262,10 +263,24 @@ fun LibraryScreen(
                                     )
 
                                     // 云端同步全部上传
-                                    if (syncClientForUpload.isLoggedIn()) {
+                                    val currentCloudTarget = webDavClient.getDefaultCloudTarget()
+                                    val canUploadAll = if (currentCloudTarget == "WEBDAV") webDavClient.isConfigured() else syncClientForUpload.isLoggedIn()
+                                    if (canUploadAll) {
                                         DropdownMenuItem(
-                                            text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_desc), fontSize = 13.sp) },
-                                            leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                            text = {
+                                                Text(
+                                                    if (currentCloudTarget == "WEBDAV") androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_webdav_title)
+                                                    else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_desc),
+                                                    fontSize = 13.sp
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    if (currentCloudTarget == "WEBDAV") Icons.Default.Storage else Icons.Default.CloudUpload,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            },
                                             onClick = {
                                                 showMoreMenu = false
                                                 showUploadAllConfirm = true
@@ -343,7 +358,6 @@ fun LibraryScreen(
                     }
 
                     // WebDAV 网盘浏览按钮
-                    val webDavClient = remember { WebDavClient(context) }
                     IconButton(onClick = { showWebDavDialog = true }, modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Default.Storage, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.webdav_title), modifier = Modifier.size(18.dp))
                     }
@@ -371,12 +385,26 @@ fun LibraryScreen(
                             syncClient = syncClientForSync,
                             onDismiss = { showSyncSettings = false },
                             onUpload = { onResult ->
-                                viewModel.uploadToCloud(context,
-                                    syncClientForSync, onResult)
+                                val currentTarget = webDavClient.getDefaultCloudTarget()
+                                if (currentTarget == "WEBDAV") {
+                                    if (webDavClient.isConfigured()) {
+                                        viewModel.uploadAllToWebDav(context, webDavClient)
+                                        onResult(context.getString(com.moyue.app.R.string.sync_webdav_uploading))
+                                    } else {
+                                        onResult(context.getString(com.moyue.app.R.string.webdav_not_configured))
+                                    }
+                                } else {
+                                    viewModel.uploadToCloud(context,
+                                        syncClientForSync, onResult)
+                                }
                             },
                             onDownload = { onResult ->
                                 viewModel.downloadFromCloud(context,
                                     syncClientForSync, onResult)
+                            },
+                            onOpenWebDav = {
+                                showSyncSettings = false
+                                showWebDavDialog = true
                             },
                         )
                     }
@@ -444,9 +472,16 @@ fun LibraryScreen(
 
         // 云端全部上传确认对话框
         if (showUploadAllConfirm) {
+            val currentCloudTarget = webDavClient.getDefaultCloudTarget()
             AlertDialog(
                 onDismissRequest = { if (!isUploading) showUploadAllConfirm = false },
-                title = { Text(if (isUploading) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_uploading) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_title)) },
+                title = {
+                    Text(
+                        if (isUploading) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_uploading)
+                        else if (currentCloudTarget == "WEBDAV") androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_webdav_title)
+                        else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_title)
+                    )
+                },
                 text = {
                     if (isUploading) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -458,15 +493,24 @@ fun LibraryScreen(
                             )
                         }
                     } else {
-                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_confirm))
+                        Text(
+                            if (currentCloudTarget == "WEBDAV") androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_webdav_confirm)
+                            else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_confirm)
+                        )
                     }
                 },
                 confirmButton = {
                     if (!isUploading) {
                         TextButton(onClick = {
-                            val client = SyncClient(context)
-                            uploadScope.launch {
-                                viewModel.uploadAllToCloud(context, client)
+                            if (currentCloudTarget == "WEBDAV") {
+                                uploadScope.launch {
+                                    viewModel.uploadAllToWebDav(context, webDavClient)
+                                }
+                            } else {
+                                val client = SyncClient(context)
+                                uploadScope.launch {
+                                    viewModel.uploadAllToCloud(context, client)
+                                }
                             }
                         }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload), color = MaterialTheme.colorScheme.primary) }
                     }
@@ -552,7 +596,7 @@ fun LibraryScreen(
                 // 搜索结果显示提示
                 if (searchQuery.isNotBlank()) {
                     Text(
-                        "搜索 \"$searchQuery\" · 找到 ${mergedItems.size} 本",
+                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.search_results_found_fmt, searchQuery, mergedItems.size),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
@@ -632,7 +676,7 @@ private fun BookCard(
                     ) {
                         Icon(Icons.Default.CloudUpload, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("上传至云端 (按默认目标)", modifier = Modifier.weight(1f))
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_single_cloud_default), modifier = Modifier.weight(1f))
                     }
                     if (onUploadToWebDav != null) {
                         TextButton(
@@ -641,7 +685,7 @@ private fun BookCard(
                         ) {
                             Icon(Icons.Default.Storage, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("上传至 WebDAV 网盘 (带书签)", modifier = Modifier.weight(1f))
+                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_single_webdav), modifier = Modifier.weight(1f))
                         }
                     }
                 }

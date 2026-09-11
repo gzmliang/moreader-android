@@ -740,4 +740,47 @@ AI Voice（云端 TTS）：
     <string name="action_more">更多功能</string>
     <string name="theme_light_mode">浅色模式</string>
     <string name="theme_dark_mode">深色模式</string>
+    <string name="retry">重试</string>
+
+    <!-- WebDAV & Sync Additions -->
+    <string name="webdav_not_configured">未配置 WebDAV 网盘，请先连接网盘</string>
+    <string name="webdav_fill_url_and_user">请填写服务器地址和账号</string>
+    <string name="webdav_desc_hint">支持对接 AList、坚果云、群晖、InfiniCloud 等网盘</string>
+    <string name="webdav_parent_dir">上一级</string>
+    <string name="webdav_root_dir">根目录</string>
+    <string name="webdav_set_upload_dir_success">已将当前目录设为默认上传目录</string>
+    <string name="webdav_is_upload_dir">已设为上传目录</string>
+    <string name="webdav_set_upload_dir">设为上传目录</string>
+    <string name="webdav_empty_folder_retry">此文件夹为空</string>
+    <string name="webdav_import_restored_meta"> (已恢复%1$d书签+%2$d高亮)</string>
+    <string name="webdav_imported_success">已导入: %1$s%2$s</string>
+    <string name="webdav_download_failed_fmt">下载失败: %1$s</string>
+    <string name="webdav_disconnect_btn">断开 WebDAV</string>
+    <string name="sync_settings_title">云同步与上传设置</string>
+    <string name="sync_default_upload_target">默认书籍上传目标</string>
+    <string name="sync_target_moyue">墨阅自建云 (同步进度)</string>
+    <string name="sync_target_webdav">WebDAV 网盘 (完整书籍+书签)</string>
+    <string name="sync_webdav_dir_root">当前目录：网盘根目录 (可在WebDAV浏览界面修改)</string>
+    <string name="sync_webdav_dir_custom">当前目录：%1$s</string>
+    <string name="sync_webdav_configured_desc">已连接 WebDAV：%1$s</string>
+    <string name="sync_upload_all_webdav_title">上传全部书籍至 WebDAV</string>
+    <string name="sync_upload_all_webdav_confirm">将所有本地书籍（含书签与划线）上传至 WebDAV 网盘？</string>
+    <string name="sync_upload_to_webdav_btn">批量备份全部书籍至 WebDAV</string>
+    <string name="sync_open_webdav_browser">打开 WebDAV 网盘书库</string>
+    <string name="sync_webdav_uploading">正在上传至 WebDAV…</string>
+    <string name="sync_webdav_upload_success">已上传至 WebDAV (%1$s)</string>
+    <string name="sync_webdav_upload_fail">上传至 WebDAV 失败: %1$s</string>
+    <string name="sync_upload_single_cloud_default">上传至云端 (按默认目标)</string>
+    <string name="sync_upload_single_webdav">上传至 WebDAV 网盘 (带书签)</string>
+    <string name="sync_help_guide_title">墨阅云端与网盘使用指南</string>
+    <string name="sync_help_section1_title">一、两大云端的定位分工</string>
+    <string name="sync_help_section1_body">1. 墨阅自建云（默认）：专用于多设备间实时同步阅读进度、书签和划线高亮。\n2. WebDAV 网盘：适合作为海量电子书大仓库，支持百度网盘、夸克网盘、阿里云盘、坚果云、群晖 NAS 等。</string>
+    <string name="sync_help_section2_title">二、什么是 AList？如何对接网盘？</string>
+    <string name="sync_help_section2_body">AList 是一款非常强大的开源网盘聚合挂载神器（官网：alist.nn.ci）。\n\n它可以将您的百度网盘、阿里云盘、夸克网盘集中挂载起来，并一键开启 WebDAV 协议。\n\n• 填写规范：在墨阅地址栏填写「http://服务器IP:端口/dav」（注意后面必须带 /dav）并输入 AList 账号密码即可打通。\n• 如需了解如何搭建 AList，可访问官方文档：https://alist.nn.ci/zh/guide/</string>
+    <string name="sync_help_section3_title">三、书签与高亮同步保证</string>
+    <string name="sync_help_section3_body">当您选择上传书籍到 WebDAV 网盘时，墨阅不仅会上传 EPUB 原文件，还会自动生成一份同名的伴侣元数据文件（.moreader.json）。\n\n日后在任何手机从网盘下载该书时，墨阅会自动识别并完整还原该书的阅读进度、所有书签和划线笔记！</string>
+    <string name="sync_cloud_books_found_fmt">🔍 找到 %1$d/%2$d 本</string>
+    <string name="sync_cloud_books_total_fmt">📚 共 %1$d 本（点击下载）:</string>
+    <string name="sync_download_restored_summary">%1$s（%2$d书签，%3$d高亮）</string>
+    <string name="search_results_found_fmt">搜索 \"%1$s\" · 找到 %2$d 本</string>
 </resources>

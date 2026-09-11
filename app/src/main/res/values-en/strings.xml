@@ -617,4 +617,47 @@ Just change the Base URL and API Key</string>
     <string name="action_more">More options</string>
     <string name="theme_light_mode">Light Mode</string>
     <string name="theme_dark_mode">Dark Mode</string>
+    <string name="retry">Retry</string>
+
+    <!-- WebDAV & Sync Additions -->
+    <string name="webdav_not_configured">WebDAV not configured. Please connect to WebDAV first.</string>
+    <string name="webdav_fill_url_and_user">Please enter server URL and username</string>
+    <string name="webdav_desc_hint">Supports AList, Nutstore, Synology, InfiniCloud, etc.</string>
+    <string name="webdav_parent_dir">Up</string>
+    <string name="webdav_root_dir">Root</string>
+    <string name="webdav_set_upload_dir_success">Current folder set as default upload directory</string>
+    <string name="webdav_is_upload_dir">Upload Directory</string>
+    <string name="webdav_set_upload_dir">Set as Upload Dir</string>
+    <string name="webdav_empty_folder_retry">This folder is empty</string>
+    <string name="webdav_import_restored_meta"> (Restored %1$d BMs + %2$d HLs)</string>
+    <string name="webdav_imported_success">Imported: %1$s%2$s</string>
+    <string name="webdav_download_failed_fmt">Download failed: %1$s</string>
+    <string name="webdav_disconnect_btn">Disconnect WebDAV</string>
+    <string name="sync_settings_title">Cloud Sync &amp; Upload Settings</string>
+    <string name="sync_default_upload_target">Default Book Upload Target</string>
+    <string name="sync_target_moyue">MoYue Cloud (Sync Progress)</string>
+    <string name="sync_target_webdav">WebDAV Cloud (Full Books &amp; Bookmarks)</string>
+    <string name="sync_webdav_dir_root">Current Dir: Root (Change in WebDAV browser)</string>
+    <string name="sync_webdav_dir_custom">Current Dir: %1$s</string>
+    <string name="sync_webdav_configured_desc">Connected to WebDAV: %1$s</string>
+    <string name="sync_upload_all_webdav_title">Upload All Books to WebDAV</string>
+    <string name="sync_upload_all_webdav_confirm">Upload all local books (with bookmarks &amp; highlights) to WebDAV?</string>
+    <string name="sync_upload_to_webdav_btn">Backup All Books to WebDAV</string>
+    <string name="sync_open_webdav_browser">Open WebDAV Library</string>
+    <string name="sync_webdav_uploading">Uploading to WebDAV…</string>
+    <string name="sync_webdav_upload_success">Uploaded to WebDAV (%1$s)</string>
+    <string name="sync_webdav_upload_fail">WebDAV upload failed: %1$s</string>
+    <string name="sync_upload_single_cloud_default">Upload to Cloud (Default Target)</string>
+    <string name="sync_upload_single_webdav">Upload to WebDAV (With Bookmarks)</string>
+    <string name="sync_help_guide_title">MoYue Cloud &amp; WebDAV Guide</string>
+    <string name="sync_help_section1_title">1. Roles of Two Cloud Targets</string>
+    <string name="sync_help_section1_body">1. MoYue Cloud (Default): Used for real-time syncing of reading progress, bookmarks, and highlights across devices.\n2. WebDAV Cloud: Ideal as a large ebook repository, supporting Baidu Netdisk, Quark, Aliyun Drive, Nutstore, Synology NAS, etc.</string>
+    <string name="sync_help_section2_title">2. What is AList? How to connect?</string>
+    <string name="sync_help_section2_body">AList is a powerful open-source file list program supporting multiple storage providers (alist.nn.ci).\n\nIt mounts your Baidu Netdisk, Aliyun Drive, Quark, etc. and provides a standard WebDAV endpoint.\n\n• Format: enter \"http://server_ip:port/dav\" (with /dav) with your credentials.\n• Documentation: https://alist.nn.ci</string>
+    <string name="sync_help_section3_title">3. Bookmarks &amp; Highlights Guarantee</string>
+    <string name="sync_help_section3_body">When uploading books to WebDAV, MoYue uploads the EPUB and automatically creates a companion metadata file (.moreader.json).\n\nWhen downloading from WebDAV on any device, reading progress, bookmarks, and highlights are fully restored!</string>
+    <string name="sync_cloud_books_found_fmt">🔍 Found %1$d/%2$d books</string>
+    <string name="sync_cloud_books_total_fmt">📚 %1$d books total (tap to download):</string>
+    <string name="sync_download_restored_summary">%1$s (%2$d BMs, %3$d HLs)</string>
+    <string name="search_results_found_fmt">Search \"%1$s\" · Found %2$d books</string>
 </resources>

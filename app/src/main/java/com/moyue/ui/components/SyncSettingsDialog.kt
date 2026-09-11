@@ -35,6 +35,7 @@ fun SyncSettingsDialog(
     onDismiss: () -> Unit,
     onUpload: ((onResult: (String) -> Unit) -> Unit)? = null,
     onDownload: ((onResult: (String) -> Unit) -> Unit)? = null,
+    onOpenWebDav: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -77,9 +78,9 @@ fun SyncSettingsDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Cloud, null, Modifier.size(24.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("云同步与上传设置", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_settings_title), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 IconButton(onClick = { showHelpDialog = true }, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.HelpOutline, contentDescription = "帮助", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.HelpOutline, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_title), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 }
             }
         },
@@ -92,7 +93,7 @@ fun SyncSettingsDialog(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
-                        Text("默认书籍上传目标", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_default_upload_target), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(
@@ -102,7 +103,7 @@ fun SyncSettingsDialog(
                                     webDavClient.setDefaultCloudTarget("MOYUE")
                                 }
                             )
-                            Text("墨阅自建云 (同步进度)", fontSize = 12.sp, modifier = Modifier.clickable {
+                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_target_moyue), fontSize = 12.sp, modifier = Modifier.clickable {
                                 defaultCloudTarget = "MOYUE"
                                 webDavClient.setDefaultCloudTarget("MOYUE")
                             })
@@ -115,7 +116,7 @@ fun SyncSettingsDialog(
                                     webDavClient.setDefaultCloudTarget("WEBDAV")
                                 }
                             )
-                            Text("WebDAV 网盘 (带书签)", fontSize = 12.sp, modifier = Modifier.clickable {
+                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_target_webdav), fontSize = 12.sp, modifier = Modifier.clickable {
                                 defaultCloudTarget = "WEBDAV"
                                 webDavClient.setDefaultCloudTarget("WEBDAV")
                             })
@@ -123,7 +124,8 @@ fun SyncSettingsDialog(
                         if (defaultCloudTarget == "WEBDAV") {
                             val curUploadDir = webDavClient.getDefaultUploadDir()
                             Text(
-                                if (curUploadDir.isBlank()) "当前目录：网盘根目录 (可在WebDAV浏览界面修改)" else "当前目录：$curUploadDir",
+                                if (curUploadDir.isBlank()) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_webdav_dir_root)
+                                else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_webdav_dir_custom, curUploadDir),
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -135,7 +137,89 @@ fun SyncSettingsDialog(
                 HorizontalDivider()
                 Spacer(Modifier.height(12.dp))
 
-                if (isLoggedIn) {
+                if (defaultCloudTarget == "WEBDAV") {
+                    if (webDavClient.isConfigured()) {
+                        Icon(Icons.Default.Storage, null,
+                            modifier = Modifier.size(40.dp).align(Alignment.CenterHorizontally),
+                            tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.webdav_connected),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        )
+                        Text(
+                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_webdav_configured_desc, webDavClient.getServerUrl()),
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // 上传全部书籍到 WebDAV
+                        Button(
+                            onClick = {
+                                syncResult = context.getString(com.moyue.app.R.string.sync_webdav_uploading)
+                                if (onUpload != null) {
+                                    onUpload { msg ->
+                                        syncResult = msg
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary),
+                        ) {
+                            Icon(Icons.Default.CloudUpload, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_to_webdav_btn))
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        // 打开 WebDAV 网盘书库
+                        if (onOpenWebDav != null) {
+                            OutlinedButton(
+                                onClick = onOpenWebDav,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(Icons.Default.FolderOpen, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_open_webdav_browser))
+                            }
+                        }
+                    } else {
+                        // 未配置 WebDAV
+                        Icon(Icons.Default.Storage, null,
+                            modifier = Modifier.size(40.dp).align(Alignment.CenterHorizontally),
+                            tint = MaterialTheme.colorScheme.outline)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.webdav_not_configured),
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        if (onOpenWebDav != null) {
+                            Button(
+                                onClick = onOpenWebDav,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.webdav_save))
+                            }
+                        }
+                    }
+
+                    syncResult?.let { msg ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(msg, fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    }
+                } else if (isLoggedIn) {
                     // ── 已登录状态 ──
                     Icon(Icons.Default.CheckCircle, null,
                         modifier = Modifier.size(40.dp).align(Alignment.CenterHorizontally),
@@ -287,8 +371,8 @@ fun SyncSettingsDialog(
                             val shownCount = filteredList.size
                             val hasFilter = cloudSearchQuery.isNotBlank()
                             Text(
-                                if (hasFilter) "🔍 找到 $shownCount/$totalCount 本"
-                                else "📚 共 $totalCount 本（点击下载）:",
+                                if (hasFilter) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_cloud_books_found_fmt, shownCount, totalCount)
+                                else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_cloud_books_total_fmt, totalCount),
                                 fontSize = 12.sp, fontWeight = FontWeight.Bold
                             )
                             Spacer(Modifier.height(4.dp))
@@ -366,13 +450,12 @@ fun SyncSettingsDialog(
                                                                         }
                                                                     }
                                                                 } catch (e: Exception) {
-                                                                    android.util.Log.e("Sync", "写入元数据失败", e)
+                                                                    android.util.Log.e("Sync", "Failed to apply metadata", e)
                                                                 }
                                                             }
-                                                            val bmPart = if (restoredBm > 0) "，${restoredBm}书签" else ""
-                                                            val hlPart = if (restoredHl > 0) "，${restoredHl}高亮" else ""
+                                                            val countMsg = if (restoredBm > 0 || restoredHl > 0) context.getString(com.moyue.app.R.string.sync_download_restored_summary, book.title, restoredBm, restoredHl) else book.title
                                                             android.widget.Toast.makeText(context,
-                                                                "Downloaded: ${book.title}$bmPart$hlPart", android.widget.Toast.LENGTH_SHORT).show()
+                                                                "${context.getString(com.moyue.app.R.string.sync_download)}: $countMsg", android.widget.Toast.LENGTH_SHORT).show()
                                                         },
                                                         onFailure = { e ->
                                                             android.widget.Toast.makeText(context,
@@ -539,42 +622,37 @@ fun SyncSettingsDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.HelpOutline, null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
-                    Text("墨阅云端使用指南", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_help_guide_title), fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             },
             text = {
                 Column(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
-                    Text("一、两大云端的定位分工", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_help_section1_title), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "1. 墨阅自建云（默认）：专用于多设备间实时同步阅读进度、书签和划线高亮。\n" +
-                        "2. WebDAV 网盘：适合作为海量电子书大仓库，支持百度网盘、夸克网盘、阿里云盘、坚果云、群晖 NAS 等。",
+                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_help_section1_body),
                         fontSize = 12.sp, lineHeight = 18.sp
                     )
 
                     Spacer(Modifier.height(12.dp))
-                    Text("二、什么是 AList？如何对接网盘？", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_help_section2_title), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "AList 是一款非常强大的开源网盘聚合挂载神器（官网：alist.nn.ci）。\n\n" +
-                        "它可以将您的百度网盘、阿里云盘、夸克网盘集中挂载起来，并一键开启 WebDAV 协议。\n\n" +
-                        "• 填写规范：在墨阅地址栏填写「http://服务器IP:端口/dav」（注意后面必须带 /dav）并输入 AList 账号密码即可打通。\n" +
-                        "• 如需了解如何搭建 AList，可访问官方文档：https://alist.nn.ci/zh/guide/",
+                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_help_section2_body),
                         fontSize = 12.sp, lineHeight = 18.sp
                     )
 
                     Spacer(Modifier.height(12.dp))
-                    Text("三、书签与高亮同步保证", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_help_section3_title), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "当您选择上传书籍到 WebDAV 网盘时，墨阅不仅会上传 EPUB 原文件，还会自动生成一份同名的伴侣元数据文件（.moreader.json）。\n\n" +
-                        "日后在任何手机从网盘下载该书时，墨阅会自动识别并完整还原该书的阅读进度、所有书签和划线笔记！",
+                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_help_section3_body),
                         fontSize = 12.sp, lineHeight = 18.sp
                     )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showHelpDialog = false }) { Text("我知道了") }
+                TextButton(onClick = { showHelpDialog = false }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_close)) }
             }
         )
     }

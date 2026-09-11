@@ -24,7 +24,7 @@ data class LibraryItem(
     val cloudInfo: SyncClient.BookInfo? = null,  // 非空表示云端存在
 ) {
     val title: String get() = localBook?.title ?: cloudInfo?.title ?: ""
-    val author: String get() = localBook?.author ?: cloudInfo?.author ?: "未知"
+    val author: String get() = localBook?.author ?: cloudInfo?.author ?: ""
     val isCloudOnly: Boolean get() = localBook == null && cloudInfo != null
     val isLocalOnly: Boolean get() = localBook != null && cloudInfo == null
     val isOnBoth: Boolean get() = localBook != null && cloudInfo != null
@@ -199,17 +199,59 @@ class LibraryViewModel(
         }
     }
 
+    /** 上传全部本地书籍到 WebDAV 网盘（含书签和高亮），自动跳过已在网盘目录的 */
+    fun uploadAllToWebDav(context: Context, webDavClient: com.moyue.app.sync.WebDavClient) {
+        viewModelScope.launch {
+            if (!webDavClient.isConfigured()) {
+                android.widget.Toast.makeText(context,
+                    context.getString(com.moyue.app.R.string.webdav_not_configured),
+                    android.widget.Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            _isUploading.value = true
+            val repo = BookRepository(context)
+            val allBooks = repo.getAllBooksOnce()
+            val destDir = webDavClient.getDefaultUploadDir()
+
+            // 获取远程目录已有文件，跳过已上传的
+            val remoteFiles = webDavClient.listFiles(destDir).getOrDefault(emptyList())
+                .map { it.name }.toSet()
+
+            val toUpload = allBooks.filter { "${it.title}.epub" !in remoteFiles }
+            val skipped = allBooks.size - toUpload.size
+
+            _uploadTotal.value = toUpload.size
+            _uploadProgress.value = 0
+            var success = 0
+            var fail = 0
+            for ((i, book) in toUpload.withIndex()) {
+                val result = webDavClient.uploadBookWithMetadata(book.id, repo, destDir)
+                if (result.isSuccess) success++ else fail++
+                _uploadProgress.value = i + 1
+            }
+            _isUploading.value = false
+
+            val msg = when {
+                fail > 0 && skipped > 0 -> context.getString(com.moyue.app.R.string.sync_upload_all_fail_skip, success, fail, skipped)
+                fail > 0 -> context.getString(com.moyue.app.R.string.sync_upload_result_fail, success, fail)
+                skipped > 0 -> context.getString(com.moyue.app.R.string.sync_upload_all_skip, success, skipped)
+                else -> context.getString(com.moyue.app.R.string.sync_upload_result_success, success)
+            }
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
     /** 上传单本书到 WebDAV 网盘（含书签和高亮） */
     fun uploadSingleBookToWebDav(context: Context, webDavClient: com.moyue.app.sync.WebDavClient, bookId: String) {
         viewModelScope.launch {
             val repo = BookRepository(context)
-            android.widget.Toast.makeText(context, "正在上传至 WebDAV...", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.sync_webdav_uploading), android.widget.Toast.LENGTH_SHORT).show()
             webDavClient.uploadBookWithMetadata(bookId, repo).fold(
                 onSuccess = { msg ->
                     android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
                 },
                 onFailure = { e ->
-                    android.widget.Toast.makeText(context, "上传至 WebDAV 失败: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.sync_webdav_upload_fail, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
                 }
             )
         }
@@ -222,7 +264,7 @@ class LibraryViewModel(
             val book = repo.getBook(bookId)
             if (book == null) {
                 android.widget.Toast.makeText(context,
-                    context.getString(com.moyue.app.R.string.sync_upload_fail, "找不到本地书"),
+                    context.getString(com.moyue.app.R.string.sync_upload_fail, context.getString(com.moyue.app.R.string.error_book_not_found)),
                     android.widget.Toast.LENGTH_SHORT).show()
                 return@launch
             }
@@ -290,11 +332,11 @@ class LibraryViewModel(
             val repo = BookRepository(context)
             syncClient.uploadToCloud(repo).fold(
                 onSuccess = { msg ->
-                    android.util.Log.i("Sync", "上传成功: $msg")
+                    android.util.Log.i("Sync", "Upload success: $msg")
                     onResult(msg)
                 },
                 onFailure = { e ->
-                    android.util.Log.e("Sync", "上传失败", e)
+                    android.util.Log.e("Sync", "Upload failed", e)
                     onResult(context.getString(com.moyue.app.R.string.sync_fail, e.message ?: ""))
                 },
             )
@@ -307,11 +349,11 @@ class LibraryViewModel(
             val repo = BookRepository(context)
             syncClient.downloadFromCloud(repo).fold(
                 onSuccess = { msg ->
-                    android.util.Log.i("Sync", "下载成功: $msg")
+                    android.util.Log.i("Sync", "Download success: $msg")
                     onResult(msg)
                 },
                 onFailure = { e ->
-                    android.util.Log.e("Sync", "下载失败", e)
+                    android.util.Log.e("Sync", "Download failed", e)
                     onResult(context.getString(com.moyue.app.R.string.sync_fail, e.message ?: ""))
                 },
             )
@@ -372,7 +414,7 @@ class LibraryViewModel(
                 repo.importHighlights(hls)
             }
         } catch (e: Exception) {
-            android.util.Log.e("Sync", "写入元数据失败", e)
+            android.util.Log.e("Sync", "Failed to apply metadata", e)
         }
     }
 }
