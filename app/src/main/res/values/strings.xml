@@ -694,9 +694,17 @@ AI Voice（云端 TTS）：
     <string name="ai_quiz_diff_basic">基础理解</string>
     <string name="ai_quiz_diff_intermediate">深度情节</string>
     <string name="ai_quiz_diff_advanced">主旨与思辨</string>
+    <string name="ai_quiz_diff_basic_short">基础</string>
+    <string name="ai_quiz_diff_intermediate_short">进阶</string>
+    <string name="ai_quiz_diff_advanced_short">思辨</string>
     <string name="ai_quiz_mode_label">模式</string>
     <string name="ai_quiz_mode_instant">即时揭晓</string>
     <string name="ai_quiz_mode_submit">完卷提交</string>
+    <string name="ai_quiz_mode_instant_short">即时反馈</string>
+    <string name="ai_quiz_mode_submit_short">完卷提交</string>
+    <string name="ai_quiz_generate_btn">✨ 开始生成测验</string>
+    <string name="ai_quiz_card_title">阅读理解测验</string>
+    <string name="ai_quiz_card_desc">基于选定内容智能出题，边读边测，强化情节理解与词汇记忆</string>
     <string name="ai_quiz_submit_btn">📝 提交全卷并查看得分</string>
     <string name="ai_quiz_score_summary">测验得分：%1$d / %2$d (%3$d%%)</string>
     <string name="ai_quiz_analysis_title">💡 深度解析</string>

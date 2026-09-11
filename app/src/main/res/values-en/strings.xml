@@ -571,9 +571,17 @@ Just change the Base URL and API Key</string>
     <string name="ai_quiz_diff_basic">Basic</string>
     <string name="ai_quiz_diff_intermediate">Intermediate</string>
     <string name="ai_quiz_diff_advanced">Advanced</string>
+    <string name="ai_quiz_diff_basic_short">Basic</string>
+    <string name="ai_quiz_diff_intermediate_short">Medium</string>
+    <string name="ai_quiz_diff_advanced_short">Advanced</string>
     <string name="ai_quiz_mode_label">Mode</string>
     <string name="ai_quiz_mode_instant">Instant</string>
     <string name="ai_quiz_mode_submit">On Submit</string>
+    <string name="ai_quiz_mode_instant_short">Instant</string>
+    <string name="ai_quiz_mode_submit_short">On Submit</string>
+    <string name="ai_quiz_generate_btn">✨ Generate Quiz</string>
+    <string name="ai_quiz_card_title">Reading Comprehension Quiz</string>
+    <string name="ai_quiz_card_desc">Generate custom quizzes to test your comprehension and key insights.</string>
     <string name="ai_quiz_submit_btn">📝 Submit and Review Score</string>
     <string name="ai_quiz_score_summary">Score: %1$d / %2$d (%3$d%%)</string>
     <string name="ai_quiz_analysis_title">💡 In-depth Explanation</string>

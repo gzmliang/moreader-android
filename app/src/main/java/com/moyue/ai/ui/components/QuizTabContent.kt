@@ -4,10 +4,16 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Quiz
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moyue.ai.data.AiCacheRepository
@@ -100,164 +107,304 @@ fun QuizTabContent(
         onQuizCompleted()
     }
 
+    fun startGenerateQuiz() {
+        isLoading = true
+        errorMessage = null
+        scope.launch {
+            val (sys, usr) = AiPromptBuilder.buildQuizPrompt(
+                config = config,
+                title = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle",
+                text = chapterText,
+                count = questionCount,
+                difficulty = difficulty,
+                scope = selectedScope
+            )
+            val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
+            isLoading = false
+            res.fold(
+                onSuccess = { json ->
+                    val parsed = AiPromptBuilder.parseQuizResponse(json, bookId, chapterIndex, selectedScope, questionCount, difficulty)
+                    repository.saveQuiz(parsed)
+                    quizResult = parsed
+                    userAnswers.clear()
+                    isSubmitted = false
+                },
+                onFailure = { errorMessage = it.localizedMessage }
+            )
+        }
+    }
+
+    // Label helpers
+    val diffShortLabel = when (difficulty) {
+        "Basic" -> stringResource(R.string.ai_quiz_diff_basic_short)
+        "Advanced" -> stringResource(R.string.ai_quiz_diff_advanced_short)
+        else -> stringResource(R.string.ai_quiz_diff_intermediate_short)
+    }
+    val modeShortLabel = when (feedbackMode) {
+        "submit" -> stringResource(R.string.ai_quiz_mode_submit_short)
+        else -> stringResource(R.string.ai_quiz_mode_instant_short)
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        // Controls Header
-        Surface(
-            color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        // Compact single-line controls bar (height ~34dp)
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-                .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp)) else Modifier)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(modifier = Modifier.padding(8.dp)) {
-                // Row 1: Scope & Count & Difficulty
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Scope
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(
-                            selected = (selectedScope == "chapter"),
-                            onClick = { selectedScope = "chapter" },
-                            label = { Text(stringResource(R.string.ai_scope_chapter), fontSize = 11.sp) }
+            // Dropdown Capsules (Scrollable horizontally to prevent any wrapping or overflow)
+            Row(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Scope Capsule: [ 当前章 ▾ ] / [ 全书 ▾ ]
+                var scopeMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    Surface(
+                        color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .clickable { scopeMenuExpanded = true }
+                            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        ) {
+                            Text(
+                                text = if (selectedScope == "book") stringResource(R.string.ai_scope_book_short) else stringResource(R.string.ai_scope_chapter_short),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = scopeMenuExpanded,
+                        onDismissRequest = { scopeMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.ai_scope_chapter), fontSize = 13.sp) },
+                            onClick = {
+                                selectedScope = "chapter"
+                                scopeMenuExpanded = false
+                            }
                         )
-                        FilterChip(
-                            selected = (selectedScope == "book"),
-                            onClick = { selectedScope = "book" },
-                            label = { Text(stringResource(R.string.ai_scope_book), fontSize = 11.sp) }
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.ai_scope_book), fontSize = 13.sp) },
+                            onClick = {
+                                selectedScope = "book"
+                                scopeMenuExpanded = false
+                            }
                         )
                     }
+                }
 
-                    // Count chips (3, 5, 10)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        listOf(3, 5, 10).forEach { cnt ->
+                // Question Count Capsule: [ 5 题 ▾ ]
+                var countMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    Surface(
+                        color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .clickable { countMenuExpanded = true }
+                            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        ) {
                             Text(
-                                text = stringResource(R.string.ai_quiz_count_format, cnt),
-                                fontSize = 11.sp,
-                                modifier = Modifier
-                                    .background(
-                                        if (questionCount == cnt) (if (isEink) Color.Black else MaterialTheme.colorScheme.primary)
-                                        else (if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant),
-                                        RoundedCornerShape(4.dp)
+                                text = stringResource(R.string.ai_quiz_count_format, questionCount),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = countMenuExpanded,
+                        onDismissRequest = { countMenuExpanded = false }
+                    ) {
+                        listOf(3, 5, 10).forEach { cnt ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = stringResource(R.string.ai_quiz_count_format, cnt),
+                                        fontSize = 13.sp,
+                                        fontWeight = if (questionCount == cnt) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (questionCount == cnt) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                     )
-                                    .then(if (isEink && questionCount != cnt) Modifier.border(1.dp, Color.Black, RoundedCornerShape(4.dp)) else Modifier)
-                                    .clickable { questionCount = cnt }
-                                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                                color = if (questionCount == cnt) Color.White else (if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface)
+                                },
+                                onClick = {
+                                    questionCount = cnt
+                                    countMenuExpanded = false
+                                }
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Row 2: Difficulty & Mode
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    // Difficulty
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        val diffs = listOf(
-                            "Basic" to stringResource(R.string.ai_quiz_diff_basic),
-                            "Intermediate" to stringResource(R.string.ai_quiz_diff_intermediate),
-                            "Advanced" to stringResource(R.string.ai_quiz_diff_advanced)
-                        )
-                        diffs.forEach { (dKey, dLabel) ->
+                // Difficulty Capsule: [ 进阶 ▾ ]
+                var diffMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    Surface(
+                        color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .clickable { diffMenuExpanded = true }
+                            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        ) {
                             Text(
-                                text = dLabel,
-                                fontSize = 11.sp,
-                                modifier = Modifier
-                                    .background(
-                                        if (difficulty == dKey) (if (isEink) Color.Black else MaterialTheme.colorScheme.primary)
-                                        else (if (isEink) Color.White else MaterialTheme.colorScheme.surface),
-                                        RoundedCornerShape(4.dp)
-                                    )
-                                    .then(if (isEink && difficulty != dKey) Modifier.border(1.dp, Color.Black, RoundedCornerShape(4.dp)) else Modifier)
-                                    .clickable { difficulty = dKey }
-                                    .padding(horizontal = 5.dp, vertical = 3.dp),
-                                color = if (difficulty == dKey) Color.White else (if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface)
+                                text = diffShortLabel,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
+                    DropdownMenu(
+                        expanded = diffMenuExpanded,
+                        onDismissRequest = { diffMenuExpanded = false }
+                    ) {
+                        listOf(
+                            "Basic" to stringResource(R.string.ai_quiz_diff_basic),
+                            "Intermediate" to stringResource(R.string.ai_quiz_diff_intermediate),
+                            "Advanced" to stringResource(R.string.ai_quiz_diff_advanced)
+                        ).forEach { (dKey, dLabel) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = dLabel,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (difficulty == dKey) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (difficulty == dKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                onClick = {
+                                    difficulty = dKey
+                                    diffMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
 
-                    // Mode Toggle (Instant vs Submit)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        val modes = listOf(
+                // Mode Capsule: [ 即时反馈 ▾ ]
+                var modeMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    Surface(
+                        color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .clickable { modeMenuExpanded = true }
+                            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        ) {
+                            Text(
+                                text = modeShortLabel,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = modeMenuExpanded,
+                        onDismissRequest = { modeMenuExpanded = false }
+                    ) {
+                        listOf(
                             "instant" to stringResource(R.string.ai_quiz_mode_instant),
                             "submit" to stringResource(R.string.ai_quiz_mode_submit)
-                        )
-                        modes.forEach { (mKey, mLabel) ->
-                            Text(
-                                text = mLabel,
-                                fontSize = 11.sp,
-                                modifier = Modifier
-                                    .background(
-                                        if (feedbackMode == mKey) (if (isEink) Color.Black else MaterialTheme.colorScheme.secondary)
-                                        else (if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant),
-                                        RoundedCornerShape(4.dp)
+                        ).forEach { (mKey, mLabel) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = mLabel,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (feedbackMode == mKey) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (feedbackMode == mKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                     )
-                                    .then(if (isEink && feedbackMode != mKey) Modifier.border(1.dp, Color.Black, RoundedCornerShape(4.dp)) else Modifier)
-                                    .clickable { feedbackMode = mKey }
-                                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                                color = if (feedbackMode == mKey) Color.White else (if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface)
+                                },
+                                onClick = {
+                                    feedbackMode = mKey
+                                    modeMenuExpanded = false
+                                }
                             )
                         }
                     }
                 }
             }
-        }
 
-        // Cache Status or regenerate
-        if (quizResult != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.ai_cached_badge),
-                    fontSize = 11.sp,
-                    color = if (isEink) Color.Black else Color(0xFF10B981),
-                    fontWeight = FontWeight.SemiBold
-                )
+            // Right side: ⚡已缓存 & 🔄重新生成
+            if (quizResult != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "⚡" + stringResource(R.string.ai_cached_short),
+                        fontSize = 11.sp,
+                        color = if (isEink) Color.Black else Color(0xFF10B981),
+                        fontWeight = FontWeight.SemiBold
+                    )
 
-                Text(
-                    text = stringResource(R.string.ai_regenerate_btn),
-                    fontSize = 11.sp,
-                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable {
-                        isLoading = true
-                        errorMessage = null
-                        scope.launch {
-                            val (sys, usr) = AiPromptBuilder.buildQuizPrompt(
-                                config = config,
-                                title = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle",
-                                text = chapterText,
-                                count = questionCount,
-                                difficulty = difficulty,
-                                scope = selectedScope
-                            )
-                            val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
-                            isLoading = false
-                            res.fold(
-                                onSuccess = { json ->
-                                    val parsed = AiPromptBuilder.parseQuizResponse(json, bookId, chapterIndex, selectedScope, questionCount, difficulty)
-                                    repository.saveQuiz(parsed)
-                                    quizResult = parsed
-                                    userAnswers.clear()
-                                    isSubmitted = false
-                                },
-                                onFailure = { errorMessage = it.localizedMessage }
-                            )
-                        }
+                    IconButton(
+                        onClick = { startGenerateQuiz() },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = stringResource(R.string.ai_regenerate_btn),
+                            tint = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
-                )
+                }
             }
         }
 
@@ -293,6 +440,14 @@ fun QuizTabContent(
                             color = MaterialTheme.colorScheme.error,
                             fontSize = 13.sp
                         )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = { startGenerateQuiz() },
+                            colors = if (isEink) ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
+                            else ButtonDefaults.buttonColors()
+                        ) {
+                            Text(stringResource(R.string.ai_regenerate_btn))
+                        }
                     }
                 }
                 quizResult != null -> {
@@ -348,12 +503,12 @@ fun QuizTabContent(
                                 }
                                 val percent = if (result.questions.isNotEmpty()) (correctCount * 100) / result.questions.size else 0
                                 Surface(
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = RoundedCornerShape(12.dp),
                                     color = if (isEink) Color.White else MaterialTheme.colorScheme.primaryContainer,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 12.dp)
-                                        .then(if (isEink) Modifier.border(2.dp, Color.Black, RoundedCornerShape(8.dp)) else Modifier)
+                                        .then(if (isEink) Modifier.border(2.dp, Color.Black, RoundedCornerShape(12.dp)) else Modifier)
                                 ) {
                                     Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(14.dp)) {
                                         Text(
@@ -369,47 +524,118 @@ fun QuizTabContent(
                     }
                 }
                 else -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    // Elegant Empty State Card
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp, vertical = 20.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = stringResource(R.string.ai_empty_hint),
-                            fontSize = 14.sp,
-                            color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Button(
-                            onClick = {
-                                isLoading = true
-                                errorMessage = null
-                                scope.launch {
-                                    val (sys, usr) = AiPromptBuilder.buildQuizPrompt(
-                                        config = config,
-                                        title = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle",
-                                        text = chapterText,
-                                        count = questionCount,
-                                        difficulty = difficulty,
-                                        scope = selectedScope
-                                    )
-                                    val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
-                                    isLoading = false
-                                    res.fold(
-                                        onSuccess = { json ->
-                                            val parsed = AiPromptBuilder.parseQuizResponse(json, bookId, chapterIndex, selectedScope, questionCount, difficulty)
-                                            repository.saveQuiz(parsed)
-                                            quizResult = parsed
-                                            userAnswers.clear()
-                                            isSubmitted = false
-                                        },
-                                        onFailure = { errorMessage = it.localizedMessage }
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            tonalElevation = if (isEink) 0.dp else 2.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = 420.dp)
+                                .then(
+                                    if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp))
+                                    else Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                                )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 28.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                // Icon Circle
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .background(
+                                            if (isEink) Color.Black else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                                            RoundedCornerShape(32.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Quiz,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(32.dp),
+                                        tint = if (isEink) Color.White else MaterialTheme.colorScheme.primary
                                     )
                                 }
-                            },
-                            colors = if (isEink) ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
-                            else ButtonDefaults.buttonColors()
-                        ) {
-                            Text(stringResource(R.string.ai_generate_btn))
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Title
+                                Text(
+                                    text = stringResource(R.string.ai_quiz_card_title),
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // Description
+                                Text(
+                                    text = stringResource(R.string.ai_quiz_card_desc),
+                                    fontSize = 13.sp,
+                                    lineHeight = 18.sp,
+                                    textAlign = TextAlign.Center,
+                                    color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Spacer(modifier = Modifier.height(20.dp))
+
+                                // Configuration summary badges
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val scopeText = if (selectedScope == "book") stringResource(R.string.ai_scope_book_short) else stringResource(R.string.ai_scope_chapter_short)
+                                    val countText = stringResource(R.string.ai_quiz_count_format, questionCount)
+                                    listOf(scopeText, countText, diffShortLabel, modeShortLabel).forEach { badge ->
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = if (isEink) Color.White else MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                                            modifier = Modifier.then(
+                                                if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(6.dp))
+                                                else Modifier.border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
+                                            )
+                                        ) {
+                                            Text(
+                                                text = badge,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(24.dp))
+
+                                // Big Generate Button
+                                Button(
+                                    onClick = { startGenerateQuiz() },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(46.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = if (isEink) ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
+                                    else ButtonDefaults.buttonColors()
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.ai_quiz_generate_btn),
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -431,14 +657,14 @@ private fun QuizQuestionItem(
     val showFeedback = (feedbackMode == "instant" && selectedOption != null) || (feedbackMode == "submit" && isSubmitted)
 
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         color = if (isEink) Color.White else MaterialTheme.colorScheme.surface,
         shadowElevation = if (isEink) 0.dp else 1.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp)) else Modifier)
+            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(12.dp)) else Modifier)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             // Question Title (Orig + Trans)
             Text(
                 text = "${question.id}. ${question.questionOriginal}",
@@ -447,7 +673,7 @@ private fun QuizQuestionItem(
                 color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
             )
             if (question.questionTranslation.isNotBlank()) {
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = question.questionTranslation,
                     fontSize = (textSizeSp * 0.9f).sp,
@@ -455,7 +681,7 @@ private fun QuizQuestionItem(
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Options
             question.options.forEach { opt ->
@@ -481,16 +707,16 @@ private fun QuizQuestionItem(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = optBgColor,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp)
-                        .border(if (isSelected || (showFeedback && isCorrect)) 2.dp else 1.dp, optBorderColor, RoundedCornerShape(6.dp))
+                        .border(if (isSelected || (showFeedback && isCorrect)) 2.dp else 1.dp, optBorderColor, RoundedCornerShape(8.dp))
                         .clickable { onSelectOption(optPrefix) }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Radio / Check indicator
@@ -510,7 +736,7 @@ private fun QuizQuestionItem(
                                 showFeedback && isSelected && !isCorrect -> Color(0xFFEF4444)
                                 else -> MaterialTheme.colorScheme.primary
                             },
-                            modifier = Modifier.width(20.dp)
+                            modifier = Modifier.width(22.dp)
                         )
 
                         Text(
@@ -524,15 +750,15 @@ private fun QuizQuestionItem(
 
             // Explanation & Feedback
             if (showFeedback && (question.analysisOriginal.isNotBlank() || question.analysisTranslation.isNotBlank())) {
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(6.dp)) else Modifier)
+                        .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp)) else Modifier)
                 ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
                         Text(
                             text = stringResource(R.string.ai_quiz_analysis_title),
                             fontSize = 12.sp,
@@ -540,7 +766,7 @@ private fun QuizQuestionItem(
                             color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
                         )
                         if (question.analysisOriginal.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = question.analysisOriginal,
                                 fontSize = (textSizeSp * 0.9f).sp,
