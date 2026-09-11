@@ -494,7 +494,8 @@ fun ReaderScreen(
                         val href = parts.getOrNull(0) ?: it
                         val visiblePara = parts.getOrNull(1)?.toIntOrNull() ?: 0
                         val scrollY = parts.getOrNull(2)?.toIntOrNull() ?: 0
-                        viewModel.onLinkClicked(href, visiblePara, scrollY) 
+                        val elementTop = parts.getOrNull(3)?.toIntOrNull() ?: -1
+                        viewModel.onLinkClicked(href, visiblePara, scrollY, elementTop) 
                     },
                     onParagraphClicked = { idx ->
                         clickedParagraphIndex = idx
@@ -509,6 +510,8 @@ fun ReaderScreen(
                     onAnchorScrolled = { viewModel.clearScrollToParagraph() },
                     scrollToPixel = if (state.scrollToPixel >= 0) state.scrollToPixel else null,
                     onPixelScrolled = { viewModel.clearScrollToPixel() },
+                    scrollToNavEntry = state.scrollToNavEntry,
+                    onNavEntryRestored = { viewModel.clearScrollToNavEntry() },
                     onShowFootnote = { text, href -> viewModel.showFootnotePreview(text, href) },
                     highlightsToRender = highlights.map { Triple(it.startParagraph, it.startOffset, it.endOffset) },
                     highlightToRemove = state.highlightToRemove?.let { Pair(it.startOffset, it.endOffset) },

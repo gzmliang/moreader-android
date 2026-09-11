@@ -55,6 +55,8 @@ fun EpubWebView(
     onAnchorScrolled: (() -> Unit)? = null,
     scrollToPixel: Int? = null,
     onPixelScrolled: (() -> Unit)? = null,
+    scrollToNavEntry: com.moyue.app.ui.NavHistoryEntry? = null,
+    onNavEntryRestored: (() -> Unit)? = null,
     onShowFootnote: ((String, String) -> Unit)? = null,
     highlightsToRender: List<Triple<Int, Int, Int>> = emptyList(),  // (startParagraph, startOffset, endOffset)
     highlightToRemove: Pair<Int, Int>? = null,  // (startOffset, endOffset)
@@ -65,6 +67,7 @@ fun EpubWebView(
     onWebViewCreated: ((WebView) -> Unit)? = null,
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
+    var lastLoadedContent by remember { mutableStateOf<String?>(null) }
     val callbackRef = remember { mutableStateOf<(String) -> Unit>({}) }
     val linkCallbackRef = remember { mutableStateOf<(String) -> Unit>({}) }
     val paragraphCallbackRef = remember { mutableStateOf<(Int) -> Unit>({}) }
@@ -158,6 +161,61 @@ fun EpubWebView(
         }
     }
 
+    // 精准原位恢复（方案 A+B 深度融合：首选根据原被点击链接元素坐标还原，次选绝对像素）
+    LaunchedEffect(scrollToNavEntry, lastLoadedContent) {
+        val entry = scrollToNavEntry ?: return@LaunchedEffect
+        if (lastLoadedContent == null) return@LaunchedEffect
+        val targetY = entry.scrollY
+        val linkHref = entry.linkHref.replace("'", "\\'")
+        val elTop = entry.elementTop
+
+        val js = """
+            (function(){
+                var targetY = $targetY;
+                var linkHref = '$linkHref';
+                var elTop = $elTop;
+                
+                function doRestore() {
+                    // 1. 首选：精确查找被点击的链接元素 a[href]
+                    if (linkHref) {
+                        var el = null;
+                        try {
+                            el = document.querySelector('a[href="' + CSS.escape(linkHref) + '"]');
+                        } catch(e){}
+                        if (!el) {
+                            try {
+                                var shortHref = linkHref.indexOf('#') >= 0 ? linkHref.substring(linkHref.indexOf('#')) : linkHref;
+                                el = document.querySelector('a[href*="' + CSS.escape(shortHref) + '"]');
+                            } catch(e){}
+                        }
+                        if (el && elTop >= 0) {
+                            var curAbsTop = el.getBoundingClientRect().top + window.scrollY;
+                            var idealY = Math.round(curAbsTop - elTop);
+                            window.scrollTo({ top: Math.max(0, idealY), behavior: 'instant' });
+                            return true;
+                        }
+                    }
+                    // 2. 次选：按离开时的绝对像素高度瞬时归位
+                    if (targetY >= 0) {
+                        window.scrollTo({ top: targetY, behavior: 'instant' });
+                        return true;
+                    }
+                    return false;
+                }
+
+                doRestore();
+                requestAnimationFrame(doRestore);
+                setTimeout(doRestore, 80);
+                setTimeout(doRestore, 250);
+                setTimeout(doRestore, 500);
+            })()
+        """.trimIndent()
+
+        webView?.evaluateJavascript(js) { _ ->
+            onNavEntryRestored?.invoke()
+        }
+    }
+
     // Render user highlights in WebView — clear all then re-render on every change
     LaunchedEffect(highlightsToRender) {
         webView?.evaluateJavascript(
@@ -200,7 +258,6 @@ fun EpubWebView(
     // We only want to reload HTML when content or base URL changes.
     // Theme changes (bgColor, textColor, fontScale) should be applied via JS (LaunchedEffect below)
     // to avoid jumping to the top of the page.
-    var lastLoadedContent by remember { mutableStateOf<String?>(null) }
     
     // Load HTML only when content or base URL actually changes
     LaunchedEffect(htmlContent, baseUrl) {
@@ -583,9 +640,11 @@ fun EpubWebView(
                                         var href=a.getAttribute('href');
                                         if(href && !href.startsWith('http') && !href.startsWith('mailto:') && !href.startsWith('tel:')){
                                             e.preventDefault();
-                                            // Get current visible paragraph index and exact scrollY before navigating
+                                            // Get current visible paragraph index, exact scrollY and element viewport top before navigating
                                             var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
                                             var scrollY=Math.round(window.scrollY);
+                                            var rect=a.getBoundingClientRect();
+                                            var elementTop=Math.round(rect.top);
                                             var visibleIdx=0;
                                             for(var i=0;i<all.length;i++){
                                                 if(all[i].offsetTop>scrollY+window.innerHeight*0.3)break;
@@ -617,7 +676,7 @@ fun EpubWebView(
                                             }
 
                                             // 方案 A：直接触发精准跳转
-                                            MoreaderBridge.onLinkClicked(href, visibleIdx, scrollY);
+                                            MoreaderBridge.onLinkClicked(href, visibleIdx, scrollY, elementTop);
                                         }
                                     }
                                 });
@@ -688,8 +747,8 @@ fun EpubWebView(
                             callbackRef.value(infoJson) 
                         }
                         @JavascriptInterface
-                        fun onLinkClicked(url: String, visibleParaIdx: Int, scrollY: Int) { 
-                            linkCallbackRef.value("$url|$visibleParaIdx|$scrollY") 
+                        fun onLinkClicked(url: String, visibleParaIdx: Int, scrollY: Int, elementTop: Int) { 
+                            linkCallbackRef.value("$url|$visibleParaIdx|$scrollY|$elementTop") 
                         }
                         @JavascriptInterface
                         fun onShowFootnote(text: String, href: String) {

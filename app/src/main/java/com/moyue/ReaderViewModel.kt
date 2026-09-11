@@ -41,6 +41,8 @@ data class NavHistoryEntry(
     val chapterLabel: String,
     val paragraphIndex: Int = 0,
     val scrollY: Int = 0,
+    val linkHref: String = "",
+    val elementTop: Int = -1,
 )
 
 /** Footnote lightweight preview model */
@@ -115,6 +117,7 @@ data class ReaderUiState(
     val scrollToParagraph: Int = -1,           // 需要滚动到的段落索引（-1 表示无）
     val scrollToAnchor: String? = null,          // 需要滚动到的 HTML 锚点（如 filepos0000154187）
     val scrollToPixel: Int = -1,                 // 需要精确滚动到的像素位置（-1 表示无）
+    val scrollToNavEntry: NavHistoryEntry? = null, // 精准原位定格回跳记录
     val footnotePreview: FootnotePreview? = null, // 注释轻预览弹窗内容
     val isChapterSwitching: Boolean = false,     // 章节切换过渡期标记，暂停 scroll 监听写 DB
     val highlightToRemove: Highlight? = null,    // Signal to remove a highlight in WebView
@@ -292,7 +295,7 @@ class ReaderViewModel(
     // ===== Navigation History =====
     
     /** Push current reading position onto the history stack (max 20 entries) */
-    private fun pushToHistory(scrollY: Int = 0) {
+    private fun pushToHistory(scrollY: Int = 0, linkHref: String = "", elementTop: Int = -1) {
         val s = _uiState.value
         val chapter = s.chapters.getOrNull(s.currentChapterIndex) ?: return
         val entry = NavHistoryEntry(
@@ -301,6 +304,8 @@ class ReaderViewModel(
             chapterLabel = chapter.id,
             paragraphIndex = s.currentParagraphIndex,
             scrollY = scrollY,
+            linkHref = linkHref,
+            elementTop = elementTop,
         )
         val newHistory = (s.navHistory + entry).takeLast(20)
         _uiState.update { it.copy(navHistory = newHistory) }
@@ -313,18 +318,17 @@ class ReaderViewModel(
         
         val prev = s.navHistory.last()
         val newHistory = s.navHistory.dropLast(1)
-        val targetPara = prev.paragraphIndex
-        val targetScrollY = prev.scrollY
         
         killPlayChain()
 
-        // 同章节瞬时像素回跳：0 毫秒、零闪烁、0 误差
+        // 同章节瞬时原位定格回跳：0 毫秒、零闪烁、0 误差
         if (prev.chapterIndex == s.currentChapterIndex) {
             _uiState.update { 
                 it.copy(
                     navHistory = newHistory,
-                    scrollToPixel = targetScrollY,
-                    scrollToParagraph = if (targetScrollY <= 0) targetPara else -1,
+                    scrollToNavEntry = prev,
+                    scrollToParagraph = -1,
+                    scrollToAnchor = null,
                 ) 
             }
             return
@@ -343,21 +347,19 @@ class ReaderViewModel(
                 scrollToParagraph = -1,
                 scrollToAnchor = null,
                 scrollToPixel = -1,
+                scrollToNavEntry = prev,
                 isChapterSwitching = true,
             )
         }
         viewModelScope.launch {
-            loadChapterContent()
+            loadChapterContent(skipScrollRestore = true)
             _uiState.update { it.copy(isChapterSwitching = false) }
-            // 优先恢复像素位置，若无像素则恢复段落位置
-            if (targetScrollY > 0) {
-                delay(200)
-                _uiState.update { it.copy(scrollToPixel = targetScrollY) }
-            } else {
-                _uiState.update { it.copy(scrollToParagraph = targetPara) }
-            }
             saveProgress()
         }
+    }
+
+    fun clearScrollToNavEntry() {
+        _uiState.update { it.copy(scrollToNavEntry = null) }
     }
 
     fun clearScrollToPixel() {
@@ -420,7 +422,7 @@ class ReaderViewModel(
         // 首次打开书本时，批量修复跨平台高亮的章节/偏移量
         repairAllCrossPlatformHighlights(book.id)
     } }
-    private suspend fun loadChapterContent(forceStart: Boolean = false) {
+    private suspend fun loadChapterContent(forceStart: Boolean = false, skipScrollRestore: Boolean = false) {
         val s = _uiState.value; val b = s.book ?: return; if (s.chapters.isEmpty()) return
         _uiState.update { it.copy(isLoading = true, loadingMessage = getApplication<android.app.Application>().getString(com.moyue.app.R.string.load_content)) }
         val ch = s.chapters.getOrNull(s.currentChapterIndex) ?: run { _uiState.update { it.copy(isLoading = false, error = getApplication<android.app.Application>().getString(com.moyue.app.R.string.error_chapter_out_of_range)) }; return }
@@ -429,10 +431,10 @@ class ReaderViewModel(
         
         // Restore paragraph position: use saved position only when reopening the same chapter,
         // not when explicitly navigating via TOC or links
-        val restorePara = if (forceStart) 0
+        val restorePara = if (forceStart || skipScrollRestore) 0
             else if (ch.href == b.currentChapterHref) b.currentParagraphIndex.coerceIn(0, maxOf(0, pl.size - 1))
             else 0
-        log("ChapterNav: ch=${ch.href} forceStart=$forceStart curCHref=${b.currentChapterHref} restorePara=$restorePara idx=${s.currentChapterIndex}")
+        log("ChapterNav: ch=${ch.href} forceStart=$forceStart skipScrollRestore=$skipScrollRestore curCHref=${b.currentChapterHref} restorePara=$restorePara idx=${s.currentChapterIndex}")
         
         _uiState.update { 
             it.copy(
@@ -445,6 +447,11 @@ class ReaderViewModel(
             ) 
         }
         
+        if (skipScrollRestore) {
+            // 回跳由 scrollToNavEntry 接管，禁止默认滚到顶部或恢复段落
+            return
+        }
+
         // Scroll to restored paragraph after a short delay
         if (restorePara > 0) {
             kotlinx.coroutines.delay(300)
@@ -570,13 +577,13 @@ class ReaderViewModel(
             _uiState.update { it.copy(selectedText = infoJson, selectionInfo = null, showSelectionMenu = true) }
         }
     }
-    fun onLinkClicked(url: String, visibleParaIdx: Int = 0, scrollY: Int = 0) { 
+    fun onLinkClicked(url: String, visibleParaIdx: Int = 0, scrollY: Int = 0, elementTop: Int = -1) { 
         // Update current paragraph to visible position before pushing to history
         _uiState.update { it.copy(currentParagraphIndex = visibleParaIdx) }
         // Handle internal EPUB link clicks
-        pushToHistory(scrollY = scrollY)
+        pushToHistory(scrollY = scrollY, linkHref = url.trim(), elementTop = elementTop)
         val cleanUrl = url.trim()
-        log("Link clicked: $cleanUrl (scrollY=$scrollY)")
+        log("Link clicked: $cleanUrl (scrollY=$scrollY, elementTop=$elementTop)")
         
         // Extract path and anchor
         val path = cleanUrl.substringBefore('#')
