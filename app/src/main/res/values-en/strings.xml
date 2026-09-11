@@ -266,6 +266,9 @@ Just change the Base URL and API Key</string>
     <string name="nav_back_default">Last reading position</string>
     <string name="nav_back_format">Back to %1$s</string>
     <string name="nav_back_label">Back</string>
+    <string name="footnote_title">Note</string>
+    <string name="footnote_go_to">Go to Note</string>
+    <string name="footnote_dismiss">Close</string>
     <string name="next_chapter">Next Chapter</string>
     <string name="original_text_label">Original Text</string>
     <string name="paragraph_menu_message">Select action for this paragraph</string>

@@ -490,10 +490,11 @@ fun ReaderScreen(
                     fontWeight = state.fontWeight,
                     onTextSelected = { viewModel.onTextSelected(it) },
                     onLinkClicked = { 
-                        val idx = it.lastIndexOf('|')
-                        val href = if (idx >= 0) it.substring(0, idx) else it
-                        val visiblePara = if (idx >= 0) it.substring(idx + 1).toIntOrNull() ?: 0 else 0
-                        viewModel.onLinkClicked(href, visiblePara) 
+                        val parts = it.split('|')
+                        val href = parts.getOrNull(0) ?: it
+                        val visiblePara = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                        val scrollY = parts.getOrNull(2)?.toIntOrNull() ?: 0
+                        viewModel.onLinkClicked(href, visiblePara, scrollY) 
                     },
                     onParagraphClicked = { idx ->
                         clickedParagraphIndex = idx
@@ -506,6 +507,9 @@ fun ReaderScreen(
                     scrollToParagraph = if (state.scrollToParagraph >= 0) state.scrollToParagraph else null,
                     scrollToAnchor = state.scrollToAnchor,
                     onAnchorScrolled = { viewModel.clearScrollToParagraph() },
+                    scrollToPixel = if (state.scrollToPixel >= 0) state.scrollToPixel else null,
+                    onPixelScrolled = { viewModel.clearScrollToPixel() },
+                    onShowFootnote = { text, href -> viewModel.showFootnotePreview(text, href) },
                     highlightsToRender = highlights.map { Triple(it.startParagraph, it.startOffset, it.endOffset) },
                     highlightToRemove = state.highlightToRemove?.let { Pair(it.startOffset, it.endOffset) },
                     onPrevChapter = { viewModel.prevChapter() },
@@ -622,10 +626,10 @@ fun ReaderScreen(
                 
                 // Floating navigation back button — persistent, stays until user taps back or dismisses
                 AnimatedVisibility(
-                    visible = showNavHint && state.canGoBack && !state.isFullscreen,
+                    visible = showNavHint && state.canGoBack,
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = if (state.isFullscreen) 72.dp else 80.dp),
                 ) {
                     Surface(
                         modifier = Modifier.padding(horizontal = 16.dp),
@@ -664,6 +668,105 @@ fun ReaderScreen(
                     }
                 }
                 
+                // Footnote preview popup (方案 B)
+                AnimatedVisibility(
+                    visible = state.footnotePreview != null,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 16.dp, vertical = if (state.isFullscreen) 24.dp else 76.dp),
+                ) {
+                    val preview = state.footnotePreview
+                    if (preview != null) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = 520.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
+                            shadowElevation = 8.dp,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.MenuBook,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.footnote_title),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { viewModel.dismissFootnotePreview() },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.footnote_dismiss),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 160.dp)
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    Text(
+                                        text = preview.text,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        lineHeight = 22.sp,
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    TextButton(
+                                        onClick = { viewModel.dismissFootnotePreview() },
+                                    ) {
+                                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.footnote_dismiss))
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = { viewModel.onFootnoteGoTo(preview.targetHref) },
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.footnote_go_to))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Paragraph click floating chip — non-blocking, auto-dismiss 3s
                 AnimatedVisibility(
                     visible = showParagraphMenu && clickedParagraphIndex >= 0,

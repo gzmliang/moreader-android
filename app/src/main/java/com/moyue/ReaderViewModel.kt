@@ -40,6 +40,13 @@ data class NavHistoryEntry(
     val chapterHref: String,
     val chapterLabel: String,
     val paragraphIndex: Int = 0,
+    val scrollY: Int = 0,
+)
+
+/** Footnote lightweight preview model */
+data class FootnotePreview(
+    val text: String,
+    val targetHref: String,
 )
 
 data class ReaderUiState(
@@ -107,6 +114,8 @@ data class ReaderUiState(
     val currentParagraphIndex: Int = 0,       // 当前阅读/朗读的段落
     val scrollToParagraph: Int = -1,           // 需要滚动到的段落索引（-1 表示无）
     val scrollToAnchor: String? = null,          // 需要滚动到的 HTML 锚点（如 filepos0000154187）
+    val scrollToPixel: Int = -1,                 // 需要精确滚动到的像素位置（-1 表示无）
+    val footnotePreview: FootnotePreview? = null, // 注释轻预览弹窗内容
     val isChapterSwitching: Boolean = false,     // 章节切换过渡期标记，暂停 scroll 监听写 DB
     val highlightToRemove: Highlight? = null,    // Signal to remove a highlight in WebView
     // Navigation history
@@ -283,7 +292,7 @@ class ReaderViewModel(
     // ===== Navigation History =====
     
     /** Push current reading position onto the history stack (max 20 entries) */
-    private fun pushToHistory() {
+    private fun pushToHistory(scrollY: Int = 0) {
         val s = _uiState.value
         val chapter = s.chapters.getOrNull(s.currentChapterIndex) ?: return
         val entry = NavHistoryEntry(
@@ -291,6 +300,7 @@ class ReaderViewModel(
             chapterHref = chapter.href,
             chapterLabel = chapter.id,
             paragraphIndex = s.currentParagraphIndex,
+            scrollY = scrollY,
         )
         val newHistory = (s.navHistory + entry).takeLast(20)
         _uiState.update { it.copy(navHistory = newHistory) }
@@ -304,8 +314,23 @@ class ReaderViewModel(
         val prev = s.navHistory.last()
         val newHistory = s.navHistory.dropLast(1)
         val targetPara = prev.paragraphIndex
+        val targetScrollY = prev.scrollY
         
         killPlayChain()
+
+        // 同章节瞬时像素回跳：0 毫秒、零闪烁、0 误差
+        if (prev.chapterIndex == s.currentChapterIndex) {
+            _uiState.update { 
+                it.copy(
+                    navHistory = newHistory,
+                    scrollToPixel = targetScrollY,
+                    scrollToParagraph = if (targetScrollY <= 0) targetPara else -1,
+                ) 
+            }
+            return
+        }
+
+        // 跨章节回跳
         _uiState.update { 
             it.copy(
                 currentChapterIndex = prev.chapterIndex,
@@ -317,17 +342,39 @@ class ReaderViewModel(
                 isTtsPaused = false,
                 scrollToParagraph = -1,
                 scrollToAnchor = null,
+                scrollToPixel = -1,
                 isChapterSwitching = true,
             )
         }
         viewModelScope.launch {
             loadChapterContent()
             _uiState.update { it.copy(isChapterSwitching = false) }
-            // Scroll to the saved paragraph - ALWAYS use the history entry's position,
-            // not the DB-restored one (which may be for a different chapter)
-            _uiState.update { it.copy(scrollToParagraph = targetPara) }
+            // 优先恢复像素位置，若无像素则恢复段落位置
+            if (targetScrollY > 0) {
+                delay(200)
+                _uiState.update { it.copy(scrollToPixel = targetScrollY) }
+            } else {
+                _uiState.update { it.copy(scrollToParagraph = targetPara) }
+            }
             saveProgress()
         }
+    }
+
+    fun clearScrollToPixel() {
+        _uiState.update { it.copy(scrollToPixel = -1) }
+    }
+
+    fun showFootnotePreview(text: String, href: String) {
+        _uiState.update { it.copy(footnotePreview = FootnotePreview(text = text.trim(), targetHref = href)) }
+    }
+
+    fun dismissFootnotePreview() {
+        _uiState.update { it.copy(footnotePreview = null) }
+    }
+
+    fun onFootnoteGoTo(href: String) {
+        dismissFootnotePreview()
+        onLinkClicked(href)
     }
 
     // ===== Book =====
@@ -523,32 +570,38 @@ class ReaderViewModel(
             _uiState.update { it.copy(selectedText = infoJson, selectionInfo = null, showSelectionMenu = true) }
         }
     }
-    fun onLinkClicked(url: String, visibleParaIdx: Int = 0) { 
+    fun onLinkClicked(url: String, visibleParaIdx: Int = 0, scrollY: Int = 0) { 
         // Update current paragraph to visible position before pushing to history
         _uiState.update { it.copy(currentParagraphIndex = visibleParaIdx) }
         // Handle internal EPUB link clicks
-        pushToHistory()
+        pushToHistory(scrollY = scrollY)
         val cleanUrl = url.trim()
-        log("Link clicked: $cleanUrl")
+        log("Link clicked: $cleanUrl (scrollY=$scrollY)")
         
         // Extract path and anchor
         val path = cleanUrl.substringBefore('#')
         val anchor = cleanUrl.substringAfter('#', "")
         
-        // Find matching chapter
-        val chs = _uiState.value.chapters
-        var idx = chs.indexOfFirst { it.href == path }
-        if (idx < 0) idx = chs.indexOfFirst { it.href.endsWith(path) }
-        if (idx < 0) idx = chs.indexOfFirst { path.endsWith(it.href) }
-        if (idx < 0) {
-            val targetFile = path.substringAfterLast('/')
-            idx = chs.indexOfFirst { it.href.substringAfterLast('/') == targetFile }
-        }
-        if (idx < 0) {
-            val targetNoExt = path.substringAfterLast('/').substringBeforeLast('.')
-            idx = chs.indexOfFirst { 
-                it.href.substringAfterLast('/').substringBeforeLast('.') == targetNoExt 
+        // 如果 path 为空（例如纯锚点 "#fn1"），则目标是当前章节，严禁匹配到第1章！
+        val s = _uiState.value
+        val chs = s.chapters
+        var idx = if (path.isEmpty()) {
+            s.currentChapterIndex
+        } else {
+            var found = chs.indexOfFirst { it.href == path }
+            if (found < 0) found = chs.indexOfFirst { it.href.endsWith(path) }
+            if (found < 0) found = chs.indexOfFirst { path.endsWith(it.href) }
+            if (found < 0) {
+                val targetFile = path.substringAfterLast('/')
+                found = chs.indexOfFirst { it.href.substringAfterLast('/') == targetFile }
             }
+            if (found < 0) {
+                val targetNoExt = path.substringAfterLast('/').substringBeforeLast('.')
+                found = chs.indexOfFirst { 
+                    it.href.substringAfterLast('/').substringBeforeLast('.') == targetNoExt 
+                }
+            }
+            found
         }
         
         if (idx >= 0) {
@@ -558,11 +611,12 @@ class ReaderViewModel(
                 _uiState.update { it.copy(scrollToAnchor = anchor) }
                 return
             }
-            _uiState.update { it.copy(currentChapterIndex = idx, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false) }
+            _uiState.update { it.copy(currentChapterIndex = idx, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false, isChapterSwitching = true) }
             viewModelScope.launch { 
                 loadChapterContent()
+                _uiState.update { it.copy(isChapterSwitching = false) }
                 if (anchor.isNotEmpty()) {
-                    delay(800)
+                    delay(500)
                     _uiState.update { it.copy(scrollToAnchor = anchor) }
                 }
                 saveProgress() 

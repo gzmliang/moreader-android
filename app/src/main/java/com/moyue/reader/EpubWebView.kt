@@ -53,6 +53,9 @@ fun EpubWebView(
     scrollToParagraph: Int? = null,
     scrollToAnchor: String? = null,
     onAnchorScrolled: (() -> Unit)? = null,
+    scrollToPixel: Int? = null,
+    onPixelScrolled: (() -> Unit)? = null,
+    onShowFootnote: ((String, String) -> Unit)? = null,
     highlightsToRender: List<Triple<Int, Int, Int>> = emptyList(),  // (startParagraph, startOffset, endOffset)
     highlightToRemove: Pair<Int, Int>? = null,  // (startOffset, endOffset)
     onPrevChapter: (() -> Unit)? = null,
@@ -66,12 +69,14 @@ fun EpubWebView(
     val linkCallbackRef = remember { mutableStateOf<(String) -> Unit>({}) }
     val paragraphCallbackRef = remember { mutableStateOf<(Int) -> Unit>({}) }
     val scrollCallbackRef = remember { mutableStateOf<(Int) -> Unit>({}) }
+    val footnoteCallbackRef = remember { mutableStateOf<(String, String) -> Unit>({ _, _ -> }) }
     val prevChapterCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
     val nextChapterCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
     LaunchedEffect(onTextSelected) { callbackRef.value = onTextSelected }
     LaunchedEffect(onLinkClicked) { linkCallbackRef.value = onLinkClicked }
     LaunchedEffect(onParagraphClicked) { paragraphCallbackRef.value = { idx -> onParagraphClicked?.invoke(idx) ?: Unit } }
     LaunchedEffect(onScrollToParagraph) { scrollCallbackRef.value = { idx -> onScrollToParagraph?.invoke(idx) ?: Unit } }
+    LaunchedEffect(onShowFootnote) { footnoteCallbackRef.value = { text, href -> onShowFootnote?.invoke(text, href) ?: Unit } }
     LaunchedEffect(onPrevChapter) { prevChapterCallbackRef.value = { onPrevChapter?.invoke() ?: Unit } }
     LaunchedEffect(onNextChapter) { nextChapterCallbackRef.value = { onNextChapter?.invoke() ?: Unit } }
 
@@ -125,8 +130,11 @@ fun EpubWebView(
                 (function(){
                     var id = '$scrollToAnchor';
                     var el = document.getElementById(id);
-                    if (!el) el = document.querySelector('[name="$scrollToAnchor"]');
-                    if (!el) el = document.querySelector('a[name="$scrollToAnchor"]');
+                    if (!el) {
+                        try {
+                            el = document.querySelector('[name="' + CSS.escape(id) + '"]') || document.querySelector('a[name="' + CSS.escape(id) + '"]');
+                        } catch(ex){}
+                    }
                     if (el) {
                         el.scrollIntoView({behavior:'smooth', block:'start'});
                         return 'found';
@@ -136,6 +144,17 @@ fun EpubWebView(
             """.trimIndent()) { _ ->
                 onAnchorScrolled?.invoke()
             }
+        }
+    }
+
+    // Scroll to exact pixel position for instant 0-error jump back
+    LaunchedEffect(scrollToPixel) {
+        if (scrollToPixel != null && scrollToPixel >= 0) {
+            webView?.evaluateJavascript(
+                "(function(){var y=$scrollToPixel;var b=window.isEink?'instant':'smooth';window.scrollTo({top:y,behavior:b});})()",
+                null
+            )
+            onPixelScrolled?.invoke()
         }
     }
 
@@ -557,22 +576,48 @@ fun EpubWebView(
                                     }
                                 };
                                 
-                                // Intercept link clicks to handle internal navigation
+                                // Intercept link clicks to handle internal navigation & footnote preview
                                 document.addEventListener('click',function(e){
                                     var a=e.target.closest('a[href]');
                                     if(a){
                                         var href=a.getAttribute('href');
                                         if(href && !href.startsWith('http') && !href.startsWith('mailto:') && !href.startsWith('tel:')){
                                             e.preventDefault();
-                                            // Get current visible paragraph index before navigating
+                                            // Get current visible paragraph index and exact scrollY before navigating
                                             var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
-                                            var scrollY=window.scrollY;
+                                            var scrollY=Math.round(window.scrollY);
                                             var visibleIdx=0;
                                             for(var i=0;i<all.length;i++){
                                                 if(all[i].offsetTop>scrollY+window.innerHeight*0.3)break;
                                                 visibleIdx=i;
                                             }
-                                            MoreaderBridge.onLinkClicked(href,visibleIdx);
+
+                                            // 方案 B：尝试在当前 DOM 嗅探注释内容（Footnote Preview）
+                                            var anchorIdx = href.indexOf('#');
+                                            if (anchorIdx >= 0) {
+                                                var anchorId = href.substring(anchorIdx + 1).trim();
+                                                if (anchorId) {
+                                                    var target = document.getElementById(anchorId);
+                                                    if (!target) {
+                                                        try {
+                                                            target = document.querySelector('[name="' + CSS.escape(anchorId) + '"]') ||
+                                                                     document.querySelector('a[name="' + CSS.escape(anchorId) + '"]');
+                                                        } catch(ex){}
+                                                    }
+                                                    if (target) {
+                                                        var noteContainer = target.closest('li, aside, dd, p, [role="doc-footnote"]') || target;
+                                                        var noteText = (noteContainer.textContent || '').trim();
+                                                        noteText = noteText.replace(/[\u21A9\u2191\u21E7\^]/g, '').trim();
+                                                        if (noteText.length > 0 && noteText.length < 1500) {
+                                                            MoreaderBridge.onShowFootnote(noteText, href);
+                                                            return;
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // 方案 A：直接触发精准跳转
+                                            MoreaderBridge.onLinkClicked(href, visibleIdx, scrollY);
                                         }
                                     }
                                 });
@@ -643,7 +688,15 @@ fun EpubWebView(
                             callbackRef.value(infoJson) 
                         }
                         @JavascriptInterface
-                        fun onLinkClicked(url: String, visibleParaIdx: Int) { linkCallbackRef.value("$url|$visibleParaIdx") }
+                        fun onLinkClicked(url: String, visibleParaIdx: Int, scrollY: Int) { 
+                            linkCallbackRef.value("$url|$visibleParaIdx|$scrollY") 
+                        }
+                        @JavascriptInterface
+                        fun onShowFootnote(text: String, href: String) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                footnoteCallbackRef.value(text, href)
+                            }
+                        }
                         @JavascriptInterface
                         fun onParagraphClicked(index: Int) { paragraphCallbackRef.value(index) }
                         @JavascriptInterface

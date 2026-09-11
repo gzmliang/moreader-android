@@ -325,6 +325,9 @@ AI Voice（云端 TTS）：
     <string name="nav_back_label">返回</string>
     <string name="nav_back_format">返回 %1$s</string>
     <string name="nav_back_default">上次阅读位置</string>
+    <string name="footnote_title">注释</string>
+    <string name="footnote_go_to">前往查看</string>
+    <string name="footnote_dismiss">关闭</string>
 
     <!-- Translation -->
     <string name="original_text_label">原文</string>
