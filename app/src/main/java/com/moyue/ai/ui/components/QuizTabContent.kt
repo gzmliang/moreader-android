@@ -590,29 +590,39 @@ fun QuizTabContent(
 
                                 Spacer(modifier = Modifier.height(20.dp))
 
-                                // Configuration summary badges
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                // Configuration summary badges (2x2 layout to prevent horizontal compression)
+                                val scopeText = if (selectedScope == "book") stringResource(R.string.ai_scope_book_short) else stringResource(R.string.ai_scope_chapter_short)
+                                val countText = stringResource(R.string.ai_quiz_count_format, questionCount)
+                                val row1 = listOf(scopeText, countText)
+                                val row2 = listOf(diffShortLabel, modeShortLabel)
+
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    val scopeText = if (selectedScope == "book") stringResource(R.string.ai_scope_book_short) else stringResource(R.string.ai_scope_chapter_short)
-                                    val countText = stringResource(R.string.ai_quiz_count_format, questionCount)
-                                    listOf(scopeText, countText, diffShortLabel, modeShortLabel).forEach { badge ->
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = if (isEink) Color.White else MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                                            modifier = Modifier.then(
-                                                if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(6.dp))
-                                                else Modifier.border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
-                                            )
+                                    listOf(row1, row2).forEach { badgeRow ->
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(
-                                                text = badge,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                            )
+                                            badgeRow.forEach { badge ->
+                                                Surface(
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    color = if (isEink) Color.White else MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                                                    modifier = Modifier.then(
+                                                        if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp))
+                                                        else Modifier.border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                                    )
+                                                ) {
+                                                    Text(
+                                                        text = badge,
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }

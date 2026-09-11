@@ -11,7 +11,7 @@
 - GitHub：<https://github.com/gzmliang/moreader-android>
 - 本地唯一 canonical 目录：`/root/.hermes/projects/moreader-android/`
 - GitHub 用户名：`gzmliang`；不要与 `gzmliang/moreader` 浏览器扩展、墨笺 Mojian、畅说 SpeakRead 混淆。
-- Android 包：`com.moyue.app.tingshu`。
+- Android 包：`com.gzmliang.moreader`（专属防劫持唯一包名，已彻底替换旧测试包名 `com.moyue.app.tingshu`）。
 - Kotlin namespace：`com.moyue.app`。**namespace 不要改**，否则 `R` 类引用会大量失败。
 - 主要用途：个人阅读、英语学习、EPUB 朗读、选词翻译、词汇积累和跨设备阅读数据同步。
 - 当前实现是 **Native Android + Jetpack Compose + WebView**，不是 Capacitor，也不是纯原生 Compose EPUB 渲染。
@@ -117,7 +117,7 @@ android {
     namespace = "com.moyue.app"
     compileSdk = 36
     defaultConfig {
-        applicationId = "com.moyue.app.tingshu"
+        applicationId = "com.gzmliang.moreader"
         minSdk = 26
         targetSdk = 36
         versionCode = 20111
