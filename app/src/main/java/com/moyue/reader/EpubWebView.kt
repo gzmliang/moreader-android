@@ -555,6 +555,9 @@ fun EpubWebView(
                                 // Paragraph click detection for "read from here"
                                 document.querySelectorAll('p,h1,h2,h3,h4,h5,h6').forEach(function(el, idx){
                                     el.addEventListener('click', function(e){
+                                        if (e.target && e.target.closest('a')) {
+                                            return; // 点击链接或角标时不触发段落朗读浮窗，避免与注释弹窗遮挡冲突
+                                        }
                                         var s=window.getSelection();
                                         if(s&&s.isCollapsed){
                                             MoreaderBridge.onParagraphClicked(idx);

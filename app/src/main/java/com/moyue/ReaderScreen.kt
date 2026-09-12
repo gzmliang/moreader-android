@@ -772,11 +772,17 @@ fun ReaderScreen(
                 }
 
                 // Paragraph click floating chip — non-blocking, auto-dismiss 3s
+                // 当出现注释弹窗时主动避让错开，绝不遮挡 Note 弹窗及操作按钮
+                val paragraphMenuBottom = if (state.footnotePreview != null) {
+                    if (state.isFullscreen) 240.dp else 290.dp
+                } else {
+                    if (state.isFullscreen) 24.dp else 80.dp
+                }
                 AnimatedVisibility(
-                    visible = showParagraphMenu && clickedParagraphIndex >= 0,
+                    visible = showParagraphMenu && clickedParagraphIndex >= 0 && state.footnotePreview == null,
                     enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
                     exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = paragraphMenuBottom),
                 ) {
                     LaunchedEffect(clickedParagraphIndex) {
                         kotlinx.coroutines.delay(3000)

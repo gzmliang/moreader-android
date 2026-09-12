@@ -391,7 +391,7 @@ class ReaderViewModel(
         val para = preview?.originParaIdx ?: 0
         val sy = preview?.originScrollY ?: 0
         dismissFootnotePreview()
-        onLinkClicked(href, visibleParaIdx = para, scrollY = sy)
+        onLinkClicked(href, visibleParaIdx = para, scrollY = sy, isDirectNavigation = true)
     }
 
     // ===== Book =====
@@ -587,15 +587,8 @@ class ReaderViewModel(
             _uiState.update { it.copy(selectedText = infoJson, selectionInfo = null, showSelectionMenu = true) }
         }
     }
-    fun onLinkClicked(url: String, visibleParaIdx: Int = 0, scrollY: Int = 0, elementTop: Int = -1) { 
-        // Update current paragraph to clicked position before pushing to history
-        _uiState.update { it.copy(currentParagraphIndex = visibleParaIdx) }
-        // Handle internal EPUB link clicks
-        pushToHistory(scrollY = scrollY, linkHref = url.trim(), elementTop = elementTop, paragraphIndex = visibleParaIdx)
+    fun onLinkClicked(url: String, visibleParaIdx: Int = 0, scrollY: Int = 0, elementTop: Int = -1, isDirectNavigation: Boolean = false) { 
         val cleanUrl = url.trim()
-        log("Link clicked: $cleanUrl (paraIdx=$visibleParaIdx, scrollY=$scrollY, elementTop=$elementTop)")
-        
-        // Extract path and anchor
         val path = cleanUrl.substringBefore('#')
         val anchor = cleanUrl.substringAfter('#', "")
         
@@ -620,6 +613,43 @@ class ReaderViewModel(
             }
             found
         }
+
+        // 方案 B 跨章节尾注/注脚嗅探：如果不属于直接跳转指令，且包含有效锚点，先异步嗅探注释内容弹窗预览
+        if (!isDirectNavigation && anchor.isNotEmpty() && idx >= 0) {
+            val targetChapter = chs.getOrNull(idx)
+            val b = s.book
+            if (targetChapter != null && b != null) {
+                viewModelScope.launch {
+                    val noteText = try {
+                        val targetHtml = repository.getChapterContent(b.id, targetChapter.href)
+                        if (targetHtml != null) extractFootnoteText(targetHtml, anchor) else null
+                    } catch (e: Exception) {
+                        log("Footnote sniff exception: ${e.message}")
+                        null
+                    }
+
+                    if (!noteText.isNullOrBlank()) {
+                        // 成功嗅探到注释内容！直接在当前页面弹出小卡片预览，读者无需离开正文
+                        showFootnotePreview(noteText, cleanUrl, visibleParaIdx, scrollY)
+                        return@launch
+                    }
+
+                    // 嗅探未命中（非注释短文本或普通章节标题），正常执行页面跳转
+                    executeLinkNavigation(cleanUrl, idx, anchor, visibleParaIdx, scrollY, elementTop)
+                }
+                return
+            }
+        }
+
+        executeLinkNavigation(cleanUrl, idx, anchor, visibleParaIdx, scrollY, elementTop)
+    }
+
+    private fun executeLinkNavigation(cleanUrl: String, idx: Int, anchor: String, visibleParaIdx: Int, scrollY: Int, elementTop: Int) {
+        // Update current paragraph to clicked position before pushing to history
+        _uiState.update { it.copy(currentParagraphIndex = visibleParaIdx) }
+        // Handle internal EPUB link clicks
+        pushToHistory(scrollY = scrollY, linkHref = cleanUrl, elementTop = elementTop, paragraphIndex = visibleParaIdx)
+        log("Link navigation executed: $cleanUrl (idx=$idx, anchor=$anchor, paraIdx=$visibleParaIdx, scrollY=$scrollY, elementTop=$elementTop)")
         
         if (idx >= 0) {
             killPlayChain()
@@ -640,6 +670,50 @@ class ReaderViewModel(
             }
         } else {
             log("Could not find chapter for link: $cleanUrl")
+        }
+    }
+
+    private fun extractFootnoteText(html: String, anchorId: String): String? {
+        if (anchorId.isBlank()) return null
+        return try {
+            val doc = org.jsoup.Jsoup.parse(html)
+            var target = doc.getElementById(anchorId)
+            if (target == null) {
+                target = doc.selectFirst("[name=\"$anchorId\"]")
+                    ?: doc.selectFirst("a[name=\"$anchorId\"]")
+                    ?: doc.selectFirst("[id*=\"$anchorId\"]")
+                    ?: doc.selectFirst("[name*=\"$anchorId\"]")
+            }
+            if (target == null) return null
+
+            // 寻找最合适的注释容器（如 li, aside, dd, p, blockquote 等）
+            val container = target.parents().firstOrNull { el ->
+                val tag = el.tagName().lowercase()
+                val role = el.attr("role").lowercase()
+                val epubType = el.attr("epub:type").lowercase()
+                val cls = el.className().lowercase()
+                tag in setOf("li", "aside", "dd", "p", "blockquote") ||
+                role == "doc-footnote" || role == "doc-endnote" ||
+                epubType == "footnote" || epubType == "endnote" ||
+                cls.contains("footnote") || cls.contains("endnote") || cls.contains("note")
+            } ?: if (target.tagName().lowercase() in setOf("li", "aside", "dd", "p", "div", "blockquote")) target else target.parent() ?: target
+
+            var text = container.text().replace(Regex("[\\u21A9\\u2191\\u21E7\\u23CE\\^]"), "").trim()
+
+            // 如果容器文本超长（例如包含了一整节内容），截取其直接段落
+            if (text.length > 2500) {
+                val directP = target.parents().firstOrNull { it.tagName().lowercase() in setOf("p", "li", "dd") } ?: target.selectFirst("p") ?: target
+                text = directP.text().replace(Regex("[\\u21A9\\u2191\\u21E7\\u23CE\\^]"), "").trim()
+            }
+
+            if (text.isNotBlank() && text.length in 2..2500) {
+                text
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            log("extractFootnoteText failed for $anchorId: ${e.message}")
+            null
         }
     }
     fun dismissSelectionMenu() { _uiState.update { it.copy(showSelectionMenu = false) } }
