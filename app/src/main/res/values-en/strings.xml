@@ -587,6 +587,8 @@ Just change the Base URL and API Key</string>
     <string name="ai_filter_all_factions">All Factions</string>
     <string name="ai_character_tap_hint">Tap to view biography &amp; lineage</string>
     <string name="ai_character_not_in_list">Character has no separate entry yet</string>
+    <string name="ai_character_search_hint">Search character, faction, or role…</string>
+    <string name="ai_character_synthetic_bio">This character appears as %1$s, closely related to %2$s.</string>
 
     <!-- Quiz Tab -->
     <string name="ai_quiz_count_label">Questions</string>

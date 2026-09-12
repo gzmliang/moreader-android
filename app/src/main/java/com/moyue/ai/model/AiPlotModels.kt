@@ -19,52 +19,87 @@ data class CharacterCard(
     /**
      * Resolves categorized relations, seamlessly supporting both new structured relations
      * and auto-parsed legacy relationship strings.
+     * Automatically expands multi-person targets (e.g. "Robb, Sansa, Arya, Bran, and Rickon")
+     * into discrete individual relation nodes.
      */
     fun getResolvedRelations(): List<StructuredRelation> {
-        if (structuredRelations.isNotEmpty()) return structuredRelations
+        val rawList = if (structuredRelations.isNotEmpty()) {
+            structuredRelations
+        } else {
+            relationships.map { relText ->
+                val lower = relText.lowercase().trim()
+                val category = when {
+                    // 1. Spouse / Partner
+                    lower.contains("wife") || lower.contains("husband") || lower.contains("spouse") ||
+                            lower.contains("married") || lower.contains("consort") || lower.contains("partner") ||
+                            lower.contains("queen to") || lower.contains("king to") ||
+                            lower.contains("妻") || lower.contains("夫") || lower.contains("配偶") -> "spouse"
 
-        // Auto-parse legacy text relations like "Father to Robb, Sansa", "Hand of the King to Robert"
-        return relationships.map { relText ->
-            val lower = relText.lowercase()
-            val category = when {
-                lower.contains("father to") || lower.contains("mother to") || lower.contains("parent to") ||
-                        lower.contains("children") || lower.contains("has children") -> "child"
+                    // 2. Parents (Ancestors / Ascendants): "Son of Rickard", "Daughter of Hoster"
+                    lower.contains("son of") || lower.contains("daughter of") || lower.contains("child of") ||
+                            lower.startsWith("parents:") || lower.startsWith("parent:") || lower.contains("born to") ||
+                            lower.contains("生父") || lower.contains("生母") -> "parent"
 
-                lower.contains("father of") || lower.contains("mother of") || lower.contains("son of") ||
-                        lower.contains("daughter of") || lower.contains("child of") -> "parent"
+                    // 3. Children (Descendants): "Father to...", "Father: Robb", "Mother to...", "Children:..."
+                    lower.startsWith("father:") || lower.contains("father to") || lower.contains("father of") ||
+                            lower.startsWith("mother:") || lower.contains("mother to") || lower.contains("mother of") ||
+                            lower.startsWith("son:") || lower.startsWith("daughter:") || lower.startsWith("children:") ||
+                            lower.contains("children to") || lower.contains("has children") || lower.contains("has son") ||
+                            lower.contains("has daughter") || lower.contains("father") || lower.contains("mother") ||
+                            lower.contains("长子") || lower.contains("幼女") || lower.contains("儿子") || lower.contains("女儿") -> "child"
 
-                lower.contains("wife") || lower.contains("husband") || lower.contains("spouse") ||
-                        lower.contains("married to") || lower.contains("consort") || lower.contains("partner") -> "spouse"
+                    // 4. Siblings
+                    lower.contains("brother") || lower.contains("sister") || lower.contains("sibling") ||
+                            lower.contains("twin") || lower.contains("兄") || lower.contains("弟") || lower.contains("姐") || lower.contains("妹") -> "sibling"
 
-                lower.contains("brother") || lower.contains("sister") || lower.contains("sibling") ||
-                        lower.contains("twin") -> "sibling"
+                    // 5. Allies / Lieges
+                    lower.contains("ally") || lower.contains("friend") || lower.contains("hand of the king") ||
+                            lower.contains("sworn to") || lower.contains("servant to") || lower.contains("loyal to") ||
+                            lower.contains("vassal to") || lower.contains("mentor") || lower.contains("protector") ||
+                            lower.contains("king") || lower.contains("lord") ||
+                            lower.contains("臣") || lower.contains("盟友") || lower.contains("挚友") || lower.contains("封臣") -> "ally"
 
-                lower.contains("rival") || lower.contains("enemy") || lower.contains("opponent") ||
-                        lower.contains("betrayed by") || lower.contains("nemesis") -> "rival"
+                    // 6. Rivals / Foes
+                    lower.contains("rival") || lower.contains("enemy") || lower.contains("opponent") ||
+                            lower.contains("betrayed by") || lower.contains("nemesis") || lower.contains("foe") ||
+                            lower.contains("仇") || lower.contains("敌") || lower.contains("宿敌") -> "rival"
 
-                lower.contains("ally") || lower.contains("friend") || lower.contains("hand of the king") ||
-                        lower.contains("sworn to") || lower.contains("servant to") || lower.contains("loyal to") ||
-                        lower.contains("vassal to") || lower.contains("mentor") || lower.contains("protector") -> "ally"
+                    else -> "other"
+                }
 
-                else -> "other"
-            }
-
-            // Extract cleaner label & target if possible
-            val parts = relText.split(" to ", " of ", " with ", ": ", limit = 2)
-            if (parts.size == 2) {
-                StructuredRelation(
-                    category = category,
-                    label = parts[0].trim(),
-                    target = parts[1].trim()
-                )
-            } else {
-                StructuredRelation(
-                    category = category,
-                    label = "",
-                    target = relText.trim()
-                )
+                val parts = relText.split(" to ", " of ", " with ", ": ", limit = 2)
+                if (parts.size == 2) {
+                    StructuredRelation(
+                        category = category,
+                        label = parts[0].trim(),
+                        target = parts[1].trim()
+                    )
+                } else {
+                    StructuredRelation(
+                        category = category,
+                        label = "",
+                        target = relText.trim()
+                    )
+                }
             }
         }
+
+        // Expand multi-person targets like "Robb, Sansa, Arya, Bran, and Rickon"
+        val expanded = mutableListOf<StructuredRelation>()
+        for (rel in rawList) {
+            val targets = rel.target.split(",", " and ", "、", "，")
+                .map { it.trim().removePrefix("and ").trim() }
+                .filter { it.isNotBlank() && it.length > 1 }
+
+            if (targets.size > 1) {
+                targets.forEach { singleTarget ->
+                    expanded.add(rel.copy(target = singleTarget))
+                }
+            } else {
+                expanded.add(rel)
+            }
+        }
+        return expanded
     }
 }
 

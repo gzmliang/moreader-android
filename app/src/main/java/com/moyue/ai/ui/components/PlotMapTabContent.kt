@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -62,13 +63,15 @@ fun PlotMapTabContent(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Faction filter and BottomSheet character selection
+    // Faction filter, search query, and BottomSheet character selection
     var selectedFaction by remember { mutableStateOf<String?>(null) }
+    var characterSearchQuery by remember { mutableStateOf("") }
     var selectedCharacter by remember { mutableStateOf<CharacterCard?>(null) }
 
     LaunchedEffect(bookId, chapterIndex, selectedScope) {
         plotResult = repository.getPlot(bookId, chapterIndex, selectedScope)
         selectedFaction = null
+        characterSearchQuery = ""
         selectedCharacter = null
     }
 
@@ -195,9 +198,18 @@ fun PlotMapTabContent(
                     val factions = remember(allCharacters) {
                         allCharacters.map { it.faction }.filter { it.isNotBlank() }.distinct()
                     }
-                    val filteredCharacters = remember(allCharacters, selectedFaction) {
-                        if (selectedFaction.isNullOrBlank()) allCharacters
-                        else allCharacters.filter { it.faction == selectedFaction }
+                    val filteredCharacters = remember(allCharacters, selectedFaction, characterSearchQuery) {
+                        allCharacters.filter { card ->
+                            val matchesFaction = selectedFaction.isNullOrBlank() || card.faction == selectedFaction
+                            val matchesSearch = characterSearchQuery.isBlank() ||
+                                    card.nameOriginal.contains(characterSearchQuery, ignoreCase = true) ||
+                                    card.nameTranslation.contains(characterSearchQuery, ignoreCase = true) ||
+                                    card.faction.contains(characterSearchQuery, ignoreCase = true) ||
+                                    card.role.contains(characterSearchQuery, ignoreCase = true) ||
+                                    card.bioOriginal.contains(characterSearchQuery, ignoreCase = true) ||
+                                    card.bioTranslation.contains(characterSearchQuery, ignoreCase = true)
+                            if (characterSearchQuery.isNotBlank()) matchesSearch else (matchesFaction && matchesSearch)
+                        }
                     }
 
                     LazyColumn(
@@ -246,8 +258,37 @@ fun PlotMapTabContent(
                             item {
                                 SectionHeader(title = stringResource(R.string.ai_plot_relations_title), isEink = isEink)
 
-                                // Faction Filter Chips (if more than 1 faction)
-                                if (factions.size > 1) {
+                                // Character Search Bar
+                                OutlinedTextField(
+                                    value = characterSearchQuery,
+                                    onValueChange = { characterSearchQuery = it },
+                                    placeholder = {
+                                        Text(stringResource(R.string.ai_character_search_hint), fontSize = 12.sp)
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    },
+                                    trailingIcon = {
+                                        if (characterSearchQuery.isNotBlank()) {
+                                            IconButton(onClick = { characterSearchQuery = "" }, modifier = Modifier.size(24.dp)) {
+                                                Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            }
+                                        }
+                                    },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 6.dp),
+                                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                                    )
+                                )
+
+                                // Faction Filter Chips (if more than 1 faction and not actively searching)
+                                if (factions.size > 1 && characterSearchQuery.isBlank()) {
                                     LazyRow(
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                         modifier = Modifier
@@ -723,11 +764,21 @@ private fun CharacterProfileSheetContent(
                                                 if (matched != null) {
                                                     onSelectCharacter(matched)
                                                 } else {
-                                                    Toast.makeText(
-                                                        context,
-                                                        context.getString(R.string.ai_character_not_in_list),
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
+                                                    // Seamless fallback card for unindexed relatives (Never hit a dead-end!)
+                                                    val syntheticCard = CharacterCard(
+                                                        nameOriginal = rel.target,
+                                                        nameTranslation = "",
+                                                        faction = character.faction,
+                                                        role = if (rel.label.isNotBlank()) rel.label else character.faction,
+                                                        bioOriginal = "Appears in the narrative in relation to ${character.nameOriginal} (${if (rel.label.isNotBlank()) rel.label else "lineage relative"}).",
+                                                        bioTranslation = context.getString(
+                                                            R.string.ai_character_synthetic_bio,
+                                                            rel.label.ifBlank { "亲属脉络" },
+                                                            character.nameTranslation.ifBlank { character.nameOriginal }
+                                                        ),
+                                                        relationships = listOf("${character.nameOriginal}: ${rel.label}")
+                                                    )
+                                                    onSelectCharacter(syntheticCard)
                                                 }
                                             }
                                             .then(

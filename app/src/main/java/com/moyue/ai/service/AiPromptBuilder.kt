@@ -168,6 +168,12 @@ object AiPromptBuilder {
             Analyze the provided book/chapter text.
             The source language is ${config.sourceLang} and the target explanation language is ${config.targetLang}.
 
+            COMPREHENSIVE CHARACTER EXTRACTION MANDATORY DIRECTIVE:
+            - You MUST comprehensively extract and analyze ALL significant, named, and recurring characters in the text.
+            - NEVER limit your output to just 2-3 top protagonists! For a book overview, aim for 15 to 30 characters; for a chapter, include all active and mentioned key individuals.
+            - Crucially, you MUST explicitly create separate, dedicated character entries for ALL family members (including EVERY individual child, spouse, sibling, parent, bastard, and ward), as well as key bannermen, advisors, and antagonists.
+            - Example: In House Stark, do NOT lump children into a single string. You MUST provide distinct, rich character entries for Eddard, Catelyn, Robb, Sansa, Arya, Bran, Rickon, Jon Snow, Theon Greyjoy, etc., each with their own bio and interconnected lineage!
+
             OUTPUT FORMAT:
             You MUST return a JSON object with this EXACT structure:
             {

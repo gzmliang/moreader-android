@@ -710,6 +710,8 @@ AI Voice（云端 TTS）：
     <string name="ai_filter_all_factions">全部势力</string>
     <string name="ai_character_tap_hint">点击查看人物档案与脉络</string>
     <string name="ai_character_not_in_list">此角色暂无独立档案条目</string>
+    <string name="ai_character_search_hint">搜索人物姓名、家族或身份…</string>
+    <string name="ai_character_synthetic_bio">该角色在当前叙事中为 %1$s，与 %2$s 紧密关联。</string>
 
     <!-- Quiz Tab -->
     <string name="ai_quiz_count_label">题数</string>
