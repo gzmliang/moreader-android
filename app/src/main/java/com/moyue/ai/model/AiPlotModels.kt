@@ -3,8 +3,23 @@ package com.moyue.ai.model
 data class StructuredRelation(
     val category: String = "other", // "parent", "spouse", "child", "sibling", "ally", "rival", "other"
     val label: String = "", // e.g. "Father", "Spouse", "Son", "Ally", "Enemy"
+    val labelTranslation: String = "", // e.g. "父亲", "冰原狼伙伴", "守夜人总司令"
     val target: String = "" // e.g. "Robb Stark", "Catelyn Tully"
-)
+) {
+    /**
+     * Resolves the presentation label based on the current language display mode.
+     */
+    fun getDisplayLabel(displayMode: String = "bilingual"): String {
+        val safeLabel = label ?: ""
+        val safeTrans = labelTranslation ?: ""
+        return when (displayMode) {
+            "orig" -> safeLabel.ifBlank { safeTrans }
+            "target" -> safeTrans.ifBlank { safeLabel }
+            "bilingual" -> safeTrans.ifBlank { safeLabel }
+            else -> safeLabel.ifBlank { safeTrans }
+        }
+    }
+}
 
 data class CharacterCard(
     val nameOriginal: String = "",
@@ -61,7 +76,9 @@ data class CharacterCard(
                             lower.contains("sworn to") || lower.contains("servant to") || lower.contains("loyal to") ||
                             lower.contains("vassal to") || lower.contains("mentor") || lower.contains("protector") ||
                             lower.contains("king") || lower.contains("lord") ||
-                            lower.contains("臣") || lower.contains("盟友") || lower.contains("挚友") || lower.contains("封臣") -> "ally"
+                            lower.contains("direwolf") || lower.contains("companion") || lower.contains("pet") ||
+                            lower.contains("臣") || lower.contains("盟友") || lower.contains("挚友") || lower.contains("封臣") ||
+                            lower.contains("冰原狼") || lower.contains("伙伴") -> "ally"
 
                     // 6. Rivals / Foes
                     lower.contains("rival") || lower.contains("enemy") || lower.contains("opponent") ||
@@ -76,12 +93,14 @@ data class CharacterCard(
                     StructuredRelation(
                         category = category,
                         label = parts[0].trim(),
+                        labelTranslation = "",
                         target = parts[1].trim()
                     )
                 } else {
                     StructuredRelation(
                         category = category,
                         label = "",
+                        labelTranslation = "",
                         target = relText.trim()
                     )
                 }
@@ -94,7 +113,8 @@ data class CharacterCard(
             val target = rel.target ?: ""
             val category = rel.category ?: "other"
             val label = rel.label ?: ""
-            val safeRel = rel.copy(category = category, label = label, target = target)
+            val labelTranslation = rel.labelTranslation ?: ""
+            val safeRel = rel.copy(category = category, label = label, labelTranslation = labelTranslation, target = target)
 
             val targets = target.split(",", " and ", "、", "，")
                 .map { it.trim().removePrefix("and ").trim() }

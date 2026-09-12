@@ -191,6 +191,7 @@ class AiCacheRepository(private val context: Context) {
                             sr.copy(
                                 category = sr.category ?: "other",
                                 label = sr.label ?: "",
+                                labelTranslation = sr.labelTranslation ?: "",
                                 target = sr.target ?: ""
                             )
                         }

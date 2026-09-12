@@ -171,8 +171,26 @@ object AiPromptBuilder {
             COMPREHENSIVE CHARACTER EXTRACTION MANDATORY DIRECTIVE:
             - You MUST comprehensively extract and analyze ALL significant, named, and recurring characters in the text.
             - NEVER limit your output to just 2-3 top protagonists! For a book overview, aim for 15 to 30 characters; for a chapter, include all active and mentioned key individuals.
-            - Crucially, you MUST explicitly create separate, dedicated character entries for ALL family members (including EVERY individual child, spouse, sibling, parent, bastard, and ward), as well as key bannermen, advisors, and antagonists.
+            - Crucially, you MUST explicitly create separate, dedicated character entries for ALL family members (including EVERY individual child, spouse, sibling, parent, bastard, and ward), as well as key bannermen, advisors, companions/pets, and antagonists.
             - Example: In House Stark, do NOT lump children into a single string. You MUST provide distinct, rich character entries for Eddard, Catelyn, Robb, Sansa, Arya, Bran, Rickon, Jon Snow, Theon Greyjoy, etc., each with their own bio and interconnected lineage!
+
+            CRITICAL RELATIONSHIP DIRECTION & PERSPECTIVE DIRECTIVE (严防角色颠倒与视角混淆 - 最高铁律):
+            - In "structuredRelations", the "label" and "labelTranslation" MUST ALWAYS describe the TARGET's role/identity relative to the current character (i.e. "Who is the TARGET to THIS character?").
+            - NEVER label the relation with the current character's OWN role toward the target! The UI renders these as "[label]: [target]" under this character's profile.
+            - Strict Concrete Rules & Few-Shot Examples:
+              * Animal Companions / Pets / Mounts:
+                - In Jon Snow's card: target is "Ghost" -> label MUST be "Direwolf Companion" (labelTranslation: "冰原狼伙伴"), NEVER "Master"!
+                - In Ghost's card: target is "Jon Snow" -> label MUST be "Master / Companion" (labelTranslation: "主人/伙伴").
+              * Superior / Subordinate (Master / Servant / Commander / Steward):
+                - In Jon Snow's card: target is "Jeor Mormont" -> label MUST be "Lord Commander" or "Superior" (labelTranslation: "守夜人总司令/长官"), NEVER "Steward"!
+                - In Jeor Mormont's card: target is "Jon Snow" -> label MUST be "Personal Steward" or "Subordinate" (labelTranslation: "事务官/部属").
+              * Parent / Child Lineage:
+                - In Eddard Stark's card: target "Robb Stark" -> label MUST be "Eldest Son / Heir" (labelTranslation: "长子/继承人"), NEVER "Father"!
+                - In Robb Stark's card: target "Eddard Stark" -> label MUST be "Father" (labelTranslation: "父亲"), NEVER "Son"!
+                - In Catelyn Stark's card: target "Eddard Stark" -> label MUST be "Husband" (labelTranslation: "丈夫"), NEVER "Wife"!
+              * Sibling & Ward Relationships:
+                - In Jon Snow's card: target "Robb Stark" -> label MUST be "Half-Brother" (labelTranslation: "同父异母兄弟").
+                - In Ned Stark's card: target "Theon Greyjoy" -> label MUST be "Ward / Hostage" (labelTranslation: "养子/质子").
 
             OUTPUT FORMAT:
             You MUST return a JSON object with this EXACT structure:
@@ -190,11 +208,12 @@ object AiPromptBuilder {
                   "structuredRelations": [
                     {
                       "category": "parent / spouse / child / sibling / ally / rival / other",
-                      "label": "Relation description (e.g. Father, Spouse, Ally, King)",
+                      "label": "Target's role in ${config.sourceLang} (e.g. Father, Husband, Direwolf Companion, Lord Commander)",
+                      "labelTranslation": "Target's role in ${config.targetLang} (e.g. 父亲, 丈夫, 冰原狼伙伴, 守夜人总司令)",
                       "target": "Target Character Name"
                     }
                   ],
-                  "relationships": ["Father to Robb, Sansa", "Ally to Robert"]
+                  "relationships": ["Father: Ned Stark", "Direwolf Companion: Ghost", "Lord Commander: Jeor Mormont"]
                 }
               ],
               "timeline": [
@@ -252,6 +271,7 @@ object AiPromptBuilder {
                         StructuredRelation(
                             category = sObj.get("category")?.asString ?: "other",
                             label = sObj.get("label")?.asString ?: "",
+                            labelTranslation = sObj.get("labelTranslation")?.asString ?: "",
                             target = sObj.get("target")?.asString ?: ""
                         )
                     )

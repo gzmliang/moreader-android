@@ -506,7 +506,8 @@ private fun CharacterCardItem(
                             "rival" -> "⚔️"
                             else -> "🔗"
                         }
-                        val displayText = if (rel.label.isNotBlank()) "$icon ${rel.label}: ${rel.target}" else "$icon ${rel.target}"
+                        val activeLabel = rel.getDisplayLabel(displayMode)
+                        val displayText = if (activeLabel.isNotBlank()) "$icon $activeLabel: ${rel.target}" else "$icon ${rel.target}"
                         Text(
                             text = displayText,
                             fontSize = 11.sp,
@@ -741,7 +742,8 @@ private fun CharacterProfileSheetContent(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 list.forEach { rel ->
-                                    val chipText = if (rel.label.isNotBlank()) "${rel.label}: ${rel.target}" else rel.target
+                                    val activeLabel = rel.getDisplayLabel(displayMode)
+                                    val chipText = if (activeLabel.isNotBlank()) "$activeLabel: ${rel.target}" else rel.target
 
                                     Surface(
                                         shape = RoundedCornerShape(6.dp),
@@ -765,18 +767,19 @@ private fun CharacterProfileSheetContent(
                                                     onSelectCharacter(matched)
                                                 } else {
                                                     // Seamless fallback card for unindexed relatives (Never hit a dead-end!)
+                                                    val fallbackRole = activeLabel.ifBlank { rel.label.ifBlank { character.faction } }
                                                     val syntheticCard = CharacterCard(
                                                         nameOriginal = rel.target,
                                                         nameTranslation = "",
                                                         faction = character.faction,
-                                                        role = if (rel.label.isNotBlank()) rel.label else character.faction,
-                                                        bioOriginal = "Appears in the narrative in relation to ${character.nameOriginal} (${if (rel.label.isNotBlank()) rel.label else "lineage relative"}).",
+                                                        role = fallbackRole,
+                                                        bioOriginal = "Appears in the narrative in relation to ${character.nameOriginal} ($fallbackRole).",
                                                         bioTranslation = context.getString(
                                                             R.string.ai_character_synthetic_bio,
-                                                            rel.label.ifBlank { "亲属脉络" },
+                                                            fallbackRole,
                                                             character.nameTranslation.ifBlank { character.nameOriginal }
                                                         ),
-                                                        relationships = listOf("${character.nameOriginal}: ${rel.label}")
+                                                        relationships = listOf("${character.nameOriginal}: $fallbackRole")
                                                     )
                                                     onSelectCharacter(syntheticCard)
                                                 }
