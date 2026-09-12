@@ -745,6 +745,15 @@ AI Voice（云端 TTS）：
     <string name="ai_settings_saved">设置已保存！</string>
     <string name="ai_settings_guide_tip">请先配置 AI 服务的 API Key 才能开始深度伴读。</string>
     <string name="ai_settings_guide_btn">去配置</string>
+    <string name="ai_provider_deepseek">DeepSeek (深度求索)</string>
+    <string name="ai_provider_siliconflow">SiliconFlow (硅基流动)</string>
+    <string name="ai_provider_openai">OpenAI (ChatGPT)</string>
+    <string name="ai_provider_openrouter">OpenRouter (多模型聚合)</string>
+    <string name="ai_provider_gemini">Google Gemini</string>
+    <string name="ai_provider_moonshot">Moonshot (Kimi 月之暗面)</string>
+    <string name="ai_provider_custom">Custom (自定义服务)</string>
+    <string name="ai_lang_auto_detect">⚡ 自动识别原著 (Auto Detect)</string>
+    <string name="ai_error_key_invalid">API Key 密钥无效 (HTTP 401)，请核对填写的 Key</string>
 
     <!-- Top Bar Actions -->
     <string name="action_more">更多功能</string>

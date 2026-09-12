@@ -69,6 +69,9 @@ class AiCacheRepository(private val context: Context) {
 
     fun saveAiConfig(config: AiConfig) {
         prefs.edit().putString("ai_config_json", gson.toJson(config)).apply()
+        if (config.provider == "Custom") {
+            saveCustomConfig(config.baseUrl, config.apiKey, config.model)
+        }
         // 双向同步写入翻译设置，保证一次配置处处生效
         appPrefs.edit()
             .putString("llm_provider", config.provider.lowercase())
@@ -76,6 +79,18 @@ class AiCacheRepository(private val context: Context) {
             .putString("llm_endpoint", config.cleanBaseUrl())
             .putString("llm_model", config.model)
             .putString("llm_target_lang", config.targetLang)
+            .apply()
+    }
+
+    // Custom AI config persistence (preserves user settings when switching presets)
+    fun getCustomBaseUrl(): String = prefs.getString("custom_ai_base_url", "") ?: ""
+    fun getCustomApiKey(): String = prefs.getString("custom_ai_api_key", "") ?: ""
+    fun getCustomModel(): String = prefs.getString("custom_ai_model", "") ?: ""
+    fun saveCustomConfig(url: String, key: String, model: String) {
+        prefs.edit()
+            .putString("custom_ai_base_url", url)
+            .putString("custom_ai_api_key", key)
+            .putString("custom_ai_model", model)
             .apply()
     }
 

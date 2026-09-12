@@ -622,6 +622,15 @@ Just change the Base URL and API Key</string>
     <string name="ai_settings_saved">Settings saved!</string>
     <string name="ai_settings_guide_tip">Please configure your AI Provider API Key first.</string>
     <string name="ai_settings_guide_btn">Configure Now</string>
+    <string name="ai_provider_deepseek">DeepSeek</string>
+    <string name="ai_provider_siliconflow">SiliconFlow</string>
+    <string name="ai_provider_openai">OpenAI (ChatGPT)</string>
+    <string name="ai_provider_openrouter">OpenRouter</string>
+    <string name="ai_provider_gemini">Google Gemini</string>
+    <string name="ai_provider_moonshot">Moonshot (Kimi)</string>
+    <string name="ai_provider_custom">Custom</string>
+    <string name="ai_lang_auto_detect">⚡ Auto Detect</string>
+    <string name="ai_error_key_invalid">Invalid API Key (HTTP 401), please check your Key</string>
 
     <!-- Top Bar Actions -->
     <string name="action_more">More options</string>
