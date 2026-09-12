@@ -9,6 +9,7 @@ import com.moyue.ai.model.AiSummaryResult
 import com.moyue.ai.model.CharacterCard
 import com.moyue.ai.model.PlotStage
 import com.moyue.ai.model.QuizQuestion
+import com.moyue.ai.model.StructuredRelation
 import com.moyue.ai.model.SummaryParagraph
 
 object AiPromptBuilder {
@@ -176,9 +177,18 @@ object AiPromptBuilder {
                 {
                   "nameOriginal": "Character Name in ${config.sourceLang}",
                   "nameTranslation": "Character Name in ${config.targetLang}",
-                  "faction": "House/Faction/Role",
+                  "faction": "House/Faction/Role (e.g. House Stark, Night's Watch)",
                   "role": "Protagonist / Antagonist / Mentor / Ally",
-                  "relationships": ["Ally to X", "Rival to Y"]
+                  "bioOriginal": "2-3 sentences introducing the character's background, identity, and current situation in ${config.sourceLang}.",
+                  "bioTranslation": "Translation of character introduction in ${config.targetLang}.",
+                  "structuredRelations": [
+                    {
+                      "category": "parent / spouse / child / sibling / ally / rival / other",
+                      "label": "Relation description (e.g. Father, Spouse, Ally, King)",
+                      "target": "Target Character Name"
+                    }
+                  ],
+                  "relationships": ["Father to Robb, Sansa", "Ally to Robert"]
                 }
               ],
               "timeline": [
@@ -228,13 +238,29 @@ object AiPromptBuilder {
                 val cObj = item.asJsonObject
                 val relList = mutableListOf<String>()
                 cObj.getAsJsonArray("relationships")?.forEach { r -> relList.add(r.asString) }
+
+                val structRelList = mutableListOf<StructuredRelation>()
+                cObj.getAsJsonArray("structuredRelations")?.forEach { sr ->
+                    val sObj = sr.asJsonObject
+                    structRelList.add(
+                        StructuredRelation(
+                            category = sObj.get("category")?.asString ?: "other",
+                            label = sObj.get("label")?.asString ?: "",
+                            target = sObj.get("target")?.asString ?: ""
+                        )
+                    )
+                }
+
                 charsList.add(
                     CharacterCard(
                         nameOriginal = cObj.get("nameOriginal")?.asString ?: "",
                         nameTranslation = cObj.get("nameTranslation")?.asString ?: "",
                         faction = cObj.get("faction")?.asString ?: "",
                         role = cObj.get("role")?.asString ?: "",
-                        relationships = relList
+                        relationships = relList,
+                        bioOriginal = cObj.get("bioOriginal")?.asString ?: "",
+                        bioTranslation = cObj.get("bioTranslation")?.asString ?: "",
+                        structuredRelations = structRelList
                     )
                 )
             }

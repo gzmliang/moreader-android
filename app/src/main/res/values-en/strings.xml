@@ -574,6 +574,19 @@ Just change the Base URL and API Key</string>
     <string name="ai_plot_core_title">📌 Narrative Core and Dynamics</string>
     <string name="ai_plot_relations_title">🔗 Character Relationship Network</string>
     <string name="ai_plot_timeline_title">⏳ Chronological Plotline</string>
+    <string name="ai_character_profile_title">Character Profile &amp; Lineage</string>
+    <string name="ai_character_bio_title">📖 Biography &amp; Background</string>
+    <string name="ai_character_lineage_title">🌳 Lineage &amp; Relations</string>
+    <string name="ai_relation_cat_parent">👴 Parents</string>
+    <string name="ai_relation_cat_spouse">💍 Spouse</string>
+    <string name="ai_relation_cat_child">👶 Children</string>
+    <string name="ai_relation_cat_sibling">🤝 Siblings</string>
+    <string name="ai_relation_cat_ally">🛡️ Allies &amp; Lieges</string>
+    <string name="ai_relation_cat_rival">⚔️ Rivals &amp; Foes</string>
+    <string name="ai_relation_cat_other">🔗 Other Relations</string>
+    <string name="ai_filter_all_factions">All Factions</string>
+    <string name="ai_character_tap_hint">Tap to view biography &amp; lineage</string>
+    <string name="ai_character_not_in_list">Character has no separate entry yet</string>
 
     <!-- Quiz Tab -->
     <string name="ai_quiz_count_label">Questions</string>
