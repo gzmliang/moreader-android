@@ -178,8 +178,31 @@ class AiCacheRepository(private val context: Context) {
             res.copy(
                 coreDynamicsOriginal = res.coreDynamicsOriginal ?: "",
                 coreDynamicsTranslation = res.coreDynamicsTranslation ?: "",
-                characters = res.characters ?: emptyList(),
-                timeline = res.timeline ?: emptyList()
+                characters = (res.characters ?: emptyList()).filterNotNull().map { card ->
+                    card.copy(
+                        nameOriginal = card.nameOriginal ?: "",
+                        nameTranslation = card.nameTranslation ?: "",
+                        faction = card.faction ?: "",
+                        role = card.role ?: "",
+                        relationships = (card.relationships ?: emptyList()).filterNotNull(),
+                        bioOriginal = card.bioOriginal ?: "",
+                        bioTranslation = card.bioTranslation ?: "",
+                        structuredRelations = (card.structuredRelations ?: emptyList()).filterNotNull().map { sr ->
+                            sr.copy(
+                                category = sr.category ?: "other",
+                                label = sr.label ?: "",
+                                target = sr.target ?: ""
+                            )
+                        }
+                    )
+                },
+                timeline = (res.timeline ?: emptyList()).filterNotNull().map { stage ->
+                    stage.copy(
+                        stage = stage.stage ?: "",
+                        eventOriginal = stage.eventOriginal ?: "",
+                        eventTranslation = stage.eventTranslation ?: ""
+                    )
+                }
             )
         } catch (e: Exception) {
             null
@@ -211,7 +234,16 @@ class AiCacheRepository(private val context: Context) {
         return try {
             val res = gson.fromJson(json, AiQuizResult::class.java) ?: return null
             res.copy(
-                questions = res.questions ?: emptyList()
+                questions = (res.questions ?: emptyList()).filterNotNull().map { q ->
+                    q.copy(
+                        questionOriginal = q.questionOriginal ?: "",
+                        questionTranslation = q.questionTranslation ?: "",
+                        options = (q.options ?: emptyList()).filterNotNull(),
+                        correctAnswer = q.correctAnswer ?: "",
+                        analysisOriginal = q.analysisOriginal ?: "",
+                        analysisTranslation = q.analysisTranslation ?: ""
+                    )
+                }
             )
         } catch (e: Exception) {
             null

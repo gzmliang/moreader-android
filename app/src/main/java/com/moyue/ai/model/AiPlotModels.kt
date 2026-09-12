@@ -7,10 +7,10 @@ data class StructuredRelation(
 )
 
 data class CharacterCard(
-    val nameOriginal: String,
-    val nameTranslation: String,
-    val faction: String,
-    val role: String,
+    val nameOriginal: String = "",
+    val nameTranslation: String = "",
+    val faction: String = "",
+    val role: String = "",
     val relationships: List<String> = emptyList(),
     val bioOriginal: String = "",
     val bioTranslation: String = "",
@@ -23,10 +23,14 @@ data class CharacterCard(
      * into discrete individual relation nodes.
      */
     fun getResolvedRelations(): List<StructuredRelation> {
-        val rawList = if (structuredRelations.isNotEmpty()) {
-            structuredRelations
+        val nonNullStructured = (structuredRelations ?: emptyList()).filterNotNull()
+        val nonNullRelationships = (relationships ?: emptyList()).filterNotNull()
+
+        val rawList = if (nonNullStructured.isNotEmpty()) {
+            nonNullStructured
         } else {
-            relationships.map { relText ->
+            nonNullRelationships.mapNotNull { relText ->
+                if (relText.isBlank()) return@mapNotNull null
                 val lower = relText.lowercase().trim()
                 val category = when {
                     // 1. Spouse / Partner
@@ -87,16 +91,21 @@ data class CharacterCard(
         // Expand multi-person targets like "Robb, Sansa, Arya, Bran, and Rickon"
         val expanded = mutableListOf<StructuredRelation>()
         for (rel in rawList) {
-            val targets = rel.target.split(",", " and ", "、", "，")
+            val target = rel.target ?: ""
+            val category = rel.category ?: "other"
+            val label = rel.label ?: ""
+            val safeRel = rel.copy(category = category, label = label, target = target)
+
+            val targets = target.split(",", " and ", "、", "，")
                 .map { it.trim().removePrefix("and ").trim() }
                 .filter { it.isNotBlank() && it.length > 1 }
 
             if (targets.size > 1) {
                 targets.forEach { singleTarget ->
-                    expanded.add(rel.copy(target = singleTarget))
+                    expanded.add(safeRel.copy(target = singleTarget))
                 }
             } else {
-                expanded.add(rel)
+                expanded.add(safeRel)
             }
         }
         return expanded
