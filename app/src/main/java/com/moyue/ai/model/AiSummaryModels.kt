@@ -11,6 +11,7 @@ data class AiSummaryResult(
     val scope: String, // "chapter" or "book"
     val ratio: Int,
     val level: String = "standard", // "simple", "standard", "advanced"
+    val mode: String = "bilingual", // "orig", "bilingual", "target"
     val title: String = "",
     val paragraphs: List<SummaryParagraph> = emptyList(),
     val rawMarkdown: String = "",

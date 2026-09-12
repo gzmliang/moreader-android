@@ -35,6 +35,7 @@ class AiCacheRepository(private val context: Context) {
             val transApiKey = appPrefs.getString("llm_apikey", "") ?: ""
             val transEndpoint = appPrefs.getString("llm_endpoint", "") ?: ""
             val transModel = appPrefs.getString("llm_model", "") ?: ""
+            val transTargetLang = appPrefs.getString("llm_target_lang", "Chinese") ?: "Chinese"
             if (transApiKey.isNotBlank()) {
                 val mappedProvider = when (transProvider.lowercase()) {
                     "deepseek" -> "DeepSeek"
@@ -58,7 +59,8 @@ class AiCacheRepository(private val context: Context) {
                     provider = mappedProvider,
                     baseUrl = fallbackBaseUrl,
                     apiKey = transApiKey,
-                    model = fallbackModel
+                    model = fallbackModel,
+                    targetLang = if (config.targetLang.isNotBlank()) config.targetLang else transTargetLang
                 )
             }
         }
@@ -73,6 +75,7 @@ class AiCacheRepository(private val context: Context) {
             .putString("llm_apikey", config.apiKey)
             .putString("llm_endpoint", config.cleanBaseUrl())
             .putString("llm_model", config.model)
+            .putString("llm_target_lang", config.targetLang)
             .apply()
     }
 
@@ -91,14 +94,22 @@ class AiCacheRepository(private val context: Context) {
     fun getLanguageDisplayMode(): String = prefs.getString("ai_language_display_mode", "bilingual") ?: "bilingual"
     fun setLanguageDisplayMode(mode: String) = prefs.edit().putString("ai_language_display_mode", mode).apply()
 
-    // Summary Cache (Strict bookId + scope + ratio + level key)
-    fun getSummary(bookId: String, chapterIndex: Int, scope: String, ratio: Int, level: String = "standard"): AiSummaryResult? {
+    // Summary Cache (Strict bookId + scope + ratio + level + mode key)
+    fun getSummary(bookId: String, chapterIndex: Int, scope: String, ratio: Int, level: String = "standard", mode: String = "bilingual"): AiSummaryResult? {
         val primaryKey = if (scope == "book") {
-            "summary_${bookId}_book_${ratio}_${level}"
+            "summary_${bookId}_book_${ratio}_${level}_${mode}"
         } else {
-            "summary_${bookId}_ch_${chapterIndex}_${ratio}_${level}"
+            "summary_${bookId}_ch_${chapterIndex}_${ratio}_${level}_${mode}"
         }
         var json = prefs.getString(primaryKey, null)
+        if (json == null) {
+            val fallbackKey = if (scope == "book") {
+                "summary_${bookId}_book_${ratio}_${level}"
+            } else {
+                "summary_${bookId}_ch_${chapterIndex}_${ratio}_${level}"
+            }
+            json = prefs.getString(fallbackKey, null)
+        }
         if (json == null && level == "standard") {
             // Fallback for legacy cache format
             val legacyKey = "summary_${bookId}_${chapterIndex}_${scope}_${ratio}"
@@ -110,6 +121,7 @@ class AiCacheRepository(private val context: Context) {
             res.copy(
                 title = res.title ?: "",
                 level = if (res.level.isNullOrBlank()) level else res.level,
+                mode = if (res.mode.isNullOrBlank()) mode else res.mode,
                 paragraphs = (res.paragraphs ?: emptyList()).map { p ->
                     p.copy(
                         original = p.original ?: "",
@@ -124,10 +136,11 @@ class AiCacheRepository(private val context: Context) {
     }
 
     fun saveSummary(summary: AiSummaryResult) {
+        val mode = if (summary.mode.isNullOrBlank()) "bilingual" else summary.mode
         val key = if (summary.scope == "book") {
-            "summary_${summary.bookId}_book_${summary.ratio}_${summary.level}"
+            "summary_${summary.bookId}_book_${summary.ratio}_${summary.level}_${mode}"
         } else {
-            "summary_${summary.bookId}_ch_${summary.chapterIndex}_${summary.ratio}_${summary.level}"
+            "summary_${summary.bookId}_ch_${summary.chapterIndex}_${summary.ratio}_${summary.level}_${mode}"
         }
         prefs.edit().putString(key, gson.toJson(summary)).apply()
     }

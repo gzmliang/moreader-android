@@ -670,4 +670,14 @@ Just change the Base URL and API Key</string>
     <string name="sync_cloud_books_total_fmt">📚 %1$d books total (tap to download):</string>
     <string name="sync_download_restored_summary">%1$s (%2$d BMs, %3$d HLs)</string>
     <string name="search_results_found_fmt">Search \"%1$s\" · Found %2$d books</string>
+
+    <!-- AI Multi-language & Summary Modes -->
+    <string name="ai_target_language_label">AI Target Language</string>
+    <string name="ai_summary_mode_label">Summary Mode</string>
+    <string name="ai_summary_mode_orig">Original Only</string>
+    <string name="ai_summary_mode_bilingual">Bilingual</string>
+    <string name="ai_summary_mode_target">Translation Only</string>
+    <string name="ai_summary_mode_orig_short">Original</string>
+    <string name="ai_summary_mode_bilingual_short">Bilingual</string>
+    <string name="ai_summary_mode_target_short">Translation</string>
 </resources>

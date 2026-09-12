@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -643,6 +644,7 @@ fun TtsSettingsSheet(
                     val llmEp = remember(llmConfig.endpoint) { mutableStateOf(llmConfig.endpoint.ifEmpty { defaultEndpoint }) }
                     val llmKey = remember(llmConfig.apiKey) { mutableStateOf(llmConfig.apiKey) }
                     val llmModel = remember(llmConfig.model) { mutableStateOf(llmConfig.model.ifEmpty { defaultModel }) }
+                    val llmTargetLang = remember(llmConfig.targetLang) { mutableStateOf(llmConfig.targetLang.ifEmpty { "Chinese" }) }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -667,24 +669,58 @@ fun TtsSettingsSheet(
                         )
                     }
                     Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         OutlinedTextField(
                             value = llmModel.value,
                             onValueChange = { llmModel.value = it },
                             label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.model_name), fontSize = 11.sp) },
                             singleLine = true,
+                            modifier = Modifier.weight(1.2f),
+                            textStyle = TextStyle(fontSize = 12.sp),
+                        )
+                        OutlinedTextField(
+                            value = llmTargetLang.value,
+                            onValueChange = { llmTargetLang.value = it },
+                            label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_target_language_label), fontSize = 11.sp) },
+                            singleLine = true,
                             modifier = Modifier.weight(1f),
                             textStyle = TextStyle(fontSize = 12.sp),
                         )
-                        Spacer(Modifier.width(6.dp))
                         Button(
                             onClick = {
-                                onLLMConfigChange(LLMConfig("custom", llmKey.value, llmEp.value, llmModel.value))
+                                onLLMConfigChange(LLMConfig("custom", llmKey.value, llmEp.value, llmModel.value, llmTargetLang.value))
                             },
                             shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                         ) {
                             Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.save), fontSize = 12.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        listOf(
+                            "Chinese" to "中文",
+                            "English" to "English",
+                            "Japanese" to "日本語",
+                            "Korean" to "한국어",
+                            "French" to "Français",
+                            "Spanish" to "Español",
+                            "German" to "Deutsch"
+                        ).forEach { (langCode, langTitle) ->
+                            val selected = llmTargetLang.value.equals(langCode, ignoreCase = true)
+                            FilterChip(
+                                selected = selected,
+                                onClick = { llmTargetLang.value = langCode },
+                                label = { Text(langTitle, fontSize = 11.sp) }
+                            )
                         }
                     }
                 }

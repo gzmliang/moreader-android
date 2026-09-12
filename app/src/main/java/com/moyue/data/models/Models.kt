@@ -75,4 +75,5 @@ data class LLMConfig(
     val apiKey: String = "",
     val endpoint: String = "https://api.siliconflow.cn/v1",
     val model: String = "Qwen/Qwen2.5-72B-Instruct",
+    val targetLang: String = "Chinese",
 )

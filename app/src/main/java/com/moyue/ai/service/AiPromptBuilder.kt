@@ -21,10 +21,12 @@ object AiPromptBuilder {
         text: String,
         ratio: Int,
         scope: String,
-        level: String = "standard"
+        level: String = "standard",
+        mode: String = "bilingual"
     ): Pair<String, String> {
         val wordCount = text.split("\\s+".toRegex()).size
         val targetLength = ((wordCount * ratio) / 100).coerceAtLeast(150)
+        val targetLang = config.targetLang.ifBlank { "Chinese" }
 
         val levelDirective = when (level.lowercase()) {
             "simple" -> """
@@ -46,12 +48,34 @@ object AiPromptBuilder {
             """.trimIndent()
         }
 
+        val modeInstruction = when (mode) {
+            "orig" -> """
+                SUMMARY MODE: ORIGINAL LANGUAGE ONLY (原著语言简写)
+                - CRITICAL: Condense and write the summary DIRECTLY in the EXACT SAME LANGUAGE as the original text (e.g. if the original text is Chinese, write purely in authentic Chinese; if English, write purely in English).
+                - Do NOT translate into English or any other intermediate language. Retain original tone and flavor.
+                - In the output JSON, put the condensed text in the "original" field, and leave the "translation" field as empty string "".
+            """.trimIndent()
+            "target" -> """
+                SUMMARY MODE: TARGET LANGUAGE ONLY (仅译文简写)
+                - CRITICAL: Condense and write the summary DIRECTLY in the target language: $targetLang.
+                - The resulting text must be fluently, accurately, and elegantly written in $targetLang.
+                - In the output JSON, put the summary in the "translation" field.
+            """.trimIndent()
+            else -> """
+                SUMMARY MODE: BILINGUAL PARALLEL (双语对照简写)
+                - In the "original" field: Condense the text directly in the original source language.
+                - In the "translation" field: Provide a faithful, high-quality, and elegant translation of that condensed paragraph into $targetLang.
+            """.trimIndent()
+        }
+
         val systemPrompt = """
             You are a world-class literary editor and speed-reading condensation specialist.
             Your task is to condense the provided text to approximately $ratio% of its original depth (target: around $targetLength words).
-            The source language is ${config.sourceLang} and the target explanation language is ${config.targetLang}.
+            Target Explanation / Translation Language: $targetLang.
             
             $levelDirective
+            
+            $modeInstruction
             
             OUTPUT FORMAT:
             You MUST return a JSON object with this EXACT structure:
@@ -59,8 +83,8 @@ object AiPromptBuilder {
               "title": "Condensed Title",
               "paragraphs": [
                 {
-                  "original": "Sentence or paragraph in ${config.sourceLang}...",
-                  "translation": "Corresponding sentence or paragraph in ${config.targetLang}..."
+                  "original": "Sentence or paragraph...",
+                  "translation": "Corresponding translation or empty string..."
                 }
               ]
             }
@@ -83,7 +107,8 @@ object AiPromptBuilder {
         chapterIndex: Int,
         scope: String,
         ratio: Int,
-        level: String = "standard"
+        level: String = "standard",
+        mode: String = "bilingual"
     ): AiSummaryResult {
         return try {
             val cleanJson = extractJson(jsonString)
@@ -94,8 +119,11 @@ object AiPromptBuilder {
             if (paragraphsArray != null) {
                 for (item in paragraphsArray) {
                     val pObj = item.asJsonObject
-                    val orig = pObj.get("original")?.asString ?: ""
+                    var orig = pObj.get("original")?.asString ?: ""
                     val trans = pObj.get("translation")?.asString ?: ""
+                    if (mode == "target" && orig.isBlank() && trans.isNotBlank()) {
+                        orig = trans
+                    }
                     if (orig.isNotBlank() || trans.isNotBlank()) {
                         list.add(SummaryParagraph(original = orig, translation = trans))
                     }
@@ -107,6 +135,7 @@ object AiPromptBuilder {
                 scope = scope,
                 ratio = ratio,
                 level = level,
+                mode = mode,
                 title = title,
                 paragraphs = list,
                 rawMarkdown = jsonString
@@ -119,6 +148,7 @@ object AiPromptBuilder {
                 scope = scope,
                 ratio = ratio,
                 level = level,
+                mode = mode,
                 title = "Summary",
                 paragraphs = listOf(SummaryParagraph(original = jsonString, translation = "")),
                 rawMarkdown = jsonString

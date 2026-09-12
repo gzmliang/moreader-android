@@ -793,4 +793,14 @@ AI Voice（云端 TTS）：
     <string name="sync_cloud_books_total_fmt">📚 共 %1$d 本（点击下载）:</string>
     <string name="sync_download_restored_summary">%1$s（%2$d书签，%3$d高亮）</string>
     <string name="search_results_found_fmt">搜索 \"%1$s\" · 找到 %2$d 本</string>
+
+    <!-- AI 多语言与简写模式支持 -->
+    <string name="ai_target_language_label">AI 目标语言</string>
+    <string name="ai_summary_mode_label">简写模式</string>
+    <string name="ai_summary_mode_orig">原著语言简写</string>
+    <string name="ai_summary_mode_bilingual">双语对照简写</string>
+    <string name="ai_summary_mode_target">仅译文简写</string>
+    <string name="ai_summary_mode_orig_short">原著</string>
+    <string name="ai_summary_mode_bilingual_short">双语</string>
+    <string name="ai_summary_mode_target_short">译文</string>
 </resources>

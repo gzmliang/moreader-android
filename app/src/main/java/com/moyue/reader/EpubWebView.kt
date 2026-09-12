@@ -64,6 +64,7 @@ fun EpubWebView(
     onPrevChapter: (() -> Unit)? = null,
     onNextChapter: (() -> Unit)? = null,
     isEinkMode: Boolean = false,
+    clearSelectionTrigger: Long = 0L,
     modifier: Modifier = Modifier,
     onWebViewCreated: ((WebView) -> Unit)? = null,
 ) {
@@ -86,6 +87,12 @@ fun EpubWebView(
 
     LaunchedEffect(isEinkMode) {
         webView?.evaluateJavascript("window.isEink = $isEinkMode;", null)
+    }
+
+    LaunchedEffect(clearSelectionTrigger) {
+        if (clearSelectionTrigger > 0L) {
+            webView?.evaluateJavascript("(function(){ var s = window.getSelection(); if (s) s.removeAllRanges(); })()", null)
+        }
     }
 
     // TTS paragraph + sentence highlight: merged into one effect

@@ -86,6 +86,9 @@ data class ReaderUiState(
     val ttsSentenceEnds: String = "",    // 句子边界偏移数组（逗号分隔，传给JS用）
     val ttsDebugLog: String = "",
     val showTtsDebugLog: Boolean = false,
+    // Selection toolbar position & clear trigger
+    val selectionMenuYRatio: Float = 0.80f,
+    val clearSelectionTrigger: Long = 0L,
     // Fullscreen mode
     val isFullscreen: Boolean = false,
     val llmConfig: LLMConfig = LLMConfig(),
@@ -203,6 +206,7 @@ class ReaderViewModel(
                 apiKey = prefs.getString("llm_apikey", "") ?: "",
                 endpoint = prefs.getString("llm_endpoint", "") ?: "",
                 model = prefs.getString("llm_model", "") ?: "",
+                targetLang = prefs.getString("llm_target_lang", "Chinese") ?: "Chinese",
             ),
             ttsSpeed = prefs.getFloat("tts_speed", 1.0f),
             systemTtsVoice = prefs.getString("system_tts_voice", "") ?: "",
@@ -429,6 +433,7 @@ class ReaderViewModel(
             edgeTtsVoice = restoredTtsVoice,
             aiVoiceId = if (book.ttsVoice.isNotEmpty()) book.ttsVoice else it.aiVoiceId,
             customTtsVoice = if (book.ttsVoice.isNotEmpty()) book.ttsVoice else it.customTtsVoice,
+            selectionMenuYRatio = prefs.getFloat("selection_menu_y_${book.id}", 0.80f),
             ttsSpeed = restoredTtsSpeed,
             isLoading = false, 
             loadingMessage = ""
@@ -717,6 +722,24 @@ class ReaderViewModel(
         }
     }
     fun dismissSelectionMenu() { _uiState.update { it.copy(showSelectionMenu = false) } }
+    fun dismissSelectionAndClear() {
+        _uiState.update { 
+            it.copy(
+                showSelectionMenu = false, 
+                selectedText = null, 
+                selectionInfo = null,
+                clearSelectionTrigger = System.currentTimeMillis()
+            ) 
+        }
+    }
+    fun saveSelectionMenuYRatio(ratio: Float) {
+        val clamped = ratio.coerceIn(0f, 1f)
+        _uiState.update { it.copy(selectionMenuYRatio = clamped) }
+        val bookId = _uiState.value.book?.id
+        if (!bookId.isNullOrBlank()) {
+            prefs.edit().putFloat("selection_menu_y_${bookId}", clamped).apply()
+        }
+    }
     fun toggleTtsDebugLog() { _uiState.update { it.copy(showTtsDebugLog = !it.showTtsDebugLog) } }
     fun copyTtsDebugLog() {
         val log = _uiState.value.ttsDebugLog
@@ -756,30 +779,6 @@ class ReaderViewModel(
                 )
             }
             // Fall through to AI/cloud route below
-        }
-
-        // === Translate mode: try dictionary as hidden optimization for short English words ===
-        if (mode == "translate") {
-            val isShortWord = t.trim().length < 50 && t.none { it in '\u4e00'..'\u9fff' }
-            if (isShortWord) {
-                com.moyue.app.localai.DictionaryEngine.init(getApplication())
-                com.moyue.app.localai.DictionaryEngine.clearDebugLog()
-                val dictResult = com.moyue.app.localai.DictionaryEngine.query(t.trim())
-                val debugLog = com.moyue.app.localai.DictionaryEngine.getDebugLog()
-                if (dictResult is com.moyue.app.data.models.DictionaryResult.Found) {
-                    val ctx = getApplication<android.app.Application>()
-                    _uiState.update { 
-                        it.copy(
-                            isTranslating = false,
-                            translationResult = dictResult.entry.formatForDisplay(ctx),
-                            isDictionaryResult = true,
-                            dictionaryDebugLog = debugLog
-                        )
-                    }
-                    return
-                }
-                _uiState.update { it.copy(dictionaryDebugLog = debugLog) }
-            }
         }
 
         if (_uiState.value.translateEngine == TranslateEngine.LOCAL) {
@@ -2050,6 +2049,7 @@ class ReaderViewModel(
             .putString("llm_apikey", c.apiKey)
             .putString("llm_endpoint", c.endpoint)
             .putString("llm_model", c.model)
+            .putString("llm_target_lang", c.targetLang)
             .apply()
 
         // 统一模型互通：同步更新 AI 伴读设置 (moreader_ai_prefs)
@@ -2076,7 +2076,8 @@ class ReaderViewModel(
                 "DeepSeek" -> "deepseek-chat"
                 "SiliconFlow" -> "Qwen/Qwen2.5-72B-Instruct"
                 else -> "gpt-4o-mini"
-            }
+            },
+            targetLang = if (c.targetLang.isNotBlank()) c.targetLang else "Chinese"
         )
         aiPrefs.edit().putString("ai_config_json", com.google.gson.Gson().toJson(updatedAiConfig)).apply()
     }

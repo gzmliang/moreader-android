@@ -27,86 +27,53 @@ class TranslationService {
         return text.any { it in '\u4e00'..'\u9fff' }
     }
 
-    private val systemPrompts = mapOf(
-        // ===== English input =====
-        "en_translate" to """You are a bilingual dictionary assistant.
+    private fun buildSystemPrompt(targetLang: String, mode: String): String {
+        val lang = if (targetLang.isBlank()) "Chinese" else targetLang
+        return when (mode) {
+            "dictionary" -> """You are an authoritative multilingual dictionary assistant.
+For the input text, provide a comprehensive explanation in $lang:
+- **Pronunciation / Phonetics** (if applicable)
+- **Definition & Part of Speech** (in $lang)
+- **Key Collocations / Idioms** (in $lang)
+- **Illustrative Example** (with $lang translation)
+Output clean markdown directly without conversational preambles.""".trimIndent()
+            "analyze" -> """You are an expert literary and grammatical analyst.
+Analyze the input text in depth using $lang:
+1. **Sentence Structure & Grammar Rules**
+2. **Key Vocabulary & Nuance** (in $lang)
+3. **Accurate & Elegant Translation** into $lang
+4. **Usage Insights / Common Pitfalls**
+Output clean markdown directly without chit-chat.""".trimIndent()
+            else -> """You are a world-class literary translator and reading assistant.
+Your mission is to accurately, fluently, and naturally translate any input text into $lang.
 
-When input is a single English word:
-**音标**：[IPA]
-**释义**：中文解释
-**词性**：noun/verb/adjective/etc.
-**例句**：1 sentence with Chinese translation
+Guidelines:
+1. When input is a single word or phrase:
+- **Translation / Definition** in $lang
+- **Part of Speech & Pronunciation** (if applicable)
+- **1 Example Sentence** with $lang translation
+2. When input is a sentence or paragraph:
+- **Complete Translation** into $lang (preserving original tone and style)
+- **Key Vocabulary & Nuances** briefly explained in $lang
 
-When input is a sentence or phrase:
-**重点词汇**：key words with Chinese meanings
-**整句翻译**：Chinese translation
+If the input is already primarily in $lang:
+- Provide concise definitions, nuances, and contextual usage directly in $lang without translating to other languages.
 
-Output directly, no extra explanation.""",
-        // ===== Chinese input =====
-        "cn_translate" to """你是专业双语词典助手。
-
-当输入是中文词语时：
-**拼音**：[pī yīn]
-**释义**：中文解释 + English definition
-**词性**：名词/动词/形容词等
-**组词**：2个常见搭配
-**例句**：1句中文 + English translation
-
-当输入是中文句子时：
-**整句翻译**：English translation
-**重点词汇**：关键词的中英双语解释
-
-直接输出内容，不要多余解释。""",
-        // ===== English explain =====
-        "en_explain" to """You are an expert language tutor helping a Chinese-speaking student understand English text.
-For the given English text, provide:
-1. **中文释义** — A clear Chinese translation/paraphrase of the meaning
-2. **语境解析** — Explain the meaning in context
-3. **重点词汇** — List key words/phrases with Chinese explanations
-4. **用法提示** — Usage tips, collocations, or common expressions
-Be concise but thorough. Use Chinese.""",
-        // ===== Chinese explain =====
-        "cn_explain" to """你是专业的中文词语解析助手。
-对于给定的中文文本，请提供：
-1. **词语释义** — 该词/句在《现代汉语词典》中的含义
-2. **English Definition** — 用简明英语解释
-3. **语境解析** — 在上下文中的含义
-4. **近义词/反义词** — 相关词语对比
-5. **用法提示** — 常见搭配、使用场景
-用中文为主、英文为辅进行解释。""",
-        // ===== English analyze =====
-        "en_analyze" to """You are a grammar analysis expert.
-For the given English text, provide:
-1. **句子结构分析** — Break down the sentence structure
-2. **语法要点** — Explain key grammar rules
-3. **核心词汇** — Analyze important vocabulary
-4. **双语对照解释** — Both English grammar AND Chinese equivalent
-5. **易错提示** — Common mistakes Chinese learners make
-Use Chinese for explanations.""",
-        // ===== Chinese analyze =====
-        "cn_analyze" to """你是中文语法和修辞分析专家。
-对于给定的中文文本，请提供：
-1. **句子结构分析** — 主谓宾定状补
-2. **修辞手法** — 比喻、拟人、排比等
-3. **重点词汇** — 关键词语的含义和用法
-4. **English Translation** — 整句英文翻译
-5. **易错提示** — 常见的中文语法错误
-用中文解释，关键术语附英文对照。""",
-    )
+Output directly without introductory filler.""".trimIndent()
+        }
+    }
 
     suspend fun translate(
         config: LLMConfig, text: String, mode: String = "translate",
         onChunk: (String) -> Unit,
     ): Result<String> = withContext(Dispatchers.IO) {
-        val chinese = isChinese(text)
-        val promptKey = "${if (chinese) "cn" else "en"}_$mode"
-        val prompt = systemPrompts[promptKey] ?: systemPrompts["en_translate"]!!
+        val prompt = buildSystemPrompt(config.targetLang, mode)
 
         val messages = JSONArray().apply {
             put(JSONObject().apply { put("role", "system"); put("content", prompt) })
             put(JSONObject().apply {
                 put("role", "user")
-                put("content", if (chinese) "请解释以下内容：\"$text\"" else "Please explain: \"$text\"")
+                put("content", "Input: \"$text\"")
             })
         }
 

@@ -62,9 +62,12 @@ fun SummaryTabContent(
     var selectedScope by remember { mutableStateOf("chapter") } // "chapter" or "book"
     var ratio by remember { mutableIntStateOf(30) }
     var level by remember { mutableStateOf("standard") } // "simple", "standard", "advanced"
+    var summaryMode by remember(displayMode) { 
+        mutableStateOf(if (displayMode in listOf("orig", "bilingual", "target")) displayMode else "bilingual") 
+    }
 
     var summaryResult by remember {
-        mutableStateOf(repository.getSummary(bookId, chapterIndex, selectedScope, ratio, level))
+        mutableStateOf(repository.getSummary(bookId, chapterIndex, selectedScope, ratio, level, summaryMode))
     }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -91,8 +94,8 @@ fun SummaryTabContent(
     }
 
     // When parameters change, reload cache
-    LaunchedEffect(bookId, chapterIndex, selectedScope, ratio, level) {
-        summaryResult = repository.getSummary(bookId, chapterIndex, selectedScope, ratio, level)
+    LaunchedEffect(bookId, chapterIndex, selectedScope, ratio, level, summaryMode) {
+        summaryResult = repository.getSummary(bookId, chapterIndex, selectedScope, ratio, level, summaryMode)
     }
 
     // Audio Playback Handler
@@ -186,13 +189,14 @@ fun SummaryTabContent(
                 text = textToAnalyze,
                 ratio = ratio,
                 scope = selectedScope,
-                level = level
+                level = level,
+                mode = summaryMode
             )
             val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
             isLoading = false
             res.fold(
                 onSuccess = { json ->
-                    val parsed = AiPromptBuilder.parseSummaryResponse(json, bookId, chapterIndex, selectedScope, ratio, level)
+                    val parsed = AiPromptBuilder.parseSummaryResponse(json, bookId, chapterIndex, selectedScope, ratio, level, summaryMode)
                     repository.saveSummary(parsed)
                     summaryResult = parsed
                 },
@@ -382,6 +386,69 @@ fun SummaryTabContent(
                                     onClick = {
                                         level = lvlKey
                                         levelMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Mode Capsule: [ 🌐 原著 ▾ ] / [ 🌐 双语 ▾ ] / [ 🌐 译文 ▾ ]
+                    var modeMenuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        Surface(
+                            color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .height(32.dp)
+                                .clickable { modeMenuExpanded = true }
+                                .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            ) {
+                                val modeLabel = when (summaryMode) {
+                                    "orig" -> stringResource(R.string.ai_summary_mode_orig_short)
+                                    "target" -> stringResource(R.string.ai_summary_mode_target_short)
+                                    else -> stringResource(R.string.ai_summary_mode_bilingual_short)
+                                }
+                                Text(
+                                    text = "🌐 $modeLabel",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = modeMenuExpanded,
+                            onDismissRequest = { modeMenuExpanded = false }
+                        ) {
+                            listOf(
+                                "orig" to stringResource(R.string.ai_summary_mode_orig),
+                                "bilingual" to stringResource(R.string.ai_summary_mode_bilingual),
+                                "target" to stringResource(R.string.ai_summary_mode_target)
+                            ).forEach { (mKey, mLabel) ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = mLabel,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (summaryMode == mKey) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (summaryMode == mKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    },
+                                    onClick = {
+                                        summaryMode = mKey
+                                        onDisplayModeChange(mKey)
+                                        modeMenuExpanded = false
                                     }
                                 )
                             }
@@ -582,7 +649,8 @@ private fun ParagraphItem(
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             // Original text
-            if ((displayMode == "bilingual" || displayMode == "orig") && !paragraph.original.isNullOrBlank()) {
+            val showOrig = (displayMode == "bilingual" || displayMode == "orig" || paragraph.translation.isNullOrBlank()) && !paragraph.original.isNullOrBlank()
+            if (showOrig) {
                 Text(
                     text = paragraph.original ?: "",
                     fontSize = textSizeSp.sp,
@@ -593,8 +661,9 @@ private fun ParagraphItem(
             }
 
             // Translation text
-            if ((displayMode == "bilingual" || displayMode == "target") && !paragraph.translation.isNullOrBlank()) {
-                if (displayMode == "bilingual" && !paragraph.original.isNullOrBlank()) {
+            val showTrans = (displayMode == "bilingual" || displayMode == "target" || paragraph.original.isNullOrBlank()) && !paragraph.translation.isNullOrBlank()
+            if (showTrans) {
+                if (showOrig) {
                     Spacer(modifier = Modifier.height(8.dp))
                     HorizontalDivider(color = if (isEink) Color.LightGray else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(8.dp))

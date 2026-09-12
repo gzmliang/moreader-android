@@ -2,13 +2,17 @@ package com.moyue.app.ui
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.foundation.lazy.LazyColumn
@@ -372,51 +376,7 @@ fun ReaderScreen(
                     }
                 }
 
-                // Selection toolbar — compact single row
-                if (state.showSelectionMenu && state.selectedText != null && !state.isTtsPlaying && !state.isTtsPaused) {
-                    val existingHighlight = viewModel.getExistingHighlightForSelection()
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                        shadowElevation = 8.dp,
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(android.graphics.Color.parseColor(state.theme.bgColor)).copy(alpha = 0.97f),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 2.dp, vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(0.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            TextButton(
-                                onClick = { viewModel.showVocabPlanPicker() },
-                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF7C4DFF)),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                            ) {
-                                Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF7C4DFF))
-                                Spacer(Modifier.width(2.dp))
-                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_add), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                            }
-                            if (existingHighlight != null) {
-                                TextButton(
-                                    onClick = { viewModel.dismissSelectionMenu(); viewModel.removeHighlight(existingHighlight) },
-                                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_remove), fontSize = 11.sp, maxLines = 1) }
-                            } else {
-                                TextButton(
-                                    onClick = { viewModel.dismissSelectionMenu(); viewModel.addHighlight() },
-                                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFE6A800)),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_add), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
-                            }
-                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.readSelection(state.selectedText!!) }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF059669)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_aloud), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
-                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("translate") }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF3B82F6)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate), fontSize = 11.sp, maxLines = 1) }
-                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("dictionary") }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF8B5CF6)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.dictionary), fontSize = 11.sp, maxLines = 1) }
-                            TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.transcribeSelection() }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF59E0B)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.transcribe), fontSize = 11.sp, maxLines = 1) }
-                        }
-                    }
-                }
+                // Selection toolbar moved to floating overlay with drag & persistence
 
                 AnimatedVisibility(visible = !state.isFullscreen) {
                     ReaderBottomBar(
@@ -455,7 +415,7 @@ fun ReaderScreen(
         } else {
             padding
         }
-        Box(Modifier.fillMaxSize().padding(effectivePadding)) {
+        BoxWithConstraints(Modifier.fillMaxSize().padding(effectivePadding)) {
             if (state.isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -519,6 +479,7 @@ fun ReaderScreen(
                     onPrevChapter = { viewModel.prevChapter() },
                     onNextChapter = { viewModel.nextChapter() },
                     isEinkMode = state.isEinkMode,
+                    clearSelectionTrigger = state.clearSelectionTrigger,
                     onWebViewCreated = { webViewInstance = it },
                     modifier = Modifier.fillMaxSize().background(Color(android.graphics.Color.parseColor(state.theme.bgColor))),
                 )
@@ -1071,6 +1032,102 @@ fun ReaderScreen(
                         viewModel.refreshEinkMode()
                     }
                 )
+            }
+
+            // Selection toolbar — floating overlay with vertical drag gesture & book-level persistence
+            if (state.showSelectionMenu && state.selectedText != null && !state.isTtsPlaying && !state.isTtsPaused) {
+                val existingHighlight = viewModel.getExistingHighlightForSelection()
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                val toolbarHeight = 46.dp
+                val topSafePadding = 12.dp
+                val bottomSafePadding = 12.dp
+
+                val maxAvailableHeightPx = with(density) {
+                    (maxHeight - toolbarHeight - topSafePadding - bottomSafePadding).toPx().coerceAtLeast(0f)
+                }
+                val topSafePaddingPx = with(density) { topSafePadding.toPx() }
+
+                var currentRatio by remember(state.book?.id, state.selectionMenuYRatio) {
+                    mutableFloatStateOf(state.selectionMenuYRatio)
+                }
+
+                val currentOffsetY = with(density) {
+                    (topSafePaddingPx + currentRatio * maxAvailableHeightPx).toDp()
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                        .offset(y = currentOffsetY)
+                        .draggable(
+                            orientation = Orientation.Vertical,
+                            state = rememberDraggableState { delta ->
+                                if (maxAvailableHeightPx > 0f) {
+                                    val deltaRatio = delta / maxAvailableHeightPx
+                                    currentRatio = (currentRatio + deltaRatio).coerceIn(0f, 1f)
+                                }
+                            },
+                            onDragStopped = {
+                                viewModel.saveSelectionMenuYRatio(currentRatio)
+                            }
+                        ),
+                    shadowElevation = 8.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                    ),
+                    color = Color(android.graphics.Color.parseColor(state.theme.bgColor)).copy(alpha = 0.98f),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(0.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(
+                            onClick = { viewModel.showVocabPlanPicker() },
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF7C4DFF)),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) {
+                            Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF7C4DFF))
+                            Spacer(Modifier.width(2.dp))
+                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_add), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+                        if (existingHighlight != null) {
+                            TextButton(
+                                onClick = { viewModel.dismissSelectionMenu(); viewModel.removeHighlight(existingHighlight) },
+                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_remove), fontSize = 11.sp, maxLines = 1) }
+                        } else {
+                            TextButton(
+                                onClick = { viewModel.dismissSelectionMenu(); viewModel.addHighlight() },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFE6A800)),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_add), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
+                        }
+                        TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.readSelection(state.selectedText!!) }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF059669)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_aloud), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
+                        TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("translate") }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF3B82F6)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate), fontSize = 11.sp, maxLines = 1) }
+                        TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("dictionary") }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF8B5CF6)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.dictionary), fontSize = 11.sp, maxLines = 1) }
+                        TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.transcribeSelection() }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF59E0B)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.transcribe), fontSize = 11.sp, maxLines = 1) }
+
+                        // Close button (✕) — 一键关闭浮窗并取消划选高亮
+                        IconButton(
+                            onClick = { viewModel.dismissSelectionAndClear() },
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
     }
