@@ -34,6 +34,7 @@ import com.moyue.ai.ui.components.ReportsTabContent
 import com.moyue.ai.ui.components.SummaryTabContent
 import com.moyue.app.R
 import com.moyue.app.data.BookDao
+import com.moyue.app.data.BookRepository
 import com.moyue.app.tts.EdgeTTSProvider
 
 @Composable
@@ -46,6 +47,7 @@ fun AiReadingScreen(
     bookDao: BookDao,
     edgeTTS: EdgeTTSProvider?,
     isEinkMode: Boolean = false,
+    bookRepository: BookRepository? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -328,6 +330,7 @@ fun AiReadingScreen(
                             bookDao = bookDao,
                             edgeTTS = edgeTTS,
                             displayMode = displayMode,
+                            bookRepository = bookRepository,
                             onDisplayModeChange = onDisplayModeChange,
                             onHasResultChange = { summaryHasResult = it },
                             onAudioPlayingChange = { isSummaryAudioPlaying = it },
@@ -343,7 +346,9 @@ fun AiReadingScreen(
                             repository = repository,
                             config = aiConfig,
                             isEink = isEink,
-                            textSizeSp = textSizeSp
+                            textSizeSp = textSizeSp,
+                            displayMode = displayMode,
+                            bookRepository = bookRepository
                         )
                         2 -> QuizTabContent(
                             bookId = bookId,
@@ -356,6 +361,7 @@ fun AiReadingScreen(
                             isEink = isEink,
                             textSizeSp = textSizeSp,
                             displayMode = displayMode,
+                            bookRepository = bookRepository,
                             onDisplayModeChange = onDisplayModeChange,
                             onQuizCompleted = {
                                 // switch to reports or stay

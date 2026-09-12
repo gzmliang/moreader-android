@@ -1065,6 +1065,7 @@ fun ReaderScreen(
                     bookDao = repository.dao,
                     edgeTTS = currentEdgeTTS,
                     isEinkMode = state.isEinkMode,
+                    bookRepository = repository,
                     onDismiss = { 
                         showAiCompanion = false 
                         viewModel.refreshEinkMode()

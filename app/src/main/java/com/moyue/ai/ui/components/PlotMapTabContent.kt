@@ -22,8 +22,10 @@ import com.moyue.ai.model.AiPlotResult
 import com.moyue.ai.model.CharacterCard
 import com.moyue.ai.model.PlotStage
 import com.moyue.ai.service.AiPromptBuilder
+import com.moyue.ai.service.BookTextExtractor
 import com.moyue.ai.service.LlmClient
 import com.moyue.app.R
+import com.moyue.app.data.BookRepository
 import kotlinx.coroutines.launch
 
 @Composable
@@ -36,7 +38,9 @@ fun PlotMapTabContent(
     repository: AiCacheRepository,
     config: AiConfig,
     isEink: Boolean,
-    textSizeSp: Float
+    textSizeSp: Float,
+    displayMode: String = "bilingual",
+    bookRepository: BookRepository? = null
 ) {
     val scope = rememberCoroutineScope()
     var selectedScope by remember { mutableStateOf("chapter") } // "chapter" or "book"
@@ -49,6 +53,35 @@ fun PlotMapTabContent(
 
     LaunchedEffect(bookId, chapterIndex, selectedScope) {
         plotResult = repository.getPlot(bookId, chapterIndex, selectedScope)
+    }
+
+    fun doGeneratePlot() {
+        isLoading = true
+        errorMessage = null
+        scope.launch {
+            val textToAnalyze = if (selectedScope == "book") {
+                BookTextExtractor.extractBookOverview(bookRepository, bookId, bookTitle, chapterText)
+            } else {
+                chapterText
+            }
+            val promptTitle = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle"
+            val (sys, usr) = AiPromptBuilder.buildPlotPrompt(
+                config = config,
+                title = promptTitle,
+                text = textToAnalyze,
+                scope = selectedScope
+            )
+            val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
+            isLoading = false
+            res.fold(
+                onSuccess = { json ->
+                    val parsed = AiPromptBuilder.parsePlotResponse(json, bookId, chapterIndex, selectedScope)
+                    repository.savePlot(parsed)
+                    plotResult = parsed
+                },
+                onFailure = { errorMessage = it.localizedMessage }
+            )
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -87,26 +120,7 @@ fun PlotMapTabContent(
                         fontSize = 11.sp,
                         color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.clickable {
-                            isLoading = true
-                            errorMessage = null
-                            scope.launch {
-                                val (sys, usr) = AiPromptBuilder.buildPlotPrompt(
-                                    config = config,
-                                    title = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle",
-                                    text = chapterText,
-                                    scope = selectedScope
-                                )
-                                val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
-                                isLoading = false
-                                res.fold(
-                                    onSuccess = { json ->
-                                        val parsed = AiPromptBuilder.parsePlotResponse(json, bookId, chapterIndex, selectedScope)
-                                        repository.savePlot(parsed)
-                                        plotResult = parsed
-                                    },
-                                    onFailure = { errorMessage = it.localizedMessage }
-                                )
-                            }
+                            doGeneratePlot()
                         }
                     )
                 }
@@ -165,7 +179,10 @@ fun PlotMapTabContent(
                         contentPadding = PaddingValues(vertical = 10.dp)
                     ) {
                         // 1. Narrative Core & Stakes
-                        if (result.coreDynamicsOriginal.isNotBlank() || result.coreDynamicsTranslation.isNotBlank()) {
+                        val showCoreOrig = (displayMode == "bilingual" || displayMode == "orig" || result.coreDynamicsTranslation.isBlank()) && result.coreDynamicsOriginal.isNotBlank()
+                        val showCoreTrans = (displayMode == "bilingual" || displayMode == "target") && result.coreDynamicsTranslation.isNotBlank()
+
+                        if (showCoreOrig || showCoreTrans) {
                             item {
                                 SectionHeader(title = stringResource(R.string.ai_plot_core_title), isEink = isEink)
                                 Surface(
@@ -177,7 +194,7 @@ fun PlotMapTabContent(
                                         .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp)) else Modifier)
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
-                                        if (result.coreDynamicsOriginal.isNotBlank()) {
+                                        if (showCoreOrig) {
                                             Text(
                                                 text = result.coreDynamicsOriginal,
                                                 fontSize = textSizeSp.sp,
@@ -185,8 +202,8 @@ fun PlotMapTabContent(
                                                 color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                                             )
                                         }
-                                        if (result.coreDynamicsTranslation.isNotBlank()) {
-                                            Spacer(modifier = Modifier.height(4.dp))
+                                        if (showCoreTrans) {
+                                            if (showCoreOrig) Spacer(modifier = Modifier.height(6.dp))
                                             Text(
                                                 text = result.coreDynamicsTranslation,
                                                 fontSize = (textSizeSp * 0.92f).sp,
@@ -204,7 +221,12 @@ fun PlotMapTabContent(
                                 SectionHeader(title = stringResource(R.string.ai_plot_relations_title), isEink = isEink)
                             }
                             items(result.characters) { card ->
-                                CharacterCardItem(card = card, isEink = isEink, textSizeSp = textSizeSp)
+                                CharacterCardItem(
+                                    card = card,
+                                    isEink = isEink,
+                                    textSizeSp = textSizeSp,
+                                    displayMode = displayMode
+                                )
                                 Spacer(modifier = Modifier.height(8.dp))
                             }
                             item { Spacer(modifier = Modifier.height(12.dp)) }
@@ -216,7 +238,12 @@ fun PlotMapTabContent(
                                 SectionHeader(title = stringResource(R.string.ai_plot_timeline_title), isEink = isEink)
                             }
                             items(result.timeline) { stage ->
-                                TimelineStageItem(stage = stage, isEink = isEink, textSizeSp = textSizeSp)
+                                TimelineStageItem(
+                                    stage = stage,
+                                    isEink = isEink,
+                                    textSizeSp = textSizeSp,
+                                    displayMode = displayMode
+                                )
                                 Spacer(modifier = Modifier.height(10.dp))
                             }
                         }
@@ -235,26 +262,7 @@ fun PlotMapTabContent(
                         Spacer(modifier = Modifier.height(14.dp))
                         Button(
                             onClick = {
-                                isLoading = true
-                                errorMessage = null
-                                scope.launch {
-                                    val (sys, usr) = AiPromptBuilder.buildPlotPrompt(
-                                        config = config,
-                                        title = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle",
-                                        text = chapterText,
-                                        scope = selectedScope
-                                    )
-                                    val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
-                                    isLoading = false
-                                    res.fold(
-                                        onSuccess = { json ->
-                                            val parsed = AiPromptBuilder.parsePlotResponse(json, bookId, chapterIndex, selectedScope)
-                                            repository.savePlot(parsed)
-                                            plotResult = parsed
-                                        },
-                                        onFailure = { errorMessage = it.localizedMessage }
-                                    )
-                                }
+                                doGeneratePlot()
                             },
                             colors = if (isEink) ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
                             else ButtonDefaults.buttonColors()
@@ -280,7 +288,12 @@ private fun SectionHeader(title: String, isEink: Boolean) {
 }
 
 @Composable
-private fun CharacterCardItem(card: CharacterCard, isEink: Boolean, textSizeSp: Float) {
+private fun CharacterCardItem(
+    card: CharacterCard,
+    isEink: Boolean,
+    textSizeSp: Float,
+    displayMode: String
+) {
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = if (isEink) Color.White else MaterialTheme.colorScheme.surface,
@@ -295,15 +308,21 @@ private fun CharacterCardItem(card: CharacterCard, isEink: Boolean, textSizeSp: 
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Name (Orig + Trans)
+                // Name based on displayMode
+                val primaryName = when (displayMode) {
+                    "orig" -> if (card.nameOriginal.isNotBlank()) card.nameOriginal else card.nameTranslation
+                    "target" -> if (card.nameTranslation.isNotBlank()) card.nameTranslation else card.nameOriginal
+                    else -> card.nameOriginal.ifBlank { card.nameTranslation } // bilingual
+                }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = card.nameOriginal,
+                        text = primaryName,
                         fontSize = (textSizeSp).sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                     )
-                    if (card.nameTranslation.isNotBlank()) {
+                    if (displayMode == "bilingual" && card.nameTranslation.isNotBlank() && card.nameTranslation != card.nameOriginal) {
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "(${card.nameTranslation})",
@@ -356,7 +375,15 @@ private fun CharacterCardItem(card: CharacterCard, isEink: Boolean, textSizeSp: 
 }
 
 @Composable
-private fun TimelineStageItem(stage: PlotStage, isEink: Boolean, textSizeSp: Float) {
+private fun TimelineStageItem(
+    stage: PlotStage,
+    isEink: Boolean,
+    textSizeSp: Float,
+    displayMode: String
+) {
+    val showEventOrig = (displayMode == "bilingual" || displayMode == "orig" || stage.eventTranslation.isBlank()) && stage.eventOriginal.isNotBlank()
+    val showEventTrans = (displayMode == "bilingual" || displayMode == "target") && stage.eventTranslation.isNotBlank()
+
     Row(modifier = Modifier.fillMaxWidth()) {
         // Vertical Timeline bullet
         Column(
@@ -384,7 +411,7 @@ private fun TimelineStageItem(stage: PlotStage, isEink: Boolean, textSizeSp: Flo
                 fontWeight = FontWeight.Bold,
                 color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
             )
-            if (stage.eventOriginal.isNotBlank()) {
+            if (showEventOrig) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = stage.eventOriginal,
@@ -392,7 +419,7 @@ private fun TimelineStageItem(stage: PlotStage, isEink: Boolean, textSizeSp: Flo
                     color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                 )
             }
-            if (stage.eventTranslation.isNotBlank()) {
+            if (showEventTrans) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = stage.eventTranslation,

@@ -20,15 +20,38 @@ object AiPromptBuilder {
         title: String,
         text: String,
         ratio: Int,
-        scope: String
+        scope: String,
+        level: String = "standard"
     ): Pair<String, String> {
         val wordCount = text.split("\\s+".toRegex()).size
         val targetLength = ((wordCount * ratio) / 100).coerceAtLeast(150)
+
+        val levelDirective = when (level.lowercase()) {
+            "simple" -> """
+                VOCABULARY & STYLE DIRECTIVE:
+                - Target Audience: Children, young learners, or beginners.
+                - Vocabulary: Use simple, clear, and child-friendly words. Avoid archaic expressions, obscure idioms, or dense academic jargon.
+                - Sentence Structure: Keep sentences short, vivid, and straightforward. Explain complex plot points and motives in accessible, engaging terms.
+            """.trimIndent()
+            "advanced" -> """
+                VOCABULARY & STYLE DIRECTIVE:
+                - Target Audience: Advanced scholars, literature connoisseurs, and critical readers.
+                - Vocabulary: Use sophisticated, rich, and intellectually elevated literary and academic vocabulary.
+                - Sentence Structure & Insight: Provide deep literary nuance, philosophical insight, and stylistic elegance. Preserve subtext, thematic complexity, and character psychological depth.
+            """.trimIndent()
+            else -> """
+                VOCABULARY & STYLE DIRECTIVE:
+                - Target Audience: General readers.
+                - Vocabulary: Use balanced, natural, and expressive literary vocabulary suitable for standard reading.
+            """.trimIndent()
+        }
 
         val systemPrompt = """
             You are a world-class literary editor and speed-reading condensation specialist.
             Your task is to condense the provided text to approximately $ratio% of its original depth (target: around $targetLength words).
             The source language is ${config.sourceLang} and the target explanation language is ${config.targetLang}.
+            
+            $levelDirective
             
             OUTPUT FORMAT:
             You MUST return a JSON object with this EXACT structure:
@@ -59,7 +82,8 @@ object AiPromptBuilder {
         bookId: String,
         chapterIndex: Int,
         scope: String,
-        ratio: Int
+        ratio: Int,
+        level: String = "standard"
     ): AiSummaryResult {
         return try {
             val cleanJson = extractJson(jsonString)
@@ -82,6 +106,7 @@ object AiPromptBuilder {
                 chapterIndex = chapterIndex,
                 scope = scope,
                 ratio = ratio,
+                level = level,
                 title = title,
                 paragraphs = list,
                 rawMarkdown = jsonString
@@ -93,6 +118,7 @@ object AiPromptBuilder {
                 chapterIndex = chapterIndex,
                 scope = scope,
                 ratio = ratio,
+                level = level,
                 title = "Summary",
                 paragraphs = listOf(SummaryParagraph(original = jsonString, translation = "")),
                 rawMarkdown = jsonString

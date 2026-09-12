@@ -31,8 +31,10 @@ import com.moyue.ai.model.AiQuizResult
 import com.moyue.ai.model.QuizQuestion
 import com.moyue.ai.model.QuizReportRecord
 import com.moyue.ai.service.AiPromptBuilder
+import com.moyue.ai.service.BookTextExtractor
 import com.moyue.ai.service.LlmClient
 import com.moyue.app.R
+import com.moyue.app.data.BookRepository
 import kotlinx.coroutines.launch
 
 @Composable
@@ -47,6 +49,7 @@ fun QuizTabContent(
     isEink: Boolean,
     textSizeSp: Float,
     displayMode: String = "bilingual",
+    bookRepository: BookRepository? = null,
     onDisplayModeChange: (String) -> Unit = {},
     onQuizCompleted: () -> Unit
 ) {
@@ -113,10 +116,16 @@ fun QuizTabContent(
         isLoading = true
         errorMessage = null
         scope.launch {
+            val textToAnalyze = if (selectedScope == "book") {
+                BookTextExtractor.extractBookOverview(bookRepository, bookId, bookTitle, chapterText)
+            } else {
+                chapterText
+            }
+            val promptTitle = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle"
             val (sys, usr) = AiPromptBuilder.buildQuizPrompt(
                 config = config,
-                title = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle",
-                text = chapterText,
+                title = promptTitle,
+                text = textToAnalyze,
                 count = questionCount,
                 difficulty = difficulty,
                 scope = selectedScope

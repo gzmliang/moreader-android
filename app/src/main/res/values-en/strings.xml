@@ -543,6 +543,13 @@ Just change the Base URL and API Key</string>
     <!-- Summary Tab -->
     <string name="ai_summary_ratio_label">Ratio</string>
     <string name="ai_summary_ratio_format">%1$d%%</string>
+    <string name="ai_summary_level_label">Vocabulary Level</string>
+    <string name="ai_summary_level_simple">🌱 Basic (Simple/Kids)</string>
+    <string name="ai_summary_level_simple_short">🌱 Basic</string>
+    <string name="ai_summary_level_standard">📖 Standard (Balanced)</string>
+    <string name="ai_summary_level_standard_short">📖 Standard</string>
+    <string name="ai_summary_level_advanced">🎓 Advanced (Literary)</string>
+    <string name="ai_summary_level_advanced_short">🎓 Advanced</string>
     <string name="ai_display_mode_bilingual">🔄 Bilingual</string>
     <string name="ai_display_mode_original">📄 Original</string>
     <string name="ai_display_mode_target">🌐 Translated</string>

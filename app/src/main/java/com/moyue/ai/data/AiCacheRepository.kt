@@ -91,14 +91,25 @@ class AiCacheRepository(private val context: Context) {
     fun getLanguageDisplayMode(): String = prefs.getString("ai_language_display_mode", "bilingual") ?: "bilingual"
     fun setLanguageDisplayMode(mode: String) = prefs.edit().putString("ai_language_display_mode", mode).apply()
 
-    // Summary Cache (Strict bookId + chapterIndex + scope + ratio key)
-    fun getSummary(bookId: String, chapterIndex: Int, scope: String, ratio: Int): AiSummaryResult? {
-        val key = "summary_${bookId}_${chapterIndex}_${scope}_${ratio}"
-        val json = prefs.getString(key, null) ?: return null
+    // Summary Cache (Strict bookId + scope + ratio + level key)
+    fun getSummary(bookId: String, chapterIndex: Int, scope: String, ratio: Int, level: String = "standard"): AiSummaryResult? {
+        val primaryKey = if (scope == "book") {
+            "summary_${bookId}_book_${ratio}_${level}"
+        } else {
+            "summary_${bookId}_ch_${chapterIndex}_${ratio}_${level}"
+        }
+        var json = prefs.getString(primaryKey, null)
+        if (json == null && level == "standard") {
+            // Fallback for legacy cache format
+            val legacyKey = "summary_${bookId}_${chapterIndex}_${scope}_${ratio}"
+            json = prefs.getString(legacyKey, null)
+        }
+        if (json == null) return null
         return try {
             val res = gson.fromJson(json, AiSummaryResult::class.java) ?: return null
             res.copy(
                 title = res.title ?: "",
+                level = if (res.level.isNullOrBlank()) level else res.level,
                 paragraphs = (res.paragraphs ?: emptyList()).map { p ->
                     p.copy(
                         original = p.original ?: "",
@@ -113,14 +124,27 @@ class AiCacheRepository(private val context: Context) {
     }
 
     fun saveSummary(summary: AiSummaryResult) {
-        val key = "summary_${summary.bookId}_${summary.chapterIndex}_${summary.scope}_${summary.ratio}"
+        val key = if (summary.scope == "book") {
+            "summary_${summary.bookId}_book_${summary.ratio}_${summary.level}"
+        } else {
+            "summary_${summary.bookId}_ch_${summary.chapterIndex}_${summary.ratio}_${summary.level}"
+        }
         prefs.edit().putString(key, gson.toJson(summary)).apply()
     }
 
     // Plot Cache
     fun getPlot(bookId: String, chapterIndex: Int, scope: String): AiPlotResult? {
-        val key = "plot_${bookId}_${chapterIndex}_${scope}"
-        val json = prefs.getString(key, null) ?: return null
+        val primaryKey = if (scope == "book") {
+            "plot_${bookId}_book"
+        } else {
+            "plot_${bookId}_ch_${chapterIndex}"
+        }
+        var json = prefs.getString(primaryKey, null)
+        if (json == null && scope != "book") {
+            val legacyKey = "plot_${bookId}_${chapterIndex}_${scope}"
+            json = prefs.getString(legacyKey, null)
+        }
+        if (json == null) return null
         return try {
             val res = gson.fromJson(json, AiPlotResult::class.java) ?: return null
             res.copy(
@@ -135,14 +159,27 @@ class AiCacheRepository(private val context: Context) {
     }
 
     fun savePlot(plot: AiPlotResult) {
-        val key = "plot_${plot.bookId}_${plot.chapterIndex}_${plot.scope}"
+        val key = if (plot.scope == "book") {
+            "plot_${plot.bookId}_book"
+        } else {
+            "plot_${plot.bookId}_ch_${plot.chapterIndex}"
+        }
         prefs.edit().putString(key, gson.toJson(plot)).apply()
     }
 
     // Quiz Cache
     fun getQuiz(bookId: String, chapterIndex: Int, scope: String, count: Int, difficulty: String): AiQuizResult? {
-        val key = "quiz_${bookId}_${chapterIndex}_${scope}_${count}_${difficulty}"
-        val json = prefs.getString(key, null) ?: return null
+        val primaryKey = if (scope == "book") {
+            "quiz_${bookId}_book_${count}_${difficulty}"
+        } else {
+            "quiz_${bookId}_ch_${chapterIndex}_${count}_${difficulty}"
+        }
+        var json = prefs.getString(primaryKey, null)
+        if (json == null && scope != "book") {
+            val legacyKey = "quiz_${bookId}_${chapterIndex}_${scope}_${count}_${difficulty}"
+            json = prefs.getString(legacyKey, null)
+        }
+        if (json == null) return null
         return try {
             val res = gson.fromJson(json, AiQuizResult::class.java) ?: return null
             res.copy(
@@ -154,7 +191,11 @@ class AiCacheRepository(private val context: Context) {
     }
 
     fun saveQuiz(quiz: AiQuizResult) {
-        val key = "quiz_${quiz.bookId}_${quiz.chapterIndex}_${quiz.scope}_${quiz.count}_${quiz.difficulty}"
+        val key = if (quiz.scope == "book") {
+            "quiz_${quiz.bookId}_book_${quiz.count}_${quiz.difficulty}"
+        } else {
+            "quiz_${quiz.bookId}_ch_${quiz.chapterIndex}_${quiz.count}_${quiz.difficulty}"
+        }
         prefs.edit().putString(key, gson.toJson(quiz)).apply()
     }
 

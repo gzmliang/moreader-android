@@ -666,6 +666,13 @@ AI Voice（云端 TTS）：
     <!-- Summary Tab -->
     <string name="ai_summary_ratio_label">浓缩比例</string>
     <string name="ai_summary_ratio_format">%1$d%%</string>
+    <string name="ai_summary_level_label">词汇难度</string>
+    <string name="ai_summary_level_simple">🌱 基础启蒙 (简易/儿童)</string>
+    <string name="ai_summary_level_simple_short">🌱 基础</string>
+    <string name="ai_summary_level_standard">📖 标准通用 (日常平衡)</string>
+    <string name="ai_summary_level_standard_short">📖 标准</string>
+    <string name="ai_summary_level_advanced">🎓 进阶深度 (专业文学)</string>
+    <string name="ai_summary_level_advanced_short">🎓 进阶</string>
     <string name="ai_display_mode_bilingual">🔄 双语对照</string>
     <string name="ai_display_mode_original">📄 仅原著</string>
     <string name="ai_display_mode_target">🌐 仅译文</string>

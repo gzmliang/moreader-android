@@ -26,10 +26,12 @@ import com.moyue.ai.model.AiConfig
 import com.moyue.ai.model.AiSummaryResult
 import com.moyue.ai.model.SummaryParagraph
 import com.moyue.ai.service.AiPromptBuilder
+import com.moyue.ai.service.BookTextExtractor
 import com.moyue.ai.service.LlmClient
 import com.moyue.ai.service.SummaryBookSaver
 import com.moyue.app.R
 import com.moyue.app.data.BookDao
+import com.moyue.app.data.BookRepository
 import com.moyue.app.tts.EdgeTTSProvider
 import kotlinx.coroutines.launch
 
@@ -47,6 +49,7 @@ fun SummaryTabContent(
     bookDao: BookDao,
     edgeTTS: EdgeTTSProvider?,
     displayMode: String = "bilingual",
+    bookRepository: BookRepository? = null,
     onDisplayModeChange: (String) -> Unit = {},
     onHasResultChange: (Boolean) -> Unit = {},
     onAudioPlayingChange: (Boolean) -> Unit = {},
@@ -58,9 +61,10 @@ fun SummaryTabContent(
 
     var selectedScope by remember { mutableStateOf("chapter") } // "chapter" or "book"
     var ratio by remember { mutableIntStateOf(30) }
+    var level by remember { mutableStateOf("standard") } // "simple", "standard", "advanced"
 
     var summaryResult by remember {
-        mutableStateOf(repository.getSummary(bookId, chapterIndex, selectedScope, ratio))
+        mutableStateOf(repository.getSummary(bookId, chapterIndex, selectedScope, ratio, level))
     }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -87,8 +91,8 @@ fun SummaryTabContent(
     }
 
     // When parameters change, reload cache
-    LaunchedEffect(bookId, chapterIndex, selectedScope, ratio) {
-        summaryResult = repository.getSummary(bookId, chapterIndex, selectedScope, ratio)
+    LaunchedEffect(bookId, chapterIndex, selectedScope, ratio, level) {
+        summaryResult = repository.getSummary(bookId, chapterIndex, selectedScope, ratio, level)
     }
 
     // Audio Playback Handler
@@ -157,178 +161,258 @@ fun SummaryTabContent(
                     badgeText = badgeText,
                     suffixText = if (selectedScope == "book") bookSuffix else chapterSuffix
                 )
-                res.fold(
-                    onSuccess = { Toast.makeText(context, saveSuccessMsg.format(it.title), Toast.LENGTH_SHORT).show() },
-                    onFailure = { Toast.makeText(context, saveFailedMsg.format(it.localizedMessage), Toast.LENGTH_SHORT).show() }
-                )
+                if (res.isSuccess) {
+                    Toast.makeText(context, saveSuccessMsg, Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, saveFailedMsg, Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
 
+    fun doGenerateSummary() {
+        isLoading = true
+        errorMessage = null
+        scope.launch {
+            val textToAnalyze = if (selectedScope == "book") {
+                BookTextExtractor.extractBookOverview(bookRepository, bookId, bookTitle, chapterText)
+            } else {
+                chapterText
+            }
+            val promptTitle = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle"
+            val (sys, usr) = AiPromptBuilder.buildSummaryPrompt(
+                config = config,
+                title = promptTitle,
+                text = textToAnalyze,
+                ratio = ratio,
+                scope = selectedScope,
+                level = level
+            )
+            val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
+            isLoading = false
+            res.fold(
+                onSuccess = { json ->
+                    val parsed = AiPromptBuilder.parseSummaryResponse(json, bookId, chapterIndex, selectedScope, ratio, level)
+                    repository.saveSummary(parsed)
+                    summaryResult = parsed
+                },
+                onFailure = { errorMessage = it.localizedMessage }
+            )
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        // Compact single-line controls bar (height ~34dp)
-        Row(
+        // Controls Header (极简胶囊控制条)
+        Surface(
+            color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp)) else Modifier)
         ) {
-            // Dropdown Capsules
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Scope Capsule: [ 当前章 ▾ ] / [ 全书 ▾ ]
-                var scopeMenuExpanded by remember { mutableStateOf(false) }
-                Box {
-                    Surface(
-                        color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .height(32.dp)
-                            .clickable { scopeMenuExpanded = true }
-                            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp)
-                        ) {
-                            Text(
-                                text = if (selectedScope == "book") stringResource(R.string.ai_scope_book_short) else stringResource(R.string.ai_scope_chapter_short),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                    DropdownMenu(
-                        expanded = scopeMenuExpanded,
-                        onDismissRequest = { scopeMenuExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.ai_scope_chapter), fontSize = 13.sp) },
-                            onClick = {
-                                selectedScope = "chapter"
-                                scopeMenuExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.ai_scope_book), fontSize = 13.sp) },
-                            onClick = {
-                                selectedScope = "book"
-                                scopeMenuExpanded = false
-                            }
-                        )
-                    }
-                }
-
-                // Ratio Capsule: [ 30% ▾ ]
-                var ratioMenuExpanded by remember { mutableStateOf(false) }
-                Box {
-                    Surface(
-                        color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .height(32.dp)
-                            .clickable { ratioMenuExpanded = true }
-                            .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp)
-                        ) {
-                            Text(
-                                text = "${ratio}%",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                    DropdownMenu(
-                        expanded = ratioMenuExpanded,
-                        onDismissRequest = { ratioMenuExpanded = false }
-                    ) {
-                        listOf(20, 30, 50).forEach { r ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = "${r}%",
-                                        fontSize = 13.sp,
-                                        fontWeight = if (ratio == r) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (ratio == r) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                    )
-                                },
-                                onClick = {
-                                    ratio = r
-                                    ratioMenuExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Right side: ⚡已缓存 & 🔄重新生成
-            if (summaryResult != null) {
+                // Left side selectors: Scope + Ratio + Vocabulary Level
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = "⚡" + stringResource(R.string.ai_cached_short),
-                        fontSize = 11.sp,
-                        color = if (isEink) Color.Black else Color(0xFF10B981),
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    IconButton(
-                        onClick = {
-                            isLoading = true
-                            errorMessage = null
-                            scope.launch {
-                                val (sys, usr) = AiPromptBuilder.buildSummaryPrompt(
-                                    config = config,
-                                    title = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle",
-                                    text = chapterText,
-                                    ratio = ratio,
-                                    scope = selectedScope
+                    // Scope Capsule: [ 章节 ▾ ] / [ 全书 ▾ ]
+                    var scopeMenuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        Surface(
+                            color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .height(32.dp)
+                                .clickable { scopeMenuExpanded = true }
+                                .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp)
+                            ) {
+                                Text(
+                                    text = if (selectedScope == "chapter") stringResource(R.string.ai_scope_chapter) else stringResource(R.string.ai_scope_book),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                                 )
-                                val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
-                                isLoading = false
-                                res.fold(
-                                    onSuccess = { json ->
-                                        val parsed = AiPromptBuilder.parseSummaryResponse(json, bookId, chapterIndex, selectedScope, ratio)
-                                        repository.saveSummary(parsed)
-                                        summaryResult = parsed
-                                    },
-                                    onFailure = { errorMessage = it.localizedMessage }
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
-                        },
-                        modifier = Modifier.size(28.dp)
+                        }
+                        DropdownMenu(
+                            expanded = scopeMenuExpanded,
+                            onDismissRequest = { scopeMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.ai_scope_chapter), fontSize = 13.sp) },
+                                onClick = {
+                                    selectedScope = "chapter"
+                                    scopeMenuExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.ai_scope_book), fontSize = 13.sp) },
+                                onClick = {
+                                    selectedScope = "book"
+                                    scopeMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+
+                    // Ratio Capsule: [ 30% ▾ ]
+                    var ratioMenuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        Surface(
+                            color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .height(32.dp)
+                                .clickable { ratioMenuExpanded = true }
+                                .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp)
+                            ) {
+                                Text(
+                                    text = "${ratio}%",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = ratioMenuExpanded,
+                            onDismissRequest = { ratioMenuExpanded = false }
+                        ) {
+                            listOf(20, 30, 50).forEach { r ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "${r}%",
+                                            fontSize = 13.sp,
+                                            fontWeight = if (ratio == r) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (ratio == r) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    },
+                                    onClick = {
+                                        ratio = r
+                                        ratioMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Vocabulary Level Capsule: [ 📖 标准 ▾ ]
+                    var levelMenuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        Surface(
+                            color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .height(32.dp)
+                                .clickable { levelMenuExpanded = true }
+                                .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            ) {
+                                val levelShortLabel = when (level) {
+                                    "simple" -> stringResource(R.string.ai_summary_level_simple_short)
+                                    "advanced" -> stringResource(R.string.ai_summary_level_advanced_short)
+                                    else -> stringResource(R.string.ai_summary_level_standard_short)
+                                }
+                                Text(
+                                    text = levelShortLabel,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = levelMenuExpanded,
+                            onDismissRequest = { levelMenuExpanded = false }
+                        ) {
+                            listOf(
+                                "simple" to stringResource(R.string.ai_summary_level_simple),
+                                "standard" to stringResource(R.string.ai_summary_level_standard),
+                                "advanced" to stringResource(R.string.ai_summary_level_advanced)
+                            ).forEach { (lvlKey, lvlLabel) ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = lvlLabel,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (level == lvlKey) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (level == lvlKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    },
+                                    onClick = {
+                                        level = lvlKey
+                                        levelMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Right side: ⚡已缓存 & 🔄重新生成
+                if (summaryResult != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = stringResource(R.string.ai_regenerate_btn),
-                            tint = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
+                        Text(
+                            text = "⚡" + stringResource(R.string.ai_cached_short),
+                            fontSize = 11.sp,
+                            color = if (isEink) Color.Black else Color(0xFF10B981),
+                            fontWeight = FontWeight.SemiBold
                         )
+
+                        IconButton(
+                            onClick = { doGenerateSummary() },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = stringResource(R.string.ai_regenerate_btn),
+                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -422,29 +506,7 @@ fun SummaryTabContent(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
-                            onClick = {
-                                isLoading = true
-                                errorMessage = null
-                                scope.launch {
-                                    val (sys, usr) = AiPromptBuilder.buildSummaryPrompt(
-                                        config = config,
-                                        title = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle",
-                                        text = chapterText,
-                                        ratio = ratio,
-                                        scope = selectedScope
-                                    )
-                                    val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
-                                    isLoading = false
-                                    res.fold(
-                                        onSuccess = { json ->
-                                            val parsed = AiPromptBuilder.parseSummaryResponse(json, bookId, chapterIndex, selectedScope, ratio)
-                                            repository.saveSummary(parsed)
-                                            summaryResult = parsed
-                                        },
-                                        onFailure = { errorMessage = it.localizedMessage }
-                                    )
-                                }
-                            },
+                            onClick = { doGenerateSummary() },
                             shape = RoundedCornerShape(8.dp),
                             colors = if (isEink) ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
                             else ButtonDefaults.buttonColors()
