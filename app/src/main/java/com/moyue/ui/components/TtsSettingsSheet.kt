@@ -149,7 +149,7 @@ fun TtsSettingsSheet(
     aiModel: String,
     aiVoice: String,
     // Custom TTS (OpenAI-compatible)
-    customEndpoint: String = "http://192.168.199.101:18083",
+    customEndpoint: String = "",
     customApiKey: String = "dummy",
     customModel: String = "moss-tts-nano",
     customVoice: String = "Lingyu",

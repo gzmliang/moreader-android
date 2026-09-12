@@ -723,7 +723,7 @@ val isChinese = word.any { it in '一'..'鿿' }
                             fetchEdgeTTSWorking(endpoint, voice, apiKey, word, log)
                         }
                         TTSProviderType.CUSTOM_TTS -> {
-                            val endpoint = prefs.getString("custom_endpoint", "http://192.168.199.101:18083") ?: "http://192.168.199.101:18083"
+                            val endpoint = prefs.getString("custom_endpoint", "") ?: ""
                             val apiKey = prefs.getString("custom_apikey", "dummy") ?: "dummy"
                             val model = prefs.getString("custom_model", "moss-tts-nano") ?: "moss-tts-nano"
                             val voice = prefs.getString("custom_voice", "Lingyu") ?: "Lingyu"

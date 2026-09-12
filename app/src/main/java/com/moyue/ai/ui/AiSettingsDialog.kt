@@ -54,7 +54,7 @@ fun AiSettingsDialog(
     var customBaseUrl by remember {
         mutableStateOf(
             if (initialConfig.provider == "Custom") initialConfig.baseUrl
-            else repository.getCustomBaseUrl().ifBlank { "http://192.168.199.101:3000/v1" }
+            else repository.getCustomBaseUrl()
         )
     }
     var customApiKey by remember {
@@ -127,7 +127,7 @@ fun AiSettingsDialog(
                 model = "moonshot-v1-8k"
             }
             "Custom" -> {
-                baseUrl = customBaseUrl.ifBlank { "http://192.168.199.101:3000/v1" }
+                baseUrl = customBaseUrl
                 apiKey = customApiKey
                 model = customModel.ifBlank { "gpt-4o-mini" }
             }
@@ -530,6 +530,41 @@ fun AiSettingsDialog(
                     ) {
                         Text(stringResource(R.string.ai_settings_save_btn))
                     }
+                }
+
+                // 9. 底部暖心赞助入口
+                var showInnerDonate by remember { mutableStateOf(false) }
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0xFFF59E0B).copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.35f)),
+                        modifier = Modifier.clickable { showInnerDonate = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text("☕", fontSize = 13.sp)
+                            Text(
+                                text = stringResource(R.string.donate_menu_title),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFD97706)
+                            )
+                        }
+                    }
+                }
+
+                if (showInnerDonate) {
+                    com.moyue.ui.components.DonateDialog(onDismiss = { showInnerDonate = false })
                 }
             }
         }

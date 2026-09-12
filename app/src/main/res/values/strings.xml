@@ -310,7 +310,7 @@ AI Voice（云端 TTS）：
     <string name="tts_label_api_key">API Key</string>
     <string name="tts_label_model">模型</string>
     <string name="tts_label_voice">音色</string>
-    <string name="tts_hint_base_url">http://192.168.199.101:18083</string>
+    <string name="tts_hint_base_url">https://api.openai.com/v1</string>
     <string name="tts_hint_api_key">dummy</string>
     <string name="tts_hint_model">moss-tts-nano</string>
     <string name="tts_hint_voice">Lingyu</string>
@@ -812,4 +812,18 @@ AI Voice（云端 TTS）：
     <string name="ai_summary_mode_orig_short">原著</string>
     <string name="ai_summary_mode_bilingual_short">双语</string>
     <string name="ai_summary_mode_target_short">译文</string>
+
+    <!-- 赞助与捐赠支持 -->
+    <string name="donate_menu_title">☕ 请作者喝杯咖啡</string>
+    <string name="donate_dialog_title">☕ 支持独立开发者梁老师</string>
+    <string name="donate_dialog_desc">感谢您使用墨阅！无论您身在海内外，您的每一份支持都是工具持续打磨与维护的最佳动力。</string>
+    <string name="donate_domestic_title">🇨🇳 微信 / 支付宝 赞赏</string>
+    <string name="donate_domestic_hint">微信或支付宝扫码赞赏，感谢支持！</string>
+    <string name="donate_save_qr_btn">💾 保存收款码至相册</string>
+    <string name="donate_save_qr_success">收款码已保存至相册！可在微信/支付宝中扫一扫相册</string>
+    <string name="donate_save_qr_failed">保存图片失败：%1$s</string>
+    <string name="donate_intl_title">🌍 International / 海外支持</string>
+    <string name="donate_kofi_btn">☕ 前往 Ko-fi 支持页面</string>
+    <string name="donate_paypal_title">PayPal 收款邮箱：</string>
+    <string name="donate_paypal_copied">已复制 PayPal 邮箱至剪贴板！</string>
 </resources>

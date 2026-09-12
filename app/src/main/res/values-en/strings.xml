@@ -325,7 +325,7 @@ Just change the Base URL and API Key</string>
     <string name="tts_custom_voice_hint">✏️ Enter custom voice...</string>
     <string name="tts_engine">Voice Engine</string>
     <string name="tts_hint_api_key">dummy</string>
-    <string name="tts_hint_base_url">http://192.168.199.101:18083</string>
+    <string name="tts_hint_base_url">https://api.openai.com/v1</string>
     <string name="tts_hint_model">moss-tts-nano</string>
     <string name="tts_hint_voice">Lingyu</string>
     <string name="tts_label_api_key">API Key</string>
@@ -689,4 +689,18 @@ Just change the Base URL and API Key</string>
     <string name="ai_summary_mode_orig_short">Original</string>
     <string name="ai_summary_mode_bilingual_short">Bilingual</string>
     <string name="ai_summary_mode_target_short">Translation</string>
+
+    <!-- Support & Donation -->
+    <string name="donate_menu_title">☕ Buy Me a Coffee</string>
+    <string name="donate_dialog_title">☕ Support Developer Liang</string>
+    <string name="donate_dialog_desc">Thank you for using Moreader! Your support keeps this tool actively maintained and continuously improved worldwide.</string>
+    <string name="donate_domestic_title">🇨🇳 WeChat / Alipay</string>
+    <string name="donate_domestic_hint">Scan QR code via WeChat or Alipay to support.</string>
+    <string name="donate_save_qr_btn">💾 Save QR Code to Gallery</string>
+    <string name="donate_save_qr_success">QR code saved to Gallery! You can scan it in WeChat / Alipay</string>
+    <string name="donate_save_qr_failed">Failed to save image: %1$s</string>
+    <string name="donate_intl_title">🌍 International Support</string>
+    <string name="donate_kofi_btn">☕ Support on Ko-fi</string>
+    <string name="donate_paypal_title">PayPal Email:</string>
+    <string name="donate_paypal_copied">PayPal email copied to clipboard!</string>
 </resources>

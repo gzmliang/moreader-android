@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
  * Header: Authorization: Bearer <api_key>
  */
 class CustomTTSProvider(
-    private val endpoint: String = "http://192.168.199.101:18083",
+    private val endpoint: String = "",
     private val apiKey: String = "dummy",
     private val model: String = "moss-tts-nano",
     private val voice: String = "Lingyu",

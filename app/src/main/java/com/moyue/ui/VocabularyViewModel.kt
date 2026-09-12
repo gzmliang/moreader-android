@@ -217,7 +217,7 @@ class VocabularyViewModel(
                             fetchAndPlay(vocabId, word, context, fetchEdgeTTS(endpoint, voice, apiKey, word))
                         }
                         TTSProviderType.CUSTOM_TTS -> {
-                            val endpoint = prefs.getString("custom_endpoint", "http://192.168.199.101:18083") ?: "http://192.168.199.101:18083"
+                            val endpoint = prefs.getString("custom_endpoint", "") ?: ""
                             val apiKey = prefs.getString("custom_apikey", "dummy") ?: "dummy"
                             val model = prefs.getString("custom_model", "moss-tts-nano") ?: "moss-tts-nano"
                             val voice = prefs.getString("custom_voice", "Lingyu") ?: "Lingyu"

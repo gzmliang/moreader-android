@@ -78,6 +78,7 @@ fun LibraryScreen(
     var showSortDialog by remember { mutableStateOf(false) }
     var showUploadAllConfirm by remember { mutableStateOf(false) }
     var showWebDavDialog by remember { mutableStateOf(false) }
+    var showDonateDialog by remember { mutableStateOf(false) }
     val uploadScope = rememberCoroutineScope()
     val syncClientForUpload = remember { SyncClient(context) }
     val webDavClient = remember { WebDavClient(context) }
@@ -287,6 +288,25 @@ fun LibraryScreen(
                                             }
                                         )
                                     }
+                                    // 请作者喝杯咖啡 / 赞赏支持
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.donate_menu_title),
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = Color(0xFFD97706)
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Text("☕", fontSize = 16.sp)
+                                        },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            showDonateDialog = true
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -524,6 +544,10 @@ fun LibraryScreen(
                 },
             )
         }
+        if (showDonateDialog) {
+            com.moyue.ui.components.DonateDialog(onDismiss = { showDonateDialog = false })
+        }
+
         // Load cloud books when logged in
         val syncClient = remember { SyncClient(context) }
         LaunchedEffect(syncClient.isLoggedIn()) {
