@@ -157,22 +157,59 @@ object AiPromptBuilder {
         }
     }
 
+    private fun resolveSourceLanguage(config: AiConfig, sampleText: String): String {
+        val configured = config.sourceLang.trim()
+        if (configured.isNotBlank() && !configured.equals("Auto", ignoreCase = true)) {
+            return configured
+        }
+        val detected = com.moyue.tts.LanguageVoiceDetector.detectLanguage(sampleText)
+        return when (detected) {
+            "zh" -> "Chinese"
+            "ja" -> "Japanese"
+            "ko" -> "Korean"
+            "ru" -> "Russian"
+            else -> "English"
+        }
+    }
+
     fun buildPlotPrompt(
         config: AiConfig,
         title: String,
         text: String,
         scope: String
     ): Pair<String, String> {
+        val effectiveSourceLang = resolveSourceLanguage(config, text)
+        val targetLang = config.targetLang.ifBlank { "Chinese" }
+        val isNativeChinese = effectiveSourceLang.equals("Chinese", ignoreCase = true)
+
+        val languageMandate = if (isNativeChinese) {
+            """
+            LANGUAGE DIRECTIVE (CRITICAL - 纯正中文原著模式):
+            - The original text is written in authentic Chinese ($effectiveSourceLang).
+            - The target explanation language is also $targetLang.
+            - Therefore, ALL character names (nameOriginal & nameTranslation), factions, roles, bios, structured relationship labels, and timeline events MUST be directly and fluently written in authentic CHINESE!
+            - NEVER translate Chinese character names or terms into English pinyin or English words (e.g. use "令狐冲" directly, NEVER "Linghu Chong"; use "华山派", NEVER "Huashan Sect"; use "师徒/长辈", NEVER "Master/Disciple").
+            - For nameTranslation and bioTranslation, you may keep them identical to nameOriginal and bioOriginal, or provide polished contemporary Chinese phrasing.
+            """.trimIndent()
+        } else {
+            """
+            LANGUAGE DIRECTIVE:
+            - The source language is $effectiveSourceLang and the target explanation language is $targetLang.
+            - For foreign works (e.g. English, Japanese), keep original names/terms in "Original" fields and provide accurate $targetLang translations in "Translation" fields.
+            """.trimIndent()
+        }
+
         val systemPrompt = """
             You are an expert literary analyst specializing in narrative structure, character dynamics, and dramaturgical arcs.
             Analyze the provided book/chapter text.
-            The source language is ${config.sourceLang} and the target explanation language is ${config.targetLang}.
+            
+            $languageMandate
 
             COMPREHENSIVE CHARACTER EXTRACTION MANDATORY DIRECTIVE:
             - You MUST comprehensively extract and analyze ALL significant, named, and recurring characters in the text.
             - NEVER limit your output to just 2-3 top protagonists! For a book overview, aim for 15 to 30 characters; for a chapter, include all active and mentioned key individuals.
-            - Crucially, you MUST explicitly create separate, dedicated character entries for ALL family members (including EVERY individual child, spouse, sibling, parent, bastard, and ward), as well as key bannermen, advisors, companions/pets, and antagonists.
-            - Example: In House Stark, do NOT lump children into a single string. You MUST provide distinct, rich character entries for Eddard, Catelyn, Robb, Sansa, Arya, Bran, Rickon, Jon Snow, Theon Greyjoy, etc., each with their own bio and interconnected lineage!
+            - Crucially, you MUST explicitly create separate, dedicated character entries for ALL family members, disciples, sect elders, companions, and antagonists.
+            - Example: In House Stark or 华山派, do NOT lump individuals into a single string. Provide distinct, rich character entries for each individual!
 
             CRITICAL RELATIONSHIP DIRECTION & PERSPECTIVE DIRECTIVE (严防角色颠倒与视角混淆 - 最高铁律):
             - In "structuredRelations", the "label" and "labelTranslation" MUST ALWAYS describe the TARGET's role/identity relative to the current character (i.e. "Who is the TARGET to THIS character?").
@@ -181,46 +218,45 @@ object AiPromptBuilder {
               * Animal Companions / Pets / Mounts:
                 - In Jon Snow's card: target is "Ghost" -> label MUST be "Direwolf Companion" (labelTranslation: "冰原狼伙伴"), NEVER "Master"!
                 - In Ghost's card: target is "Jon Snow" -> label MUST be "Master / Companion" (labelTranslation: "主人/伙伴").
-              * Superior / Subordinate (Master / Servant / Commander / Steward):
+              * Superior / Subordinate (Master / Disciple / Commander):
                 - In Jon Snow's card: target is "Jeor Mormont" -> label MUST be "Lord Commander" or "Superior" (labelTranslation: "守夜人总司令/长官"), NEVER "Steward"!
-                - In Jeor Mormont's card: target is "Jon Snow" -> label MUST be "Personal Steward" or "Subordinate" (labelTranslation: "事务官/部属").
+                - In 令狐冲's card: target is "岳不群" -> label & labelTranslation MUST be "恩师 / 掌门", NEVER "徒弟 / 大弟子"!
+                - In 岳不群's card: target is "令狐冲" -> label & labelTranslation MUST be "大弟子 / 徒弟", NEVER "师父"!
               * Parent / Child Lineage:
                 - In Eddard Stark's card: target "Robb Stark" -> label MUST be "Eldest Son / Heir" (labelTranslation: "长子/继承人"), NEVER "Father"!
-                - In Robb Stark's card: target "Eddard Stark" -> label MUST be "Father" (labelTranslation: "父亲"), NEVER "Son"!
-                - In Catelyn Stark's card: target "Eddard Stark" -> label MUST be "Husband" (labelTranslation: "丈夫"), NEVER "Wife"!
-              * Sibling & Ward Relationships:
-                - In Jon Snow's card: target "Robb Stark" -> label MUST be "Half-Brother" (labelTranslation: "同父异母兄弟").
-                - In Ned Stark's card: target "Theon Greyjoy" -> label MUST be "Ward / Hostage" (labelTranslation: "养子/质子").
+                - In 岳灵珊's card: target "岳不群" -> label & labelTranslation MUST be "父亲", NEVER "女儿"!
+              * Sibling & Couple Relationships:
+                - In 岳灵珊's card: target "令狐冲" -> label & labelTranslation MUST be "大师兄 / 青梅竹马", NEVER "小师妹"!
 
             OUTPUT FORMAT:
             You MUST return a JSON object with this EXACT structure:
             {
-              "coreDynamicsOriginal": "One concise paragraph explaining narrative stakes & tension in ${config.sourceLang}...",
-              "coreDynamicsTranslation": "Translation in ${config.targetLang}...",
+              "coreDynamicsOriginal": "One concise paragraph explaining narrative stakes & tension in $effectiveSourceLang...",
+              "coreDynamicsTranslation": "Explanation in $targetLang...",
               "characters": [
                 {
-                  "nameOriginal": "Character Name in ${config.sourceLang}",
-                  "nameTranslation": "Character Name in ${config.targetLang}",
-                  "faction": "House/Faction/Role (e.g. House Stark, Night's Watch)",
-                  "role": "Protagonist / Antagonist / Mentor / Ally",
-                  "bioOriginal": "2-3 sentences introducing the character's background, identity, and current situation in ${config.sourceLang}.",
-                  "bioTranslation": "Translation of character introduction in ${config.targetLang}.",
+                  "nameOriginal": "Character Name in $effectiveSourceLang",
+                  "nameTranslation": "Character Name in $targetLang",
+                  "faction": "House/Sect/Faction/Role (e.g. 华山派, 日月神教, House Stark)",
+                  "role": "Protagonist / Antagonist / Mentor / Ally / 掌门 / 弟子",
+                  "bioOriginal": "2-3 sentences introducing the character's background, identity, and current situation in $effectiveSourceLang.",
+                  "bioTranslation": "Character introduction in $targetLang.",
                   "structuredRelations": [
                     {
                       "category": "parent / spouse / child / sibling / ally / rival / other",
-                      "label": "Target's role in ${config.sourceLang} (e.g. Father, Husband, Direwolf Companion, Lord Commander)",
-                      "labelTranslation": "Target's role in ${config.targetLang} (e.g. 父亲, 丈夫, 冰原狼伙伴, 守夜人总司令)",
+                      "label": "Target's role in $effectiveSourceLang (e.g. 恩师, 父亲, 丈夫, Lord Commander)",
+                      "labelTranslation": "Target's role in $targetLang (e.g. 恩师, 父亲, 丈夫, 守夜人总司令)",
                       "target": "Target Character Name"
                     }
                   ],
-                  "relationships": ["Father: Ned Stark", "Direwolf Companion: Ghost", "Lord Commander: Jeor Mormont"]
+                  "relationships": ["恩师: 岳不群", "冰原狼伙伴: Ghost"]
                 }
               ],
               "timeline": [
                 {
                   "stage": "Opening / 起因",
-                  "eventOriginal": "What happens in ${config.sourceLang}...",
-                  "eventTranslation": "Event explanation in ${config.targetLang}..."
+                  "eventOriginal": "What happens in $effectiveSourceLang...",
+                  "eventTranslation": "Event explanation in $targetLang..."
                 },
                 {
                   "stage": "Conflict & Turning Point / 冲突与转折",
@@ -330,11 +366,30 @@ object AiPromptBuilder {
         difficulty: String,
         scope: String
     ): Pair<String, String> {
+        val effectiveSourceLang = resolveSourceLanguage(config, text)
+        val targetLang = config.targetLang.ifBlank { "Chinese" }
+        val isNativeChinese = effectiveSourceLang.equals("Chinese", ignoreCase = true)
+
+        val languageDirective = if (isNativeChinese) {
+            """
+            LANGUAGE DIRECTIVE (CRITICAL - 纯正中文原著模式):
+            - The text is written in authentic Chinese.
+            - All questions, options, and explanations MUST be generated purely and naturally in CHINESE.
+            - NEVER translate questions, character names, or options into English or Pinyin.
+            """.trimIndent()
+        } else {
+            """
+            LANGUAGE DIRECTIVE:
+            - Source language is $effectiveSourceLang, explanation language is $targetLang.
+            """.trimIndent()
+        }
+
         val systemPrompt = """
             You are a master reading comprehension test designer.
             Generate $count multiple-choice questions (A, B, C, D) based on the text.
             Difficulty level: $difficulty.
-            Source language is ${config.sourceLang}, explanation language is ${config.targetLang}.
+            
+            $languageDirective
 
             OUTPUT FORMAT:
             You MUST return a JSON object with this EXACT structure:
@@ -342,8 +397,8 @@ object AiPromptBuilder {
               "questions": [
                 {
                   "id": 1,
-                  "questionOriginal": "Question text in ${config.sourceLang}...",
-                  "questionTranslation": "Question text in ${config.targetLang}...",
+                  "questionOriginal": "Question text in $effectiveSourceLang...",
+                  "questionTranslation": "Question text in $targetLang...",
                   "options": [
                     "A. Option 1",
                     "B. Option 2",
@@ -351,8 +406,8 @@ object AiPromptBuilder {
                     "D. Option 4"
                   ],
                   "correctAnswer": "A",
-                  "analysisOriginal": "Explanation in ${config.sourceLang}...",
-                  "analysisTranslation": "Explanation in ${config.targetLang}..."
+                  "analysisOriginal": "Explanation in $effectiveSourceLang...",
+                  "analysisTranslation": "Explanation in $targetLang..."
                 }
               ]
             }

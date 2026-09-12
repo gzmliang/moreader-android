@@ -442,10 +442,26 @@ private fun CharacterCardItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val isChinese = when {
+                    card.nameOriginal.isNotBlank() -> card.nameOriginal.any { it in '\u4e00'..'\u9fff' }
+                    card.nameTranslation.isNotBlank() -> card.nameTranslation.any { it in '\u4e00'..'\u9fff' }
+                    else -> false
+                }
+                val isSame = card.nameOriginal.trim().equals(card.nameTranslation.trim(), ignoreCase = true)
+
                 val primaryName = when (displayMode) {
                     "orig" -> if (card.nameOriginal.isNotBlank()) card.nameOriginal else card.nameTranslation
                     "target" -> if (card.nameTranslation.isNotBlank()) card.nameTranslation else card.nameOriginal
-                    else -> card.nameOriginal.ifBlank { card.nameTranslation }
+                    else -> {
+                        // In bilingual mode, if it's Chinese text, prefer Chinese name
+                        if (isChinese) {
+                            if (card.nameOriginal.any { it in '\u4e00'..'\u9fff' }) card.nameOriginal
+                            else if (card.nameTranslation.any { it in '\u4e00'..'\u9fff' }) card.nameTranslation
+                            else card.nameOriginal.ifBlank { card.nameTranslation }
+                        } else {
+                            card.nameOriginal.ifBlank { card.nameTranslation }
+                        }
+                    }
                 }
 
                 Row(
@@ -458,13 +474,16 @@ private fun CharacterCardItem(
                         fontWeight = FontWeight.Bold,
                         color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                     )
-                    if (displayMode == "bilingual" && card.nameTranslation.isNotBlank() && card.nameTranslation != card.nameOriginal) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "(${card.nameTranslation})",
-                            fontSize = (textSizeSp * 0.9f).sp,
-                            color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    if (displayMode == "bilingual" && card.nameTranslation.isNotBlank() && !isSame) {
+                        val secondaryName = if (primaryName == card.nameOriginal) card.nameTranslation else card.nameOriginal
+                        if (secondaryName.isNotBlank()) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "($secondaryName)",
+                                fontSize = (textSizeSp * 0.9f).sp,
+                                color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
 
@@ -586,10 +605,25 @@ private fun CharacterProfileSheetContent(
             verticalAlignment = Alignment.Top
         ) {
             Column(modifier = Modifier.weight(1f)) {
+                val isChinese = when {
+                    character.nameOriginal.isNotBlank() -> character.nameOriginal.any { it in '\u4e00'..'\u9fff' }
+                    character.nameTranslation.isNotBlank() -> character.nameTranslation.any { it in '\u4e00'..'\u9fff' }
+                    else -> false
+                }
+                val isSame = character.nameOriginal.trim().equals(character.nameTranslation.trim(), ignoreCase = true)
+
                 val primaryName = when (displayMode) {
                     "orig" -> if (character.nameOriginal.isNotBlank()) character.nameOriginal else character.nameTranslation
                     "target" -> if (character.nameTranslation.isNotBlank()) character.nameTranslation else character.nameOriginal
-                    else -> character.nameOriginal.ifBlank { character.nameTranslation }
+                    else -> {
+                        if (isChinese) {
+                            if (character.nameOriginal.any { it in '\u4e00'..'\u9fff' }) character.nameOriginal
+                            else if (character.nameTranslation.any { it in '\u4e00'..'\u9fff' }) character.nameTranslation
+                            else character.nameOriginal.ifBlank { character.nameTranslation }
+                        } else {
+                            character.nameOriginal.ifBlank { character.nameTranslation }
+                        }
+                    }
                 }
 
                 Text(
@@ -598,12 +632,15 @@ private fun CharacterProfileSheetContent(
                     fontWeight = FontWeight.Bold,
                     color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                 )
-                if (displayMode == "bilingual" && character.nameTranslation.isNotBlank() && character.nameTranslation != character.nameOriginal) {
-                    Text(
-                        text = character.nameTranslation,
-                        fontSize = (textSizeSp * 0.95f).sp,
-                        color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                if (displayMode == "bilingual" && character.nameTranslation.isNotBlank() && !isSame) {
+                    val secondaryName = if (primaryName == character.nameOriginal) character.nameTranslation else character.nameOriginal
+                    if (secondaryName.isNotBlank()) {
+                        Text(
+                            text = secondaryName,
+                            fontSize = (textSizeSp * 0.95f).sp,
+                            color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 // Faction & Role Badges

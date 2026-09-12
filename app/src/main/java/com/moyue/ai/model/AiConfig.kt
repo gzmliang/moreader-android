@@ -5,7 +5,7 @@ data class AiConfig(
     val baseUrl: String = "https://api.openai.com/v1",
     val apiKey: String = "",
     val model: String = "gpt-4o-mini",
-    val sourceLang: String = "English",
+    val sourceLang: String = "Auto",
     val targetLang: String = "Chinese"
 ) {
     fun cleanBaseUrl(): String {
