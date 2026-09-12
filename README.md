@@ -11,6 +11,13 @@ Originally migrated from a browser extension (墨阅 Moreader), reimagined as a 
   - Instant bottom sheet preview for both page-level and cross-chapter endnotes (no need to navigate away from reading text)
   - Automatic collision-avoidance between footnote popup and floating action chips
   - Bookmark-channel return jump with golden-halo badge highlight and soft blue paragraph highlight for 100% accurate visual focus restoration
+- **AI Character Graph & Plot Network (v2.9.52)** —
+  - Target-Centric relationship perspective constraint avoiding master-servant or seniority inversion
+  - Dual-language relationship labels (`labelTranslation`) with localized display
+  - Real-time character search by English/Chinese name or house/family
+  - Automatic multi-relative split into independent capsules with accurate generational categorization
+  - Resilient cache self-healing against missing fields and NPE
+  - Fallback relationship cards ensuring seamless interaction without dead ends
 - **Text-to-Speech** — Two TTS engines:
   - **Edge TTS** (online, 100+ voices across locales, gender icons)
   - **AI Voice** (OpenAI-compatible API)
