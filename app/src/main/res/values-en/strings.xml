@@ -505,10 +505,11 @@ Just change the Base URL and API Key</string>
     <string name="voice_picker_preview">Preview</string>
     <string name="voice_picker_stop">Stop</string>
     <string name="voice_picker_empty">No matching voices</string>
-    <string name="voice_picker_preview_text_chinese">你好，这是我的声音。</string>
-    <string name="voice_picker_preview_text_english">Hello, this is my voice.</string>
-    <string name="voice_picker_preview_text_japanese">こんにちは、これが私の声です。</string>
-    <string name="voice_picker_preview_text_korean">안녕하세요, 제 목소리입니다.</string>
+    <string name="voice_picker_preview_text_chinese">你好，我是你的朗读伴侣。希望在接下来的阅读时光里，为你带来温暖与舒适的陪伴。</string>
+    <string name="voice_picker_preview_text_english">Hello! It is a pleasure to read with you. I hope my voice brings your favorite books and stories to life.</string>
+    <string name="voice_picker_preview_text_japanese">こんにちは。私の声はいかがでしょうか？素敵な読書の時間をお届けします。</string>
+    <string name="voice_picker_preview_text_korean">안녕하세요. 오늘부터 당신의 독서 여정에 함께할 목소리입니다. 마음에 드셨으면 좋겠습니다.</string>
+    <string name="voice_preview_failed">Voice preview failed. Please check network or try another voice.</string>
 
     <!-- AI Companion (AI Companion and Quiz System) -->
     <string name="ai_companion_title">AI Companion</string>

@@ -63,13 +63,13 @@ private fun aiVoicesForModel(model: String): List<Pair<String, String>> {
 private fun previewTextForVoice(voiceId: String, isEdge: Boolean): String {
     if (isEdge) {
         return when {
-            voiceId.startsWith("zh-") -> "你好，这是我的声音，用于测试朗读效果。"
-            voiceId.startsWith("ja-") -> "こんにちは、これが私の声です。"
-            voiceId.startsWith("ko-") -> "안녕하세요, 제 목소리입니다。"
-            else -> "Hello, this is my voice."
+            voiceId.startsWith("zh-") -> "你好，我是你的朗读伴侣。希望在接下来的阅读时光里，为你带来温暖与舒适的陪伴。"
+            voiceId.startsWith("ja-") -> "こんにちは。私の声はいかがでしょうか？素敵な読書の時間をお届けします。"
+            voiceId.startsWith("ko-") -> "안녕하세요. 오늘부터 당신의 독서 여정에 함께할 목소리입니다. 마음에 드셨으면 좋겠습니다。"
+            else -> "Hello! It is a pleasure to read with you. I hope my voice brings your favorite books and stories to life."
         }
     }
-    return "你好，这是语音测试，用于确认当前引擎的声音是否满意。"
+    return "你好，我是你的朗读伴侣。希望在接下来的阅读时光里，为你带来温暖与舒适的陪伴。"
 }
 
 /**
@@ -321,7 +321,7 @@ fun TtsSettingsSheet(
                     )
                     Box(modifier = Modifier.weight(1f)) {
                         OutlinedTextField(
-                            value = EDGE_VOICES.find { it.id == localVoice.value }?.displayName(context) ?: localVoice.value,
+                            value = EdgeVoiceManager.getVoices(context).find { it.id == localVoice.value }?.displayName(context) ?: localVoice.value,
                             onValueChange = {}, readOnly = true,
                             label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_voice), fontSize = 11.sp) },
                             singleLine = true, modifier = Modifier.fillMaxWidth(),

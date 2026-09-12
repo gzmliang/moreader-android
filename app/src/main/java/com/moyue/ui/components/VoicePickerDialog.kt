@@ -1,16 +1,13 @@
 package com.moyue.app.ui.components
 
-import androidx.compose.animation.animateColorAsState
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -29,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -36,12 +34,14 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.File
+import java.io.FileInputStream
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
- * Voice picker dialog with search, language tabs, and preview playback.
- * Groups voices by language category and supports 1-tap preview.
+ * Voice picker dialog with dynamic Microsoft Edge-TTS voice list synchronization,
+ * search, language tabs, robust fallback, and audio preview playback.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,36 +54,39 @@ fun VoicePickerDialog(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    // ---- Dynamic voice list with local cache and instant 0ms fallback ----
+    var allVoices by remember { mutableStateOf(EdgeVoiceManager.getVoices(context)) }
+
+    LaunchedEffect(endpoint) {
+        val updated = EdgeVoiceManager.syncVoices(context, endpoint)
+        if (!updated.isNullOrEmpty()) {
+            allVoices = updated
+        }
+    }
+
     // ---- State ----
     var searchQuery by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf(0) }
     var previewingVoiceId by remember { mutableStateOf<String?>(null) }
     var mediaPlayerRef by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+    var currentTempFile by remember { mutableStateOf<File?>(null) }
+    var previewJob by remember { mutableStateOf<Job?>(null) }
+
     val previewClient = remember {
         OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(40, TimeUnit.SECONDS)
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
             .build()
     }
 
-    // Recent voices (stored in prefs or just use current as recent for now)
-    val recentVoices = remember { mutableStateListOf(currentVoiceId) }
-
-    // ---- Group voices by language category ----
-    val voiceCategories = remember {
-        mapOf(
-            0 to "common",   // 常用
-            1 to listOf("zh"),     // 中文
-            2 to listOf("en"),     // English
-            3 to listOf("ja"),     // 日本語
-            4 to listOf("ko"),     // 한국어
-            5 to emptyList<String>(),      // 其他
-        )
+    // Recent voices: defaults to currentVoiceId + top classics
+    val recentVoices = remember(currentVoiceId) {
+        listOf(currentVoiceId, "zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural", "en-US-JennyNeural", "en-US-GuyNeural")
     }
 
     // Filtered + grouped voices
-    val filtered = remember(searchQuery, selectedTab) {
-        EDGE_VOICES.filter { voice ->
+    val filtered = remember(searchQuery, selectedTab, allVoices) {
+        allVoices.filter { voice ->
             val matchesSearch = searchQuery.isBlank() ||
                     voice.displayName(context).contains(searchQuery, ignoreCase = true) ||
                     voice.id.contains(searchQuery, ignoreCase = true)
@@ -92,35 +95,43 @@ fun VoicePickerDialog(
             if (searchQuery.isNotBlank()) return@filter true // Show all matches when searching
 
             when (selectedTab) {
-                0 -> recentVoices.contains(voice.id) // 常用
+                0 -> recentVoices.contains(voice.id) || voice.id == currentVoiceId // 常用
                 1 -> voice.id.startsWith("zh-") // 中文
                 2 -> voice.id.startsWith("en-") // English
                 3 -> voice.id.startsWith("ja-") // 日本語
                 4 -> voice.id.startsWith("ko-") // 한국어
-                else -> voice.id !in listOf("zh", "en", "ja", "ko").flatMap { p ->
-                    EDGE_VOICES.filter { it.id.startsWith("$p-") }.map { it.id }
-                }
+                else -> !voice.id.startsWith("zh-") && !voice.id.startsWith("en-") &&
+                        !voice.id.startsWith("ja-") && !voice.id.startsWith("ko-")
             }
         }
     }
 
     // ---- Preview function ----
     fun stopPreview() {
+        previewJob?.cancel()
+        previewJob = null
         mediaPlayerRef?.let { mp ->
-            try { mp.stop() } catch (_: Exception) {}
+            try { if (mp.isPlaying) mp.stop() } catch (_: Exception) {}
             try { mp.release() } catch (_: Exception) {}
         }
         mediaPlayerRef = null
+        currentTempFile?.delete()
+        currentTempFile = null
         previewingVoiceId = null
     }
 
     fun playPreview(voiceId: String) {
-        if (previewingVoiceId != null) {
+        // Toggle off if already previewing the same voice
+        if (previewingVoiceId == voiceId) {
             stopPreview()
             return
         }
+
+        // Switch to new preview
+        stopPreview()
         previewingVoiceId = voiceId
-        scope.launch {
+
+        previewJob = scope.launch {
             try {
                 val previewText = when {
                     voiceId.startsWith("zh-") ->
@@ -132,6 +143,7 @@ fun VoicePickerDialog(
                     else ->
                         context.getString(com.moyue.app.R.string.voice_picker_preview_text_english)
                 }
+
                 val json = JSONObject().apply {
                     put("text", previewText)
                     put("voice", voiceId)
@@ -139,57 +151,98 @@ fun VoicePickerDialog(
                     put("pitch", "+0Hz")
                 }
                 val body = json.toString().toRequestBody("application/json".toMediaType())
-                val request = Request.Builder()
-                    .url("${endpoint.removeSuffix("/")}/tts")
-                    .post(body)
-                    .build()
-                val response = withContext(Dispatchers.IO) {
-                    previewClient.newCall(request).execute()
-                }
-                if (response.isSuccessful) {
-                    val audioBytes = response.body?.bytes()
-                    if (audioBytes != null && audioBytes.isNotEmpty()) {
-                        val tempFile = java.io.File.createTempFile("voice_preview_", ".mp3")
-                        tempFile.writeBytes(audioBytes)
-                        val mp = android.media.MediaPlayer().apply {
-                            setDataSource(tempFile.absolutePath)
-                            setOnCompletionListener {
-                                release()
-                                tempFile.delete()
-                                if (mediaPlayerRef === this) mediaPlayerRef = null
-                                previewingVoiceId = null
-                            }
-                            setOnErrorListener { mp2, _, _ ->
-                                mp2.release()
-                                tempFile.delete()
-                                if (mediaPlayerRef === mp2) mediaPlayerRef = null
-                                previewingVoiceId = null
-                                true
-                            }
-                            prepare()
-                            start()
-                        }
-                        mediaPlayerRef = mp
-                    } else {
-                        previewingVoiceId = null
-                    }
+
+                val clean = endpoint.removeSuffix("/")
+                val defaultServer = "http://p-plus.duckdns.org:5001"
+                val fallbackServer = "http://powerplus.blogsyte.com:5001"
+                val endpoints = if (clean == defaultServer || clean == fallbackServer) {
+                    listOf(clean, if (clean == defaultServer) fallbackServer else defaultServer)
                 } else {
-                    previewingVoiceId = null
+                    listOf(clean)
+                }
+
+                var audioBytes: ByteArray? = null
+                withContext(Dispatchers.IO) {
+                    for (ep in endpoints) {
+                        try {
+                            val request = Request.Builder()
+                                .url("$ep/tts")
+                                .post(body)
+                                .build()
+                            val response = previewClient.newCall(request).execute()
+                            if (response.isSuccessful) {
+                                val bytes = response.body?.bytes()
+                                if (bytes != null && bytes.isNotEmpty()) {
+                                    audioBytes = bytes
+                                    break
+                                }
+                            }
+                        } catch (_: Exception) {
+                            // Try next candidate
+                        }
+                    }
+                }
+
+                if (audioBytes != null && audioBytes!!.isNotEmpty()) {
+                    val tempFile = File.createTempFile("voice_preview_", ".mp3", context.cacheDir)
+                    tempFile.writeBytes(audioBytes!!)
+                    currentTempFile = tempFile
+
+                    val mp = android.media.MediaPlayer()
+                    mediaPlayerRef = mp
+
+                    FileInputStream(tempFile).use { fis ->
+                        mp.setDataSource(fis.fd)
+                    }
+
+                    mp.setOnCompletionListener {
+                        mp.release()
+                        tempFile.delete()
+                        if (mediaPlayerRef === mp) mediaPlayerRef = null
+                        if (currentTempFile === tempFile) currentTempFile = null
+                        if (previewingVoiceId == voiceId) previewingVoiceId = null
+                    }
+
+                    mp.setOnErrorListener { mp2, _, _ ->
+                        try { mp2.release() } catch (_: Exception) {}
+                        tempFile.delete()
+                        if (mediaPlayerRef === mp2) mediaPlayerRef = null
+                        if (currentTempFile === tempFile) currentTempFile = null
+                        if (previewingVoiceId == voiceId) previewingVoiceId = null
+                        true
+                    }
+
+                    mp.setOnPreparedListener {
+                        it.start()
+                    }
+                    mp.prepareAsync()
+                } else {
+                    if (previewingVoiceId == voiceId) {
+                        previewingVoiceId = null
+                        Toast.makeText(
+                            context,
+                            context.getString(com.moyue.app.R.string.voice_preview_failed),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 }
             } catch (e: Exception) {
-                previewingVoiceId = null
+                if (previewingVoiceId == voiceId) {
+                    previewingVoiceId = null
+                    Toast.makeText(
+                        context,
+                        context.getString(com.moyue.app.R.string.voice_preview_failed),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
         }
     }
 
-    // 停止预览并释放资源（Dialog 关闭时调用）
+    // Stop and cleanup audio on dispose
     DisposableEffect(Unit) {
         onDispose {
-            mediaPlayerRef?.let { mp ->
-                try { mp.stop() } catch (_: Exception) {}
-                try { mp.release() } catch (_: Exception) {}
-            }
-            mediaPlayerRef = null
+            stopPreview()
         }
     }
 
@@ -207,7 +260,7 @@ fun VoicePickerDialog(
             tonalElevation = 6.dp,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // ── Header: title + close ──
+                // ── Header: title + voice count + close ──
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -222,9 +275,9 @@ fun VoicePickerDialog(
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "${filtered.size} ${context.getString(com.moyue.app.R.string.voice_female).firstOrNull()?.let { "/" + it }?.removeSuffix("/") ?: ""}",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                            "${filtered.size}",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             modifier = Modifier.padding(end = 8.dp),
                         )
                         IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
@@ -382,8 +435,9 @@ fun VoicePickerDialog(
                                         if (isPreviewing) {
                                             Icon(
                                                 Icons.Default.Stop,
-                                                contentDescription = null,
+                                                contentDescription = context.getString(com.moyue.app.R.string.voice_picker_stop),
                                                 modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.primary,
                                             )
                                         } else {
                                             Icon(
@@ -392,20 +446,6 @@ fun VoicePickerDialog(
                                                 modifier = Modifier.size(16.dp),
                                             )
                                         }
-                                    }
-
-                                    Spacer(Modifier.width(4.dp))
-
-                                    // Checkmark
-                                    if (isSelected) {
-                                        Icon(
-                                            Icons.Default.Check,
-                                            null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                    } else {
-                                        Spacer(Modifier.width(18.dp))
                                     }
                                 }
                             }
