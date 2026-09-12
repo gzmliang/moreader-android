@@ -7,6 +7,9 @@ Originally migrated from a browser extension (墨阅 Moreader), reimagined as a 
 ## Features
 
 - **EPUB Reading** — Renders EPUB content via WebView with customizable fonts, themes, and layout
+- **Footnote Preview & Precise Return-Jump (v2.9.43)** — 
+  - Instant bottom sheet preview for page-level footnotes without losing reading place
+  - Bookmark-channel return jump with golden-halo badge highlight and soft blue paragraph highlight for 100% accurate visual focus restoration
 - **Text-to-Speech** — Two TTS engines:
   - **Edge TTS** (online, 100+ voices across locales, gender icons)
   - **AI Voice** (OpenAI-compatible API)
