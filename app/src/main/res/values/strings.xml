@@ -694,6 +694,8 @@ AI Voice（云端 TTS）：
     <string name="ai_summary_badge_text">AI 精读</string>
 
     <!-- Plot Tab -->
+    <string name="ai_expand">展开</string>
+    <string name="ai_collapse">收起</string>
     <string name="ai_plot_core_title">📌 叙事格局与推进核心</string>
     <string name="ai_plot_relations_title">🔗 角色关系网络</string>
     <string name="ai_plot_timeline_title">⏳ 关键情节推进线</string>

@@ -55,20 +55,31 @@ class AiCacheRepository(private val context: Context) {
                     "SiliconFlow" -> "Qwen/Qwen2.5-72B-Instruct"
                     else -> "gpt-4o-mini"
                 }
+                val migratedSourceLang = if (config.sourceLang.isBlank() || (config.sourceLang.equals("English", ignoreCase = true) && !prefs.getBoolean("ai_source_lang_manually_set", false))) {
+                    "Auto"
+                } else {
+                    config.sourceLang
+                }
                 return config.copy(
                     provider = mappedProvider,
                     baseUrl = fallbackBaseUrl,
                     apiKey = transApiKey,
                     model = fallbackModel,
+                    sourceLang = migratedSourceLang,
                     targetLang = if (config.targetLang.isNotBlank()) config.targetLang else transTargetLang
                 )
             }
         }
-        return config
+        val migratedSourceLang = if (config.sourceLang.isBlank() || (config.sourceLang.equals("English", ignoreCase = true) && !prefs.getBoolean("ai_source_lang_manually_set", false))) {
+            "Auto"
+        } else {
+            config.sourceLang
+        }
+        return config.copy(sourceLang = migratedSourceLang)
     }
 
     fun saveAiConfig(config: AiConfig) {
-        prefs.edit().putString("ai_config_json", gson.toJson(config)).apply()
+        prefs.edit().putString("ai_config_json", gson.toJson(config)).putBoolean("ai_source_lang_manually_set", true).apply()
         if (config.provider == "Custom") {
             saveCustomConfig(config.baseUrl, config.apiKey, config.model)
         }
@@ -217,6 +228,16 @@ class AiCacheRepository(private val context: Context) {
             "plot_${plot.bookId}_ch_${plot.chapterIndex}"
         }
         prefs.edit().putString(key, gson.toJson(plot)).apply()
+    }
+
+    fun clearPlot(bookId: String, chapterIndex: Int, scope: String) {
+        val primaryKey = if (scope == "book") {
+            "plot_${bookId}_book"
+        } else {
+            "plot_${bookId}_ch_${chapterIndex}"
+        }
+        val legacyKey = "plot_${bookId}_${chapterIndex}_${scope}"
+        prefs.edit().remove(primaryKey).remove(legacyKey).apply()
     }
 
     // Quiz Cache

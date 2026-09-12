@@ -13,7 +13,13 @@ data class StructuredRelation(
         val safeLabel = label ?: ""
         val safeTrans = labelTranslation ?: ""
         return when (displayMode) {
-            "orig" -> safeLabel.ifBlank { safeTrans }
+            "orig" -> {
+                if (!safeLabel.any { it in '\u4e00'..'\u9fff' } && safeTrans.any { it in '\u4e00'..'\u9fff' }) {
+                    safeTrans
+                } else {
+                    safeLabel.ifBlank { safeTrans }
+                }
+            }
             "target" -> safeTrans.ifBlank { safeLabel }
             "bilingual" -> safeTrans.ifBlank { safeLabel }
             else -> safeLabel.ifBlank { safeTrans }

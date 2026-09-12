@@ -571,6 +571,8 @@ Just change the Base URL and API Key</string>
     <string name="ai_summary_badge_text">AI Summary</string>
 
     <!-- Plot Tab -->
+    <string name="ai_expand">Expand</string>
+    <string name="ai_collapse">Collapse</string>
     <string name="ai_plot_core_title">📌 Narrative Core and Dynamics</string>
     <string name="ai_plot_relations_title">🔗 Character Relationship Network</string>
     <string name="ai_plot_timeline_title">⏳ Chronological Plotline</string>

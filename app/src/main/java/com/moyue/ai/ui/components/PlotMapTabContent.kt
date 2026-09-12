@@ -14,6 +14,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -57,23 +59,51 @@ fun PlotMapTabContent(
     val scope = rememberCoroutineScope()
     var selectedScope by remember { mutableStateOf("chapter") } // "chapter" or "book"
 
+    val isChineseBook = remember(bookTitle, chapterText) {
+        val sample = (bookTitle + " " + chapterText.take(1000))
+        val count = sample.count { it in '\u4e00'..'\u9fff' }
+        count >= 5 || (sample.isNotBlank() && count.toDouble() / sample.length > 0.1) || com.moyue.tts.LanguageVoiceDetector.detectLanguage(sample) == "zh"
+    }
+
+    fun isStalePlotResult(result: AiPlotResult?, isChinese: Boolean): Boolean {
+        if (result == null || !isChinese) return false
+        val chars = result.characters
+        if (chars.isNotEmpty()) {
+            val englishOrigCount = chars.count { card ->
+                card.nameOriginal.isNotBlank() &&
+                card.nameOriginal.all { it.code < 128 } &&
+                card.nameOriginal.any { it.isLetter() }
+            }
+            if (englishOrigCount.toDouble() / chars.size > 0.3) {
+                return true
+            }
+        }
+        if (result.coreDynamicsOriginal.isNotBlank() &&
+            !result.coreDynamicsOriginal.any { it in '\u4e00'..'\u9fff' } &&
+            (result.coreDynamicsTranslation.any { it in '\u4e00'..'\u9fff' } || isChinese)
+        ) {
+            return true
+        }
+        return false
+    }
+
     var plotResult by remember {
-        mutableStateOf(repository.getPlot(bookId, chapterIndex, selectedScope))
+        val initial = repository.getPlot(bookId, chapterIndex, selectedScope)
+        if (isStalePlotResult(initial, isChineseBook)) {
+            repository.clearPlot(bookId, chapterIndex, selectedScope)
+            mutableStateOf<AiPlotResult?>(null)
+        } else {
+            mutableStateOf(initial)
+        }
     }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isCoreExpanded by remember { mutableStateOf(false) }
 
     // Faction filter, search query, and BottomSheet character selection
     var selectedFaction by remember { mutableStateOf<String?>(null) }
     var characterSearchQuery by remember { mutableStateOf("") }
     var selectedCharacter by remember { mutableStateOf<CharacterCard?>(null) }
-
-    LaunchedEffect(bookId, chapterIndex, selectedScope) {
-        plotResult = repository.getPlot(bookId, chapterIndex, selectedScope)
-        selectedFaction = null
-        characterSearchQuery = ""
-        selectedCharacter = null
-    }
 
     fun doGeneratePlot() {
         isLoading = true
@@ -104,6 +134,20 @@ fun PlotMapTabContent(
         }
     }
 
+    LaunchedEffect(bookId, chapterIndex, selectedScope) {
+        val cached = repository.getPlot(bookId, chapterIndex, selectedScope)
+        if (isStalePlotResult(cached, isChineseBook)) {
+            repository.clearPlot(bookId, chapterIndex, selectedScope)
+            plotResult = null
+            doGeneratePlot()
+        } else {
+            plotResult = cached
+        }
+        selectedFaction = null
+        characterSearchQuery = ""
+        selectedCharacter = null
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // Controls Header
         Surface(
@@ -116,7 +160,7 @@ fun PlotMapTabContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(8.dp),
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -135,27 +179,27 @@ fun PlotMapTabContent(
                 }
 
                 if (plotResult != null) {
-                    Text(
-                        text = stringResource(R.string.ai_regenerate_btn),
-                        fontSize = 11.sp,
-                        color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable {
-                            doGeneratePlot()
-                        }
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "⚡" + stringResource(R.string.ai_cached_short),
+                            fontSize = 11.sp,
+                            color = if (isEink) Color.Black else Color(0xFF10B981),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = stringResource(R.string.ai_regenerate_btn),
+                            fontSize = 11.sp,
+                            color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable {
+                                doGeneratePlot()
+                            }
+                        )
+                    }
                 }
             }
-        }
-
-        // Cache Status
-        if (plotResult != null) {
-            Text(
-                text = stringResource(R.string.ai_cached_badge),
-                fontSize = 11.sp,
-                color = if (isEink) Color.Black else Color(0xFF10B981),
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp)
-            )
         }
 
         // Content Area
@@ -214,46 +258,9 @@ fun PlotMapTabContent(
 
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(vertical = 10.dp)
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
                     ) {
-                        // 1. Narrative Core & Stakes
-                        val showCoreOrig = (displayMode == "bilingual" || displayMode == "orig" || result.coreDynamicsTranslation.isBlank()) && result.coreDynamicsOriginal.isNotBlank()
-                        val showCoreTrans = (displayMode == "bilingual" || displayMode == "target") && result.coreDynamicsTranslation.isNotBlank()
-
-                        if (showCoreOrig || showCoreTrans) {
-                            item {
-                                SectionHeader(title = stringResource(R.string.ai_plot_core_title), isEink = isEink)
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (isEink) Color.White else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(bottom = 16.dp)
-                                        .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp)) else Modifier)
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        if (showCoreOrig) {
-                                            Text(
-                                                text = result.coreDynamicsOriginal,
-                                                fontSize = textSizeSp.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
-                                        if (showCoreTrans) {
-                                            if (showCoreOrig) Spacer(modifier = Modifier.height(6.dp))
-                                            Text(
-                                                text = result.coreDynamicsTranslation,
-                                                fontSize = (textSizeSp * 0.92f).sp,
-                                                color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // 2. Character Relationship Cards & Lineage
+                        // 1. Character Relationship Cards & Lineage (第一核心视觉重心：置顶人物角色图谱)
                         if (allCharacters.isNotEmpty()) {
                             item {
                                 SectionHeader(title = stringResource(R.string.ai_plot_relations_title), isEink = isEink)
@@ -329,11 +336,87 @@ fun PlotMapTabContent(
                                     isEink = isEink,
                                     textSizeSp = textSizeSp,
                                     displayMode = displayMode,
+                                    isChineseBook = isChineseBook,
                                     onClick = { selectedCharacter = card }
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                             }
-                            item { Spacer(modifier = Modifier.height(12.dp)) }
+                            item { Spacer(modifier = Modifier.height(10.dp)) }
+                        }
+
+                        // 2. Narrative Core & Stakes (收敛为精简可折叠小卡片)
+                        val showCoreOrig = (displayMode == "bilingual" || displayMode == "orig" || result.coreDynamicsTranslation.isBlank()) && result.coreDynamicsOriginal.isNotBlank()
+                        val showCoreTrans = (displayMode == "bilingual" || displayMode == "target") && result.coreDynamicsTranslation.isNotBlank()
+
+                        if (showCoreOrig || showCoreTrans) {
+                            item {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isEink) Color.White else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { isCoreExpanded = !isCoreExpanded }
+                                        .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp)) else Modifier)
+                                ) {
+                                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = stringResource(R.string.ai_plot_core_title),
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
+                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (isCoreExpanded) stringResource(R.string.ai_collapse) else stringResource(R.string.ai_expand),
+                                                    fontSize = 11.sp,
+                                                    color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.primary
+                                                )
+                                                Icon(
+                                                    imageVector = if (isCoreExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+
+                                        if (isCoreExpanded) {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            val coreOrigText = if (isChineseBook && !result.coreDynamicsOriginal.any { it in '\u4e00'..'\u9fff' } && result.coreDynamicsTranslation.any { it in '\u4e00'..'\u9fff' }) {
+                                                result.coreDynamicsTranslation
+                                            } else {
+                                                result.coreDynamicsOriginal
+                                            }
+                                            if (showCoreOrig && coreOrigText.isNotBlank()) {
+                                                Text(
+                                                    text = coreOrigText,
+                                                    fontSize = textSizeSp.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                            if (showCoreTrans && result.coreDynamicsTranslation.isNotBlank() && result.coreDynamicsTranslation != coreOrigText) {
+                                                if (showCoreOrig && coreOrigText.isNotBlank()) Spacer(modifier = Modifier.height(6.dp))
+                                                Text(
+                                                    text = result.coreDynamicsTranslation,
+                                                    fontSize = (textSizeSp * 0.92f).sp,
+                                                    color = if (isEink) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(14.dp))
+                            }
                         }
 
                         // 3. Chronological Plotline
@@ -346,7 +429,8 @@ fun PlotMapTabContent(
                                     stage = stage,
                                     isEink = isEink,
                                     textSizeSp = textSizeSp,
-                                    displayMode = displayMode
+                                    displayMode = displayMode,
+                                    isChineseBook = isChineseBook
                                 )
                                 Spacer(modifier = Modifier.height(10.dp))
                             }
@@ -367,6 +451,7 @@ fun PlotMapTabContent(
                                 isEink = isEink,
                                 textSizeSp = textSizeSp,
                                 displayMode = displayMode,
+                                isChineseBook = isChineseBook,
                                 onSelectCharacter = { newChar -> selectedCharacter = newChar },
                                 onClose = { selectedCharacter = null }
                             )
@@ -423,6 +508,7 @@ private fun CharacterCardItem(
     isEink: Boolean,
     textSizeSp: Float,
     displayMode: String,
+    isChineseBook: Boolean = false,
     onClick: () -> Unit
 ) {
     Surface(
@@ -442,7 +528,7 @@ private fun CharacterCardItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val isChinese = when {
+                val isChinese = isChineseBook || when {
                     card.nameOriginal.isNotBlank() -> card.nameOriginal.any { it in '\u4e00'..'\u9fff' }
                     card.nameTranslation.isNotBlank() -> card.nameTranslation.any { it in '\u4e00'..'\u9fff' }
                     else -> false
@@ -450,7 +536,13 @@ private fun CharacterCardItem(
                 val isSame = card.nameOriginal.trim().equals(card.nameTranslation.trim(), ignoreCase = true)
 
                 val primaryName = when (displayMode) {
-                    "orig" -> if (card.nameOriginal.isNotBlank()) card.nameOriginal else card.nameTranslation
+                    "orig" -> {
+                        if (isChinese && !card.nameOriginal.any { it in '\u4e00'..'\u9fff' } && card.nameTranslation.any { it in '\u4e00'..'\u9fff' }) {
+                            card.nameTranslation
+                        } else {
+                            if (card.nameOriginal.isNotBlank()) card.nameOriginal else card.nameTranslation
+                        }
+                    }
                     "target" -> if (card.nameTranslation.isNotBlank()) card.nameTranslation else card.nameOriginal
                     else -> {
                         // In bilingual mode, if it's Chinese text, prefer Chinese name
@@ -582,11 +674,18 @@ private fun CharacterProfileSheetContent(
     isEink: Boolean,
     textSizeSp: Float,
     displayMode: String,
+    isChineseBook: Boolean = false,
     onSelectCharacter: (CharacterCard) -> Unit,
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+
+    val isChinese = isChineseBook || when {
+        character.nameOriginal.isNotBlank() -> character.nameOriginal.any { it in '\u4e00'..'\u9fff' }
+        character.nameTranslation.isNotBlank() -> character.nameTranslation.any { it in '\u4e00'..'\u9fff' }
+        else -> false
+    }
 
     Column(
         modifier = Modifier
@@ -605,15 +704,16 @@ private fun CharacterProfileSheetContent(
             verticalAlignment = Alignment.Top
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                val isChinese = when {
-                    character.nameOriginal.isNotBlank() -> character.nameOriginal.any { it in '\u4e00'..'\u9fff' }
-                    character.nameTranslation.isNotBlank() -> character.nameTranslation.any { it in '\u4e00'..'\u9fff' }
-                    else -> false
-                }
                 val isSame = character.nameOriginal.trim().equals(character.nameTranslation.trim(), ignoreCase = true)
 
                 val primaryName = when (displayMode) {
-                    "orig" -> if (character.nameOriginal.isNotBlank()) character.nameOriginal else character.nameTranslation
+                    "orig" -> {
+                        if (isChinese && !character.nameOriginal.any { it in '\u4e00'..'\u9fff' } && character.nameTranslation.any { it in '\u4e00'..'\u9fff' }) {
+                            character.nameTranslation
+                        } else {
+                            if (character.nameOriginal.isNotBlank()) character.nameOriginal else character.nameTranslation
+                        }
+                    }
                     "target" -> if (character.nameTranslation.isNotBlank()) character.nameTranslation else character.nameOriginal
                     else -> {
                         if (isChinese) {
@@ -695,8 +795,10 @@ private fun CharacterProfileSheetContent(
         )
 
         // ── 2. Biography & Background ──
-        val showBioOrig = (displayMode == "bilingual" || displayMode == "orig" || character.bioTranslation.isBlank()) && character.bioOriginal.isNotBlank()
-        val showBioTrans = (displayMode == "bilingual" || displayMode == "target") && character.bioTranslation.isNotBlank()
+        val isBioOrigEnglishOnly = isChinese && !character.bioOriginal.any { it in '\u4e00'..'\u9fff' } && character.bioTranslation.any { it in '\u4e00'..'\u9fff' }
+        val effectiveBioOrig = if (isBioOrigEnglishOnly) character.bioTranslation else character.bioOriginal
+        val showBioOrig = (displayMode == "bilingual" || displayMode == "orig" || character.bioTranslation.isBlank()) && effectiveBioOrig.isNotBlank()
+        val showBioTrans = (displayMode == "bilingual" || displayMode == "target") && character.bioTranslation.isNotBlank() && (!isBioOrigEnglishOnly || displayMode == "target")
 
         if (showBioOrig || showBioTrans) {
             Text(
@@ -717,13 +819,13 @@ private fun CharacterProfileSheetContent(
                 Column(modifier = Modifier.padding(12.dp)) {
                     if (showBioOrig) {
                         Text(
-                            text = character.bioOriginal,
+                            text = effectiveBioOrig,
                             fontSize = (textSizeSp * 0.95f).sp,
                             lineHeight = (textSizeSp * 1.35f).sp,
                             color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    if (showBioTrans) {
+                    if (showBioTrans && character.bioTranslation != effectiveBioOrig) {
                         if (showBioOrig) Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = character.bioTranslation,
@@ -859,10 +961,13 @@ private fun TimelineStageItem(
     stage: PlotStage,
     isEink: Boolean,
     textSizeSp: Float,
-    displayMode: String
+    displayMode: String,
+    isChineseBook: Boolean = false
 ) {
-    val showEventOrig = (displayMode == "bilingual" || displayMode == "orig" || stage.eventTranslation.isBlank()) && stage.eventOriginal.isNotBlank()
-    val showEventTrans = (displayMode == "bilingual" || displayMode == "target") && stage.eventTranslation.isNotBlank()
+    val isEventOrigEnglishOnly = isChineseBook && !stage.eventOriginal.any { it in '\u4e00'..'\u9fff' } && stage.eventTranslation.any { it in '\u4e00'..'\u9fff' }
+    val effectiveEventOrig = if (isEventOrigEnglishOnly) stage.eventTranslation else stage.eventOriginal
+    val showEventOrig = (displayMode == "bilingual" || displayMode == "orig" || stage.eventTranslation.isBlank()) && effectiveEventOrig.isNotBlank()
+    val showEventTrans = (displayMode == "bilingual" || displayMode == "target") && stage.eventTranslation.isNotBlank() && (!isEventOrigEnglishOnly || displayMode == "target")
 
     Row(modifier = Modifier.fillMaxWidth()) {
         // Vertical Timeline bullet
@@ -894,12 +999,12 @@ private fun TimelineStageItem(
             if (showEventOrig) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = stage.eventOriginal,
+                    text = effectiveEventOrig,
                     fontSize = (textSizeSp * 0.95f).sp,
                     color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
                 )
             }
-            if (showEventTrans) {
+            if (showEventTrans && stage.eventTranslation != effectiveEventOrig) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = stage.eventTranslation,

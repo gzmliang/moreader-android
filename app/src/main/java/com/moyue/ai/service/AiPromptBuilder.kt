@@ -157,7 +157,17 @@ object AiPromptBuilder {
         }
     }
 
-    private fun resolveSourceLanguage(config: AiConfig, sampleText: String): String {
+    fun isChineseText(sampleText: String, title: String = ""): Boolean {
+        val sample = (title + " " + sampleText.take(1500))
+        val count = sample.count { it in '\u4e00'..'\u9fff' }
+        return count >= 5 || (sample.isNotBlank() && count.toDouble() / sample.length > 0.1) || com.moyue.tts.LanguageVoiceDetector.detectLanguage(sampleText) == "zh"
+    }
+
+    private fun resolveSourceLanguage(config: AiConfig, sampleText: String, title: String = ""): String {
+        // 铁律：只要书名或正文包含中文，强制锁死为纯正中文模式，绝不受任何旧配置干扰
+        if (isChineseText(sampleText, title)) {
+            return "Chinese"
+        }
         val configured = config.sourceLang.trim()
         if (configured.isNotBlank() && !configured.equals("Auto", ignoreCase = true)) {
             return configured
@@ -178,24 +188,123 @@ object AiPromptBuilder {
         text: String,
         scope: String
     ): Pair<String, String> {
-        val effectiveSourceLang = resolveSourceLanguage(config, text)
+        val effectiveSourceLang = resolveSourceLanguage(config, text, title)
         val targetLang = config.targetLang.ifBlank { "Chinese" }
         val isNativeChinese = effectiveSourceLang.equals("Chinese", ignoreCase = true)
 
         val languageMandate = if (isNativeChinese) {
             """
-            LANGUAGE DIRECTIVE (CRITICAL - 纯正中文原著模式):
-            - The original text is written in authentic Chinese ($effectiveSourceLang).
-            - The target explanation language is also $targetLang.
-            - Therefore, ALL character names (nameOriginal & nameTranslation), factions, roles, bios, structured relationship labels, and timeline events MUST be directly and fluently written in authentic CHINESE!
-            - NEVER translate Chinese character names or terms into English pinyin or English words (e.g. use "令狐冲" directly, NEVER "Linghu Chong"; use "华山派", NEVER "Huashan Sect"; use "师徒/长辈", NEVER "Master/Disciple").
-            - For nameTranslation and bioTranslation, you may keep them identical to nameOriginal and bioOriginal, or provide polished contemporary Chinese phrasing.
+            LANGUAGE DIRECTIVE (CRITICAL - 纯正中文原著最高铁律 - 绝严禁任何英文或拼音):
+            - The original book text is authentic CHINESE ($effectiveSourceLang).
+            - The target explanation language is also CHINESE ($targetLang).
+            - MANDATORY RULE: ALL character names (nameOriginal & nameTranslation), factions, roles, bios (bioOriginal & bioTranslation), structured relationship labels (label & labelTranslation), core narrative dynamics, and timeline events MUST be written 100% in authentic, idiomatic CHINESE!
+            - STRICT PROHIBITION: NEVER translate any Chinese character name, sect/faction, martial art, or term into English or Pinyin!
+              * Example: Use "令狐冲" for BOTH "nameOriginal" and "nameTranslation" (ABSOLUTELY NEVER "Linghu Chong").
+              * Example: Use "任盈盈" for BOTH "nameOriginal" and "nameTranslation" (ABSOLUTELY NEVER "Ren Yingying").
+              * Example: Use "岳不群" for BOTH "nameOriginal" and "nameTranslation" (ABSOLUTELY NEVER "Yue Buqun").
+              * Example: Use "华山派" (NEVER "Huashan Sect"), "日月神教" (NEVER "Sun Moon Holy Cult"), "辟邪剑法" (NEVER "Bixie Swordplay").
+              * Example: Use "恩师 / 掌门" (NEVER "Master / Leader"), "大师兄 / 掌门大弟子" (NEVER "Senior Disciple").
+            - For all "Original" and "Translation" paired fields (nameOriginal & nameTranslation, bioOriginal & bioTranslation, coreDynamicsOriginal & coreDynamicsTranslation, eventOriginal & eventTranslation), directly fill BOTH fields with authentic, natural Chinese.
             """.trimIndent()
         } else {
             """
             LANGUAGE DIRECTIVE:
             - The source language is $effectiveSourceLang and the target explanation language is $targetLang.
             - For foreign works (e.g. English, Japanese), keep original names/terms in "Original" fields and provide accurate $targetLang translations in "Translation" fields.
+            """.trimIndent()
+        }
+
+        val jsonFormatExample = if (isNativeChinese) {
+            """
+            {
+              "coreDynamicsOriginal": "一至两段凝练生动的叙事格局、核心冲突与剧情张力分析（纯正中文）...",
+              "coreDynamicsTranslation": "一至两段凝练生动的叙事格局、核心冲突与剧情张力分析（纯正中文）...",
+              "characters": [
+                {
+                  "nameOriginal": "令狐冲",
+                  "nameTranslation": "令狐冲",
+                  "faction": "华山派",
+                  "role": "大弟子 / 主角",
+                  "bioOriginal": "华山派大弟子，生性豁达不羁，机缘巧合下习得独孤九剑，卷入五岳剑派与日月神教的纷争。",
+                  "bioTranslation": "华山派大弟子，生性豁达不羁，机缘巧合下习得独孤九剑，卷入五岳剑派与日月神教的纷争。",
+                  "structuredRelations": [
+                    {
+                      "category": "parent",
+                      "label": "恩师 / 养父",
+                      "labelTranslation": "恩师 / 养父",
+                      "target": "岳不群"
+                    },
+                    {
+                      "category": "spouse",
+                      "label": "生死知己 / 伴侣",
+                      "labelTranslation": "生死知己 / 伴侣",
+                      "target": "任盈盈"
+                    }
+                  ],
+                  "relationships": ["恩师: 岳不群", "伴侣: 任盈盈"]
+                }
+              ],
+              "timeline": [
+                {
+                  "stage": "起因 / 开端",
+                  "eventOriginal": "福威镖局惨遭灭门，辟邪剑谱引动江湖各大门派暗流涌动...",
+                  "eventTranslation": "福威镖局惨遭灭门，辟邪剑谱引动江湖各大门派暗流涌动..."
+                },
+                {
+                  "stage": "冲突与转折",
+                  "eventOriginal": "令狐冲思过崖获风清扬传授独孤九剑，重创强敌却见疑于师门...",
+                  "eventTranslation": "令狐冲思过崖获风清扬传授独孤九剑，重创强敌却见疑于师门..."
+                },
+                {
+                  "stage": "高潮与结局",
+                  "eventOriginal": "黑木崖力战东方不败，五岳剑派合并阴谋败露，令狐冲与任盈盈琴箫和鸣隐退江湖...",
+                  "eventTranslation": "黑木崖力战东方不败，五岳剑派合并阴谋败露，令狐冲与任盈盈琴箫和鸣隐退江湖..."
+                }
+              ]
+            }
+            """.trimIndent()
+        } else {
+            """
+            {
+              "coreDynamicsOriginal": "One concise paragraph explaining narrative stakes & tension in $effectiveSourceLang...",
+              "coreDynamicsTranslation": "Explanation in $targetLang...",
+              "characters": [
+                {
+                  "nameOriginal": "Character Name in $effectiveSourceLang",
+                  "nameTranslation": "Character Name in $targetLang",
+                  "faction": "House/Sect/Faction/Role (e.g. House Stark, Night's Watch)",
+                  "role": "Protagonist / Antagonist / Mentor / Ally",
+                  "bioOriginal": "2-3 sentences introducing the character's background, identity, and current situation in $effectiveSourceLang.",
+                  "bioTranslation": "Character introduction in $targetLang.",
+                  "structuredRelations": [
+                    {
+                      "category": "parent / spouse / child / sibling / ally / rival / other",
+                      "label": "Target's role in $effectiveSourceLang (e.g. Father, Husband, Lord Commander)",
+                      "labelTranslation": "Target's role in $targetLang (e.g. 父亲, 丈夫, 守夜人总司令)",
+                      "target": "Target Character Name"
+                    }
+                  ],
+                  "relationships": ["Father: Ned Stark", "Lord Commander: Jeor Mormont"]
+                }
+              ],
+              "timeline": [
+                {
+                  "stage": "Opening / 起因",
+                  "eventOriginal": "What happens in $effectiveSourceLang...",
+                  "eventTranslation": "Event explanation in $targetLang..."
+                },
+                {
+                  "stage": "Conflict & Turning Point / 冲突与转折",
+                  "eventOriginal": "Major turning point in $effectiveSourceLang...",
+                  "eventTranslation": "Turning point explanation in $targetLang..."
+                },
+                {
+                  "stage": "Climax & Resolution / 高潮与结局",
+                  "eventOriginal": "Resolution in $effectiveSourceLang...",
+                  "eventTranslation": "Resolution explanation in $targetLang..."
+                }
+              ]
+            }
             """.trimIndent()
         }
 
@@ -230,46 +339,7 @@ object AiPromptBuilder {
 
             OUTPUT FORMAT:
             You MUST return a JSON object with this EXACT structure:
-            {
-              "coreDynamicsOriginal": "One concise paragraph explaining narrative stakes & tension in $effectiveSourceLang...",
-              "coreDynamicsTranslation": "Explanation in $targetLang...",
-              "characters": [
-                {
-                  "nameOriginal": "Character Name in $effectiveSourceLang",
-                  "nameTranslation": "Character Name in $targetLang",
-                  "faction": "House/Sect/Faction/Role (e.g. 华山派, 日月神教, House Stark)",
-                  "role": "Protagonist / Antagonist / Mentor / Ally / 掌门 / 弟子",
-                  "bioOriginal": "2-3 sentences introducing the character's background, identity, and current situation in $effectiveSourceLang.",
-                  "bioTranslation": "Character introduction in $targetLang.",
-                  "structuredRelations": [
-                    {
-                      "category": "parent / spouse / child / sibling / ally / rival / other",
-                      "label": "Target's role in $effectiveSourceLang (e.g. 恩师, 父亲, 丈夫, Lord Commander)",
-                      "labelTranslation": "Target's role in $targetLang (e.g. 恩师, 父亲, 丈夫, 守夜人总司令)",
-                      "target": "Target Character Name"
-                    }
-                  ],
-                  "relationships": ["恩师: 岳不群", "冰原狼伙伴: Ghost"]
-                }
-              ],
-              "timeline": [
-                {
-                  "stage": "Opening / 起因",
-                  "eventOriginal": "What happens in $effectiveSourceLang...",
-                  "eventTranslation": "Event explanation in $targetLang..."
-                },
-                {
-                  "stage": "Conflict & Turning Point / 冲突与转折",
-                  "eventOriginal": "...",
-                  "eventTranslation": "..."
-                },
-                {
-                  "stage": "Climax & Resolution / 高潮与结局",
-                  "eventOriginal": "...",
-                  "eventTranslation": "..."
-                }
-              ]
-            }
+            $jsonFormatExample
         """.trimIndent()
 
         val userPrompt = """
@@ -366,7 +436,7 @@ object AiPromptBuilder {
         difficulty: String,
         scope: String
     ): Pair<String, String> {
-        val effectiveSourceLang = resolveSourceLanguage(config, text)
+        val effectiveSourceLang = resolveSourceLanguage(config, text, title)
         val targetLang = config.targetLang.ifBlank { "Chinese" }
         val isNativeChinese = effectiveSourceLang.equals("Chinese", ignoreCase = true)
 
