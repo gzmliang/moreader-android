@@ -21,6 +21,11 @@ Originally migrated from a browser extension (墨阅 Moreader), reimagined as a 
 - **Text-to-Speech** — Two TTS engines:
   - **Edge TTS** (online, 100+ voices across locales, gender icons)
   - **AI Voice** (OpenAI-compatible API)
+- **Rock-solid TTS Sync (v1.0.3)** —
+  - Sentence-level green highlight shares the *same* character ruler as the narration (clean-text → DOM coordinate map, rebuilt before every sentence), so the bar never drifts; cross-element sentences are wrapped for real instead of inserting an empty span
+  - **Playback tokens + full in-flight cancellation**: an audio response that arrives after a cancel/pause is discarded and never spoken (no more two voices at once)
+  - **"Generating audio, please wait…"** overlay with a ⏹ Cancel button; it disappears the instant audio starts, and every read-aloud entry point (play button / tap-paragraph / selection / whole chapter) goes through the same gate
+  - Pinyin annotations (`<rt>/<rp>/<sup>/<sub>`) are stripped so narration never reads phonetic guides
 - **Chapter Navigation** — Side drawer table of contents, prev/next chapter
 - **Translation** — Select text for inline translation (AI-powered)
 - **Progress Tracking** — Remembers reading position per book

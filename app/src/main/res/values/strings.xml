@@ -257,6 +257,8 @@ AI Voice（云端 TTS）：
     <string name="tts_log_pause">[TTS] ⏸ 暂停 idx=%1$d</string>
     <string name="tts_log_invalid_restore">[TTS] ❌ 无可恢复状态（playIdx=%1$d）</string>
     <string name="tts_log_resume">[TTS] ▶ 继续</string>
+    <string name="tts_generating">正在生成语音，请稍候…</string>
+    <string name="tts_cancel_generating">取消生成</string>
     <string name="tts_log_stop">[TTS] ⏹ 停止</string>
     <string name="tts_log_switch_engine">切换 TTS 引擎: %1$s</string>
     <string name="tts_log_offset_inc">[设置] 高亮偏移 +1 = %1$d</string>

@@ -348,6 +348,8 @@ Just change the Base URL and API Key</string>
     <string name="tts_log_recording_done">🎙️ Recording complete: %s (%d KB)</string>
     <string name="tts_log_read_from_paragraph">========== Reading from paragraph %1$d ==========</string>
     <string name="tts_log_resume">[TTS] ▶ Resume</string>
+    <string name="tts_generating">Generating audio, please wait…</string>
+    <string name="tts_cancel_generating">Cancel</string>
     <string name="tts_log_stop">[TTS] ⏹ Stop</string>
     <string name="tts_log_switch_engine">Switch TTS engine: %1$s</string>
     <string name="tts_model">TTS Model</string>

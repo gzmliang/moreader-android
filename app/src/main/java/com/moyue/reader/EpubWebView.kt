@@ -50,6 +50,10 @@ fun EpubWebView(
     ttsHighlightIndex: Int = -1,
     ttsSentenceIdx: Int = -1,
     ttsSentenceEnds: String = "",
+    // ★ 当前段落的「清洗后正文」（与 Kotlin 侧切句所用文本完全同一份）：
+    //   交给 WebView 里的 JS 建「字符 → DOM 落点」地图，让高亮与朗读用同一把尺子。
+    //   为空时 JS 自动走旧逻辑（只做加法，不可能变差）。
+    ttsParaText: String = "",
     scrollToParagraph: Int? = null,
     onParagraphScrolled: (() -> Unit)? = null,
     scrollToAnchor: String? = null,
@@ -99,7 +103,7 @@ fun EpubWebView(
     // (was two separate effects — async evaluateJavascript order was undefined,
     //  causing initAndHighlight to run before ttsHL added .tts-hl class)
     var prevHighlightIdx by remember { mutableStateOf(ttsHighlightIndex) }
-    LaunchedEffect(ttsHighlightIndex, ttsSentenceIdx, ttsSentenceEnds) {
+    LaunchedEffect(ttsHighlightIndex, ttsSentenceIdx, ttsSentenceEnds, ttsParaText) {
         val paraChanged = ttsHighlightIndex != prevHighlightIdx
         prevHighlightIdx = ttsHighlightIndex
         webView?.let { wv ->
@@ -111,8 +115,12 @@ fun EpubWebView(
                 ttsSentenceIdx == 0 || paraChanged -> {
                     // 把 Kotlin 算好的句子边界传给 JS，避免 JS 自己切分产生偏移不一致
                     val endsJson = if (ttsSentenceEnds.isNotBlank()) "[$ttsSentenceEnds]" else "[]"
-                    android.util.Log.d("EpubWV", "[TIME] ⏱ initHL($ttsHighlightIndex,0,$endsJson) paraChanged=$paraChanged @${System.currentTimeMillis()}")
-                    wv.evaluateJavascript("window.initAndHighlight($ttsHighlightIndex,0,$endsJson)", null)
+                    // 段落正文用 Base64 传递：彻底避开引号/换行/反斜杠的转义坑
+                    val paraB64 = if (ttsParaText.isNotEmpty())
+                        android.util.Base64.encodeToString(ttsParaText.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+                    else ""
+                    android.util.Log.d("EpubWV", "[TIME] ⏱ initHL($ttsHighlightIndex,0,$endsJson,paraLen=${ttsParaText.length}) paraChanged=$paraChanged @${System.currentTimeMillis()}")
+                    wv.evaluateJavascript("window.initAndHighlight($ttsHighlightIndex,0,$endsJson,'$paraB64')", null)
                 }
                 ttsSentenceIdx > 0 -> {
                     android.util.Log.d("EpubWV", "[TIME] ⏱ ttsHLSentence($ttsSentenceIdx) @${System.currentTimeMillis()}")
@@ -375,11 +383,57 @@ fun EpubWebView(
                                     if(idx>=0&&idx<all.length){all[idx].classList.add('tts-hl');all[idx].scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});}
                                 };
                                 window.ttsClear=function(){document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});};
+                                // ===== 【高亮对齐地图】与浏览器扩展端同一套方案 =====
+                                // 病根：Kotlin 用「清洗后文本」算句子边界，JS 却去数「原始 DOM 字符」，
+                                // 两把尺子长度不同 → 绿条整体漂移（这句不亮 / 亮到上一句）。
+                                // 做法：把清洗文本的每个字符映射回真实 DOM 落点，高亮直接换算 Range。
+                                window._paraMap=null;
+                                window._paraCleanText='';
+                                window._b64ToUtf8=function(b64){
+                                    try{
+                                        var bin=atob(b64);
+                                        var bytes=new Uint8Array(bin.length);
+                                        for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+                                        return new TextDecoder('utf-8').decode(bytes);
+                                    }catch(e){return '';}
+                                };
+                                window._buildParaMap=function(el,cleanText){
+                                    if(!el||!cleanText)return null;
+                                    try{
+                                        var nodes=[],chars=[];
+                                        var walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,null);
+                                        while(walker.nextNode()){
+                                            var tn=walker.currentNode;
+                                            var pn=tn.parentNode;
+                                            if(pn){
+                                                var tag=pn.nodeName;
+                                                if(tag==='SCRIPT'||tag==='STYLE'||tag==='RT'||tag==='RP'||tag==='RTC'||tag==='SUP'||tag==='SUB')continue;
+                                            }
+                                            var s=tn.data||'';
+                                            for(var k=0;k<s.length;k++){chars.push(s.charAt(k));nodes.push({node:tn,off:k});}
+                                        }
+                                        if(!chars.length)return null;
+                                        var map=new Array(cleanText.length);
+                                        var i=0;
+                                        for(var j=0;j<cleanText.length;j++){
+                                            var c=cleanText.charAt(j);
+                                            if(c===' '||c==='\t'||c==='\n'||c==='\r'){
+                                                while(i<chars.length&&!/\s/.test(chars[i]))i++;
+                                            }else{
+                                                while(i<chars.length&&chars[i]!==c)i++;
+                                            }
+                                            if(i>=chars.length)return null;
+                                            map[j]=nodes[i];
+                                            i++;
+                                        }
+                                        return map;
+                                    }catch(e){return null;}
+                                };
                                 // Sentence-level highlight
                                 window.ttsSentences=[];
                                 window._ttsSentencePara=null;
                                 window.ttsSentEnds=[];  // 从 Kotlin 传入的句子边界
-                                window.initAndHighlight=function(paraIdx,sentenceIdx,sentEnds){
+                                window.initAndHighlight=function(paraIdx,sentenceIdx,sentEnds,paraB64){
                                     console.log('[initHL] para='+paraIdx+' sent='+sentenceIdx+' ends='+JSON.stringify(sentEnds));
                                     MoreaderBridge.jsLog('[JS] initAndHighlight('+paraIdx+','+sentenceIdx+')');
                                     document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});
@@ -392,6 +446,27 @@ fun EpubWebView(
                                     // 使用 Kotlin 传来的句子边界
                                     window.ttsSentEnds=sentEnds||[];
                                     MoreaderBridge.jsLog('[JS] sentEnds from Kotlin: '+JSON.stringify(window.ttsSentEnds));
+                                    // ★ 建地图：仅当地图能完整走通、且边界落在清洗文本范围内才启用（否则回退旧逻辑）
+                                    window._paraMap=null;
+                                    window._paraCleanText='';
+                                    try{
+                                        var lastEnd=(window.ttsSentEnds.length>0)?window.ttsSentEnds[window.ttsSentEnds.length-1]:0;
+                                        if(paraB64&&lastEnd>0){
+                                            var cleanText=window._b64ToUtf8(paraB64);
+                                            if(cleanText&&lastEnd<=cleanText.length){
+                                                var builtMap=window._buildParaMap(el,cleanText);
+                                                if(builtMap){
+                                                    window._paraMap=builtMap;
+                                                    window._paraCleanText=cleanText;
+                                                    MoreaderBridge.jsLog('[JS] 高亮地图启用 cleanLen='+cleanText.length+' lastEnd='+lastEnd);
+                                                }else{
+                                                    MoreaderBridge.jsLog('[JS] 高亮地图构建失败，回退旧逻辑');
+                                                }
+                                            }else{
+                                                MoreaderBridge.jsLog('[JS] 地图自检不通过 cleanLen='+(cleanText?cleanText.length:'null')+' lastEnd='+lastEnd+'，回退旧逻辑');
+                                            }
+                                        }
+                                    }catch(e){MoreaderBridge.jsLog('[JS] 地图异常: '+e.message);window._paraMap=null;window._paraCleanText='';}
                                     // 重建 ttsSentences 供兼容使用
                                     window.ttsSentences=[];
                                     var prev=0;
@@ -422,25 +497,46 @@ fun EpubWebView(
                                     MoreaderBridge.jsLog('[JS] sent['+idx+']={start:'+sent.start+',end:'+sent.end+'}');
                                     var hl=window._ttsSentencePara;
                                     if(!hl){MoreaderBridge.jsLog('[JS] _ttsHL no para');return;}
-                                    var textNodes=[];
-                                    var walker=document.createTreeWalker(hl,NodeFilter.SHOW_TEXT);
-                                    var charCount=0;
-                                    while(walker.nextNode()){
-                                        textNodes.push({node:walker.currentNode,start:charCount,end:charCount+walker.currentNode.textContent.length});
-                                        charCount+=walker.currentNode.textContent.length;
-                                    }
-                                    MoreaderBridge.jsLog('[JS] textNodes='+textNodes.length+' totalChars='+charCount);
-                                    var sTN=null,sOff=0,eTN=null,eOff=0;
-                                    for(var i=0;i<textNodes.length;i++){
-                                        var tn=textNodes[i];
-                                        if(!sTN&&tn.start<=sent.start&&tn.end>sent.start){sTN=tn.node;sOff=sent.start-tn.start;}
-                                        if(tn.start<sent.end&&tn.end>=sent.end){eTN=tn.node;eOff=sent.end-tn.start;}
-                                    }
-                                    if(!sTN||!eTN){MoreaderBridge.jsLog('[JS] _ttsHL no nodes: sTN='+(sTN?'ok':'null')+' eTN='+(eTN?'ok':'null'));return;}
-                                    MoreaderBridge.jsLog('[JS] _ttsHL sTN ok sOff='+sOff+' eTN ok eOff='+eOff);
                                     var range=document.createRange();
-                                    range.setStart(sTN,sOff);
-                                    range.setEnd(eTN,eOff);
+                                    var usedMap=false;
+                                    // ① 首选（修复）：每句现场重建地图。ttsSentenceClear 的 normalize() 会销毁旧文本节点，
+                                    //    段首建的那份地图到后面就是「脱树空节点」，必须重建，否则 setStart 直接抛异常。
+                                    if(window._paraCleanText&&sent.start>=0&&sent.end<=window._paraCleanText.length){
+                                        var freshMap=window._buildParaMap(hl,window._paraCleanText);
+                                        if(freshMap){window._paraMap=freshMap;}
+                                        var useMap=freshMap||window._paraMap;
+                                        var mnStart=useMap?useMap[sent.start]:null,mnEnd=useMap?useMap[sent.end-1]:null;
+                                        if(mnStart&&mnEnd){
+                                            try{
+                                                range.setStart(mnStart.node,mnStart.off);
+                                                range.setEnd(mnEnd.node,mnEnd.off+1);
+                                                // 说明：清洗只删除字符（装饰符/脚注/拼音/多余空白），不改变字符顺序，
+                                                // 因此地图换算出的范围天然正确；中间夹带的已删除字符（如 • 或脚注 *）
+                                                // 属于正常现象，不应据此回退。
+                                                usedMap=true;
+                                            }catch(e){MoreaderBridge.jsLog('[JS] 地图取范围异常，回退: '+e.message);usedMap=false;}
+                                        }
+                                    }
+                                    // ② 兜底：旧逻辑（数原始 DOM 字符）—— 行为与过去完全一致，绝不会更差
+                                    if(!usedMap){
+                                        var textNodes=[];
+                                        var walker=document.createTreeWalker(hl,NodeFilter.SHOW_TEXT);
+                                        var charCount=0;
+                                        while(walker.nextNode()){
+                                            textNodes.push({node:walker.currentNode,start:charCount,end:charCount+walker.currentNode.textContent.length});
+                                            charCount+=walker.currentNode.textContent.length;
+                                        }
+                                        var sTN=null,sOff=0,eTN=null,eOff=0;
+                                        for(var i=0;i<textNodes.length;i++){
+                                            var tn=textNodes[i];
+                                            if(!sTN&&tn.start<=sent.start&&tn.end>sent.start){sTN=tn.node;sOff=sent.start-tn.start;}
+                                            if(tn.start<sent.end&&tn.end>=sent.end){eTN=tn.node;eOff=sent.end-tn.start;}
+                                        }
+                                        if(!sTN||!eTN){MoreaderBridge.jsLog('[JS] _ttsHL no nodes: sTN='+(sTN?'ok':'null')+' eTN='+(eTN?'ok':'null'));return;}
+                                        MoreaderBridge.jsLog('[JS] 旧逻辑定位 sOff='+sOff+' eOff='+eOff);
+                                        range.setStart(sTN,sOff);
+                                        range.setEnd(eTN,eOff);
+                                    }
                                     var span=document.createElement('span');
                                     span.className='tts-sentence-hl';
                                     span.setAttribute('data-tts-sentence','1');
@@ -448,8 +544,18 @@ fun EpubWebView(
                                         range.surroundContents(span);
                                         MoreaderBridge.jsLog('[JS] surroundContents OK');
                                     }catch(e){
-                                        MoreaderBridge.jsLog('[JS] surroundContents EXCEPTION: '+e.message);
-                                        range.insertNode(span);
+                                        // 修复：跨元素（<a>/<em>/<br> 等）边界时 surroundContents 会拒绝，
+                                        // 旧代码只 insertNode 一个「空 span」，等于没高亮。改为抽出内容再塞进 span。
+                                        MoreaderBridge.jsLog('[JS] surroundContents EXCEPTION: '+e.message+' → extractContents 兜底');
+                                        try{
+                                            var frag=range.extractContents();
+                                            while(span.firstChild)span.removeChild(span.firstChild);
+                                            span.appendChild(frag);
+                                            range.insertNode(span);
+                                        }catch(e2){
+                                            MoreaderBridge.jsLog('[JS] extractContents 兜底也失败: '+e2.message);
+                                            try{range.insertNode(span);}catch(e3){}
+                                        }
                                     }
                                     // 滚动到屏幕中央
                                     span.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});

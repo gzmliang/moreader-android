@@ -28,7 +28,11 @@ class EdgeTTSProvider(
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    private var currentCall: Call? = null
+    // ★ v1.0.1：在途请求集合 + 播放令牌（generation）。
+    //   病根：以前只存「最后一个」请求，暂停时只能取消最后一个，前面泄漏的请求回来照样开口 → 两个声音。
+    //   现在：每次播放领一个自增令牌，响应回来先对号；号不对就当场丢弃，绝不播放。
+    private val pendingCalls = mutableSetOf<Call>()
+    private var generation = 0L
     private var audioPlayer: android.media.MediaPlayer? = null
 
     override val type: TTSProviderType get() = TTSProviderType.EDGE_TTS
@@ -143,7 +147,9 @@ class EdgeTTSProvider(
         val body = makeJsonBody(text, rate)
 
         val candidates = getCandidateEndpoints()
+        val myGen = ++generation
         fun tryCall(idx: Int) {
+            if (myGen != generation) return   // ★ 本次播放已被取消/取代 → 停止重试
             if (idx >= candidates.size) {
                 listener.onError("Edge TTS all endpoints failed")
                 return
@@ -155,9 +161,11 @@ class EdgeTTSProvider(
                 .apply { if (apiKey.isNotEmpty()) addHeader("X-API-Key", apiKey) }
                 .build()
             val call = client.newCall(req)
-            currentCall = call
+            pendingCalls.add(call)
             call.enqueue(object : Callback {
                 override fun onFailure(c: Call, e: IOException) {
+                    pendingCalls.remove(c)
+                    if (myGen != generation) return   // ★ 已作废 → 不回调、不播放
                     if (!c.isCanceled()) {
                         if (idx + 1 < candidates.size) {
                             tryCall(idx + 1)
@@ -167,6 +175,11 @@ class EdgeTTSProvider(
                     }
                 }
                 override fun onResponse(c: Call, response: Response) {
+                    pendingCalls.remove(c)
+                    if (myGen != generation) {      // ★ 迟到的响应：直接丢弃，绝不开口
+                        try { response.close() } catch (e: Exception) {}
+                        return
+                    }
                     if (!response.isSuccessful) {
                         if (idx + 1 < candidates.size) {
                             tryCall(idx + 1)
@@ -190,7 +203,7 @@ class EdgeTTSProvider(
                         if (wb.isNotEmpty()) listener.onWordBoundaries(wb)
                     }
                     listener.onStart()
-                    playAudio(blob, listener)
+                    playAudio(blob, listener, myGen)
                 }
             })
         }
@@ -202,14 +215,17 @@ class EdgeTTSProvider(
      * Used for preloaded segments from audioCache.
      */
     override fun playRaw(audioData: ByteArray, listener: TTSListener) {
-        stop()
+        val myGen = ++generation
+        stopPlaybackOnly()
+        if (myGen != generation) return
         listener.onStart()
-        playAudio(audioData, listener)
+        playAudio(audioData, listener, myGen)
     }
 
     private var currentTempFile: java.io.File? = null
 
-    private fun playAudio(audioData: ByteArray, listener: TTSListener) {
+    private fun playAudio(audioData: ByteArray, listener: TTSListener, myGen: Long) {
+        if (myGen != generation) return   // ★ 播放前最后一刻再对一次号
         try {
             val tempFile = java.io.File.createTempFile("tts_", ".mp3")
             tempFile.writeBytes(audioData)
@@ -217,11 +233,13 @@ class EdgeTTSProvider(
             audioPlayer = android.media.MediaPlayer().apply {
                 setDataSource(tempFile.absolutePath)
                 setOnCompletionListener {
+                    if (myGen != generation) return@setOnCompletionListener
                     listener.onDone()
                     tempFile.delete()
                     currentTempFile = null
                 }
                 setOnErrorListener { _, what, extra ->
+                    if (myGen != generation) return@setOnErrorListener true
                     listener.onError("Playback error: $what/$extra")
                     tempFile.delete()
                     currentTempFile = null
@@ -235,15 +253,22 @@ class EdgeTTSProvider(
         }
     }
 
-    override fun stop() {
-        currentCall?.cancel()
+    /** 只停播放器 + 清临时文件（不动令牌，供 playRaw 复用） */
+    private fun stopPlaybackOnly() {
         audioPlayer?.apply {
-            if (isPlaying) stop()
-            release()
+            try { if (isPlaying) stop() } catch (e: Exception) {}
+            try { release() } catch (e: Exception) {}
         }
         audioPlayer = null
         currentTempFile?.delete()
         currentTempFile = null
+    }
+
+    override fun stop() {
+        generation++                       // ★ 让所有在途请求作废（它们的响应回来会被丢弃）
+        pendingCalls.forEach { try { it.cancel() } catch (e: Exception) {} }
+        pendingCalls.clear()
+        stopPlaybackOnly()
     }
 
     override fun destroy() {

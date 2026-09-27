@@ -75,6 +75,9 @@ data class ReaderUiState(
     val ttsProvider: TTSProviderType = TTSProviderType.EDGE_TTS,
     val isTtsPlaying: Boolean = false,
     val isTtsPaused: Boolean = false,
+    // ★ v1.0.1：正在联网生成语音（立即生效）—— UI 据此显示「Generating audio…」并拦掉重复点击，
+    //   从源头杜绝「等不及多点一次 → 两份声音此起彼伏」。
+    val isTtsGenerating: Boolean = false,
     val ttsSpeed: Float = 1.0f,
     val systemTtsVoice: String = "",
     val ttsParagraphs: List<String> = emptyList(),
@@ -264,6 +267,11 @@ class ReaderViewModel(
 
     private fun extractParagraphsFromHtml(html: String): List<String> {
         val doc = org.jsoup.Jsoup.parse(html)
+        // ★ 先剔除注音（拼音）与上下标：它们不是正文，却会被算进字符数、甚至被朗读出来。
+        //   与浏览器扩展端 getCleanText 的规则保持一致（rt/rp/rtc/sup/sub 一律丢弃）。
+        //   注意：这些都不是 p/h1-h6 段落级元素，因此不会影响 WebView 的段落索引对齐。
+        doc.select("rt, rp, rtc").remove()
+        doc.select("sup, sub").remove()
         // ⚠️ 不要 remove 任何元素！WebView DOM 用 querySelectorAll('p,h1-h6') 获取段落索引，
         // 这里必须和 DOM 完全对齐，否则保存的段落索引恢复时会跳到错误位置。
         // 只做文本级清理（去注音/脚注标记的文字内容），不改变 DOM 结构。
@@ -1213,6 +1221,8 @@ class ReaderViewModel(
 
             override fun onStart() {
                 if (playSessionId != currentSession || !playChainActive) return
+                // ★ v1.0.1：音频真的开始播了 → 收起「生成中」
+                if (_uiState.value.isTtsGenerating) _uiState.update { it.copy(isTtsGenerating = false) }
                 paraStartMs = System.currentTimeMillis()
                 log("[TIME] ⏱ Para${idx + 1} START @${paraStartMs}ms")
                 // 重置每个段落的检测状态
@@ -1289,7 +1299,7 @@ class ReaderViewModel(
             override fun onError(msg: String) {
                 if (playSessionId != currentSession || !playChainActive) return
                 estJob?.cancel()
-                _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1, ttsSentenceEnds = "") }
+                _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1, ttsSentenceEnds = "", isTtsGenerating = false) }
                 log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, idx, msg))
                 consecutiveErrors++
                 if (consecutiveErrors >= 3) {
@@ -1317,13 +1327,13 @@ class ReaderViewModel(
             }
         } else {
             val p = recreateProvider(text)
-            if (p == null) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }; return }
+            if (p == null) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1, isTtsGenerating = false) }; return }
 
-            if (p is SystemTTSProvider) {
-                p.speak(text, speed, listener)
-            } else {
-                p.speak(text, speed, listener)
+            if (p !is SystemTTSProvider) {
+                // ★ 需要联网合成 → 亮起「生成中」（UI 会显示弹窗并拦住重复点击）
+                _uiState.update { it.copy(isTtsGenerating = true) }
             }
+            p.speak(text, speed, listener)
         }
 
         // Preload next paragraphs in background (for non-System providers)
@@ -1366,6 +1376,9 @@ class ReaderViewModel(
 
             override fun onStart() {
                 if (playSessionId != currentSession || !playChainActive) return
+                // ★ v1.0.2：音频真的开始播了 → 收起「生成中」（子段路径之前漏了这一步，
+                //   导致长段落朗读时弹窗一直挂着不消失）
+                if (_uiState.value.isTtsGenerating) _uiState.update { it.copy(isTtsGenerating = false) }
                 paraStartMs = System.currentTimeMillis()
                 log("[TIME] ⏱ P${paraIdx + 1} sub${subIdx + 1} START @${paraStartMs}ms")
                 rangesReceived = false
@@ -1467,6 +1480,8 @@ class ReaderViewModel(
             override fun onError(msg: String) {
                 if (playSessionId != currentSession || !playChainActive) return
                 estJob?.cancel()
+                // ★ v1.0.2：合成失败也收起「生成中」，避免弹窗卡住
+                if (_uiState.value.isTtsGenerating) _uiState.update { it.copy(isTtsGenerating = false) }
                 _uiState.update { it.copy(ttsSentenceCount = 0, ttsSentenceIdx = -1, ttsSentenceEnds = "") }
                 log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_engine_error, paraIdx, msg))
                 consecutiveErrors++
@@ -1493,7 +1508,10 @@ class ReaderViewModel(
         } else {
             // Cache miss — 对于 EdgeTTS 强制获取词边界（子段可能只有1句话但高亮同步需要）
             val p = recreateProvider(subText)
-            if (p == null) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) }; return }
+            if (p == null) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1, isTtsGenerating = false) }; return }
+            if (p !is SystemTTSProvider) {
+                _uiState.update { it.copy(isTtsGenerating = true) }   // ★ 子段也要联网合成
+            }
             if (p is EdgeTTSProvider) {
                 viewModelScope.launch(Dispatchers.IO) {
                     val result = p.fetchAudioWithBoundaries(subText, speed)
@@ -1601,6 +1619,7 @@ class ReaderViewModel(
     }
 
     fun readChapter() {
+        if (_uiState.value.isTtsGenerating) { log("[TTS] 🛡️ 正在生成语音，忽略重复的全章朗读"); return }
         log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_full_read))
         playChainActive = true
         val s = _uiState.value
@@ -1654,6 +1673,7 @@ class ReaderViewModel(
 
     /** Read from a specific paragraph index */
     fun readFromParagraph(index: Int) {
+        if (_uiState.value.isTtsGenerating) { log("[TTS] 🛡️ 正在生成语音，忽略本次点读"); return }
         val now = System.currentTimeMillis()
         if (now - lastReadClickTime < 500L) {
             log("[TTS] 🛡️ 快速连击防抖忽略 (500ms 内重复点击)")
@@ -1759,10 +1779,11 @@ class ReaderViewModel(
         killPlayChain()
         _uiState.update { it.copy(isTtsPlaying = true, isTtsPaused = false, ttsCurrentIdx = -1) }
         val p = recreateProvider() ?: run { _uiState.update { it.copy(isTtsPlaying = false) }; return }
+        if (p !is SystemTTSProvider) _uiState.update { it.copy(isTtsGenerating = true) }
         p.speak(cleanText, s.ttsSpeed, object : TTSListener {
-            override fun onStart() {}
-            override fun onDone() { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) } }
-            override fun onError(msg: String) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1) } }
+            override fun onStart() { if (_uiState.value.isTtsGenerating) _uiState.update { it.copy(isTtsGenerating = false) } }
+            override fun onDone() { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1, isTtsGenerating = false) } }
+            override fun onError(msg: String) { _uiState.update { it.copy(isTtsPlaying = false, ttsCurrentIdx = -1, ttsPlayIdx = -1, isTtsGenerating = false) } }
         })
     }
 
@@ -1914,7 +1935,7 @@ class ReaderViewModel(
         }
     }
 
-    fun ttsPause() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_pause, _uiState.value.ttsPlayIdx)); playChainActive = false; currentTTSProvider?.stop(); _uiState.update { it.copy(isTtsPaused = true, isTtsPlaying = false) } }
+    fun ttsPause() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_pause, _uiState.value.ttsPlayIdx)); playChainActive = false; currentTTSProvider?.stop(); _uiState.update { it.copy(isTtsPaused = true, isTtsPlaying = false, isTtsGenerating = false) } }
     fun ttsResume() {
         log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_resume))
         val s = _uiState.value
@@ -1938,6 +1959,7 @@ class ReaderViewModel(
     private fun killPlayChain() {
         playSessionId++
         playChainActive = false
+        if (_uiState.value.isTtsGenerating) _uiState.update { it.copy(isTtsGenerating = false) }
         currentTTSProvider?.stop()
         audioCache.clear()
         boundariesCache.clear()
@@ -1992,10 +2014,15 @@ class ReaderViewModel(
             }
         }
     }
-    fun ttsStop() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_stop)); killPlayChain(); _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1, ttsLocked = false) } }
+    fun ttsStop() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_stop)); killPlayChain(); _uiState.update { it.copy(isTtsPlaying = false, isTtsPaused = false, ttsCurrentIdx = -1, ttsPlayIdx = -1, ttsLocked = false, isTtsGenerating = false) } }
     private var lastToggleTime = 0L
 
     fun togglePlayPause() {
+        // ★ v1.0.1：生成中再点播放键 → 忽略（只提示），避免触发第二份声音
+        if (_uiState.value.isTtsGenerating && !_uiState.value.isTtsPaused) {
+            log("[TTS] 🛡️ 正在生成语音，忽略本次播放/暂停点击")
+            return
+        }
         val now = System.currentTimeMillis()
         if (now - lastToggleTime < 300) return // debounce: prevent rapid double-taps
         lastToggleTime = now

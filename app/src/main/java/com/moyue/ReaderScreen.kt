@@ -383,6 +383,7 @@ fun ReaderScreen(
                         currentIndex = state.currentChapterIndex, totalChapters = state.chapters.size,
                         fontSize = state.fontSize, fontFamily = state.fontFamily, fontWeight = state.fontWeight,
                         isTtsPlaying = state.isTtsPlaying, isTtsPaused = state.isTtsPaused,
+                        isTtsGenerating = state.isTtsGenerating,
                         isTtsLocked = state.ttsLocked,
                         onPrev = { viewModel.prevChapter() }, onNext = { viewModel.nextChapter() },
                         onFontSizeChange = { viewModel.setFontSize(it) },
@@ -465,6 +466,9 @@ fun ReaderScreen(
                     ttsHighlightIndex = ttsHighlightIdx,
                     ttsSentenceIdx = state.ttsSentenceIdx,
                     ttsSentenceEnds = state.ttsSentenceEnds,
+                    // ★ 当前段落的「清洗后正文」：交给 WebView 里的 JS 建「字符→DOM 落点」地图，
+                    //   让高亮和朗读用同一把尺子（根治「这句不亮 / 亮到上一句」的漂移）
+                    ttsParaText = state.ttsParagraphs.getOrNull(ttsHighlightIdx) ?: "",
                     scrollToParagraph = if (state.scrollToParagraph >= 0) state.scrollToParagraph else null,
                     onParagraphScrolled = { viewModel.clearScrollToParagraph() },
                     scrollToAnchor = state.scrollToAnchor,
@@ -579,11 +583,19 @@ fun ReaderScreen(
                                     contentColor = Color.Black,
                                 ),
                             ) {
-                                Icon(
-                                    if (state.isTtsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    modifier = Modifier.size(32.dp),
-                                    contentDescription = if (state.isTtsPlaying) "暂停" else "继续",
-                                )
+                                if (state.isTtsGenerating) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                        strokeWidth = 3.dp,
+                                        color = Color.Black,
+                                    )
+                                } else {
+                                    Icon(
+                                        if (state.isTtsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        modifier = Modifier.size(32.dp),
+                                        contentDescription = if (state.isTtsPlaying) "暂停" else "继续",
+                                    )
+                                }
                             }
                         }
                     }
@@ -1034,6 +1046,60 @@ fun ReaderScreen(
                 )
             }
 
+            // ★ v1.0.1：语音生成中提示（首次生成较慢时给明确反馈；生成期间播放键已被闸门拦住，
+            //   不会重现「等不及多点一次 → 两份声音此起彼伏」。这里不拦截触摸，不影响翻页看原文。）
+            if (state.isTtsGenerating) {
+                var showGeneratingUi by remember { mutableStateOf(false) }
+                LaunchedEffect(state.isTtsGenerating) {
+                    if (state.isTtsGenerating) {
+                        kotlinx.coroutines.delay(600)
+                        if (state.isTtsGenerating) showGeneratingUi = true
+                    } else {
+                        showGeneratingUi = false
+                    }
+                }
+                if (showGeneratingUi) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.Black.copy(alpha = 0.85f),
+                            tonalElevation = 8.dp,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White,
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_generating),
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Button(
+                                    onClick = { viewModel.ttsStop() },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color.White.copy(alpha = 0.18f),
+                                        contentColor = Color.White,
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                ) {
+                                    Text(
+                                        "⏹ " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_cancel_generating),
+                                        fontSize = 13.sp,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Selection toolbar — floating overlay with vertical drag gesture & book-level persistence
             if (state.showSelectionMenu && state.selectedText != null && !state.isTtsPlaying && !state.isTtsPaused) {
                 val existingHighlight = viewModel.getExistingHighlightForSelection()
@@ -1137,7 +1203,7 @@ fun ReaderScreen(
 @Composable
 private fun ReaderBottomBar(
     currentIndex: Int, totalChapters: Int, fontSize: Int, fontFamily: String, fontWeight: String,
-    isTtsPlaying: Boolean, isTtsPaused: Boolean,
+    isTtsPlaying: Boolean, isTtsPaused: Boolean, isTtsGenerating: Boolean = false,
     isTtsLocked: Boolean,
     onPrev: () -> Unit, onNext: () -> Unit,
     onFontSizeChange: (Int) -> Unit,
@@ -1378,12 +1444,20 @@ private fun ReaderBottomBar(
                         Icon(Icons.Default.ChevronRight, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.next_chapter), tint = barTextColor, modifier = Modifier.size(18.dp))
                     }
 
-                    // TTS: Play/Pause
-                    if (isTtsPlaying || isTtsPaused) {
+                    // TTS: Play/Pause（★ 生成中显示转圈，点击会被闸门拦住，不会产生第二份声音）
+                    if (isTtsPlaying || isTtsPaused || isTtsGenerating) {
                         EqualButton(onClick = { if (!isTtsLocked) onPlayPause() }) {
-                            Icon(if (isTtsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (isTtsPlaying) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pause) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.resume),
-                                tint = if (isTtsLocked) barTextColor.copy(alpha = 0.3f) else MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            if (isTtsGenerating) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            } else {
+                                Icon(if (isTtsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (isTtsPlaying) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pause) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.resume),
+                                    tint = if (isTtsLocked) barTextColor.copy(alpha = 0.3f) else MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            }
                         }
                     } else {
                         EqualButton(onPlayPause) {
@@ -1391,15 +1465,15 @@ private fun ReaderBottomBar(
                         }
                     }
 
-                    // TTS: Stop (conditional)
-                    if (isTtsPlaying || isTtsPaused) {
+                    // TTS: Stop (conditional，生成中也可用 = 取消生成)
+                    if (isTtsPlaying || isTtsPaused || isTtsGenerating) {
                         EqualButton(onClick = { if (!isTtsLocked) onStop() }) {
                             Icon(Icons.Default.Stop, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.stop), tint = if (isTtsLocked) MaterialTheme.colorScheme.error.copy(alpha = 0.3f) else MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                         }
                     }
 
                     // TTS: Lock (防误触)
-                    if (isTtsPlaying || isTtsPaused) {
+                    if (isTtsPlaying || isTtsPaused || isTtsGenerating) {
                         EqualButton(onToggleLock) {
                             Icon(if (isTtsLocked) Icons.Default.Lock else Icons.Default.LockOpen,
                                 contentDescription = "锁定",
