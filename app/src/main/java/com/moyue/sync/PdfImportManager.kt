@@ -99,6 +99,31 @@ object PdfImportManager {
     private fun prefs(ctx: Context): SharedPreferences =
         ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
+    /**
+     * 文件名 → 可读书名。
+     *
+     * 实测 z-library / libgen 下载的扫描本文件名长这样：
+     * `isbn_9787530751046_Author_Unknown_z_library_sk,_1lib_sk,_z_li.pdf`，
+     * 直接当书名很难看，所以把站点水印词 / ISBN / 后缀名这类 token 剔掉。
+     * 万一剔光了（整串全是水印），宁可回到原名也不要交一个空名给服务端。
+     */
+    private val PDF_NAME_JUNK = setOf(
+        "isbn", "author", "unknown", "z", "library", "zlib", "zlibrary", "1lib", "libgen",
+        "sk", "si", "com", "net", "org", "www", "pdf", "epub", "mobi", "azw3",
+        "djvu", "txt", "scan", "scanned",
+    )
+
+    private fun humanizePdfTitle(rawName: String): String {
+        val base = rawName.removeSuffix(".pdf").removeSuffix(".PDF").trim()
+        val kept = base.split(Regex("[_\\-\\s,]+")).filter { tk ->
+            val low = tk.lowercase()
+            low.isNotBlank() && low !in PDF_NAME_JUNK && !Regex("^\\d{9,13}$").matches(low)
+        }
+        val joined = kept.joinToString(" ").trim().trim(',').trim()
+        // 剔完只剩一两个字母（如 z-library 文件名尾巴的 "li"）→ 不如用回原名
+        return if (joined.length >= 3) joined else base
+    }
+
     // ── 对外操作 ──────────────────────────────────────────
 
     /** 用户选了一批 PDF：逐个排队转换（串行，避免同时拖垮服务器 OCR） */
@@ -110,8 +135,7 @@ object PdfImportManager {
             Entry(
                 localId = UUID.randomUUID().toString(),
                 fileName = displayNames.getOrElse(i) { "document.pdf" },
-                title = displayNames.getOrElse(i) { "document.pdf" }
-                    .removeSuffix(".pdf").removeSuffix(".PDF"),
+                title = humanizePdfTitle(displayNames.getOrElse(i) { "document.pdf" }),
                 phase = Phase.PENDING,
             )
         }
