@@ -50,6 +50,13 @@ class SyncClient(private val context: Context) {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
+    /** 大文件专用（PDF 上传 / 转换等待可达数十分钟，普通 30s 超时不够用） */
+    private val longClient = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(600, TimeUnit.SECONDS)
+        .writeTimeout(600, TimeUnit.SECONDS)
+        .build()
+
     // ── 认证状态 ──────────────────────────────────────
 
     fun getServerUrl(): String = prefs.getString(KEY_SERVER, DEFAULT_SERVER) ?: DEFAULT_SERVER
@@ -155,6 +162,7 @@ class SyncClient(private val context: Context) {
         val author: String,
         val fileSize: Long,
         val createdAt: String,
+        val hasCover: Boolean = false,
     )
 
     suspend fun listBooks(): Result<List<BookInfo>> {
@@ -168,9 +176,290 @@ class SyncClient(private val context: Context) {
                     author = b.optString("author", ""),
                     fileSize = b.optLong("file_size", 0),
                     createdAt = b.optString("created_at", ""),
+                    hasCover = b.optBoolean("has_cover", false),
                 )
             }
         }
+    }
+
+    /** 云端书库封面小图（带本地磁盘缓存，命中即秒开） */
+    fun coverCacheFile(bookId: Int): File =
+        File(File(context.cacheDir, "cloud_covers").apply { mkdirs() }, "$bookId.jpg")
+
+    suspend fun fetchBookCover(bookId: Int, force: Boolean = false): ByteArray? = withContext(Dispatchers.IO) {
+        val cacheFile = coverCacheFile(bookId)
+        if (!force && cacheFile.exists() && cacheFile.length() > 0) {
+            return@withContext runCatching { cacheFile.readBytes() }.getOrNull()
+        }
+        var lastException: Exception? = null
+        for (server in getCandidateServerUrls()) {
+            try {
+                val url = "${server.trimEnd('/')}/sync/books/$bookId/cover"
+                val req = Request.Builder().url(url)
+                    .addHeader("Authorization", "Bearer ${getToken() ?: ""}")
+                    .get()
+                    .build()
+                val resp = client.newCall(req).execute()
+                if (resp.isSuccessful) {
+                    val bytes = resp.body?.bytes()
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        runCatching { cacheFile.writeBytes(bytes) }
+                        return@withContext bytes
+                    }
+                    return@withContext null
+                }
+                if (resp.code in 500..599) {
+                    lastException = Exception("HTTP ${resp.code}")
+                    continue
+                }
+                return@withContext null
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+        Log.w("Sync", "取封面失败 book=$bookId", lastException)
+        null
+    }
+
+    class PdfConvertException(val code: String, val serverDetail: String) : Exception(serverDetail)
+
+    /** 后台转换任务状态（服务端 pdf_jobs） */
+    data class PdfJobInfo(
+        val id: String,
+        val status: String,      // queued / running / done / failed / canceled
+        val stage: String,       // queued / probe / extract / ocr / build / done
+        val percent: Int,
+        val pagesDone: Int,
+        val pagesTotal: Int,
+        val etaSeconds: Int,
+        val message: String,
+        val code: String,
+        val filename: String,
+        val title: String,
+        val author: String,
+        val chapters: Int,
+        val paragraphs: Int,
+        val chars: Int,
+        val source: String,
+    ) {
+        val isFinished: Boolean get() = status == "done" || status == "failed" || status == "canceled"
+
+        companion object {
+            fun from(o: JSONObject) = PdfJobInfo(
+                id = o.optString("id", ""),
+                status = o.optString("status", "queued"),
+                stage = o.optString("stage", ""),
+                percent = o.optInt("percent", 0),
+                pagesDone = o.optInt("pages_done", 0),
+                pagesTotal = o.optInt("pages_total", 0),
+                etaSeconds = o.optInt("eta_seconds", 0),
+                message = o.optString("message", ""),
+                code = o.optString("code", ""),
+                filename = o.optString("filename", ""),
+                title = o.optString("title", ""),
+                author = o.optString("author", ""),
+                chapters = o.optInt("chapters", 0),
+                paragraphs = o.optInt("paragraphs", 0),
+                chars = o.optInt("chars", 0),
+                source = o.optString("source", ""),
+            )
+        }
+    }
+
+    private fun parseJob(body: String): PdfJobInfo =
+        PdfJobInfo.from(JSONObject(body).getJSONObject("job"))
+
+    /**
+     * 投递 PDF 转换后台任务（大书不再受 600 秒等待限制）。
+     * 返回任务状态，后续用 [getPdfJob] 轮询，完成后用 [downloadPdfJobResult] 取 EPUB。
+     */
+    suspend fun createPdfJob(
+        pdfFile: File,
+        title: String? = null,
+        author: String? = null,
+    ): Result<PdfJobInfo> = withContext(Dispatchers.IO) {
+        if (!pdfFile.exists()) return@withContext Result.failure(PdfConvertException("missing", "文件不存在"))
+        if (!isLoggedIn()) return@withContext Result.failure(PdfConvertException("login_required", "未登录"))
+
+        var lastException: Exception? = null
+        for (server in getCandidateServerUrls()) {
+            try {
+                val url = "${server.trimEnd('/')}/sync/pdf/jobs"
+                val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
+                    .addFormDataPart(
+                        "file", pdfFile.name,
+                        pdfFile.asRequestBody("application/pdf".toMediaType()),
+                    )
+                if (!title.isNullOrBlank()) builder.addFormDataPart("title", title)
+                if (!author.isNullOrBlank()) builder.addFormDataPart("author", author)
+                val req = Request.Builder().url(url)
+                    .addHeader("Authorization", "Bearer ${getToken() ?: ""}")
+                    .post(builder.build())
+                    .build()
+                val resp = longClient.newCall(req).execute()
+                val bodyText = resp.body?.string() ?: ""
+                if (resp.isSuccessful) {
+                    return@withContext Result.success(parseJob(bodyText))
+                }
+                val code = runCatching { JSONObject(bodyText).optString("code", "") }.getOrDefault("")
+                val detail = runCatching { JSONObject(bodyText).optString("detail", bodyText) }.getOrDefault(bodyText)
+                if (resp.code == 401) {
+                    return@withContext Result.failure(PdfConvertException("login_required", detail))
+                }
+                if (resp.code in 400..499) {
+                    return@withContext Result.failure(PdfConvertException(code.ifBlank { "failed" }, detail))
+                }
+                lastException = PdfConvertException(code, "HTTP ${resp.code}: $detail")
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+        Result.failure(lastException ?: PdfConvertException("failed", "网络请求失败"))
+    }
+
+    /** 查后台任务进度（App 每 2~3 秒轮询一次） */
+    suspend fun getPdfJob(jobId: String): Result<PdfJobInfo> {
+        return api("GET", "/sync/pdf/jobs/$jobId", canRetryAuth = true).map { parseJob(it) }
+    }
+
+    /** 拉取未完成的任务列表（App 重启后接上没跑完的任务） */
+    suspend fun listActivePdfJobs(): Result<List<PdfJobInfo>> {
+        return api("GET", "/sync/pdf/jobs?active=1&limit=5").map { json ->
+            val arr = JSONObject(json).getJSONArray("jobs")
+            (0 until arr.length()).map { PdfJobInfo.from(arr.getJSONObject(it)) }
+        }
+    }
+
+    /** 最近的任务（含已完成，用于「App 不在时跑完」的补下载） */
+    suspend fun listRecentPdfJobs(): Result<List<PdfJobInfo>> {
+        return api("GET", "/sync/pdf/jobs?limit=6").map { json ->
+            val arr = JSONObject(json).getJSONArray("jobs")
+            (0 until arr.length()).map { PdfJobInfo.from(arr.getJSONObject(it)) }
+        }
+    }
+
+    /** 取消后台任务 */
+    suspend fun cancelPdfJob(jobId: String): Result<Unit> {
+        return api("POST", "/sync/pdf/jobs/$jobId/cancel").map { }
+    }
+
+    /** 下载转换好的 EPUB（任务未完成时服务端返回 409 + code=not_ready） */
+    suspend fun downloadPdfJobResult(jobId: String): Result<ByteArray> = withContext(Dispatchers.IO) {
+        var lastException: Exception? = null
+        for (server in getCandidateServerUrls()) {
+            try {
+                val url = "${server.trimEnd('/')}/sync/pdf/jobs/$jobId/result"
+                val req = Request.Builder().url(url)
+                    .addHeader("Authorization", "Bearer ${getToken() ?: ""}")
+                    .get()
+                    .build()
+                val resp = longClient.newCall(req).execute()
+                if (resp.isSuccessful) {
+                    val bytes = resp.body?.bytes() ?: ByteArray(0)
+                    if (bytes.isEmpty()) {
+                        return@withContext Result.failure(PdfConvertException("empty", "转换结果为空"))
+                    }
+                    return@withContext Result.success(bytes)
+                }
+                val bodyText = resp.body?.string() ?: ""
+                val code = runCatching { JSONObject(bodyText).optString("code", "") }.getOrDefault("")
+                val detail = runCatching { JSONObject(bodyText).optString("detail", bodyText) }.getOrDefault(bodyText)
+                if (resp.code == 409) {
+                    return@withContext Result.failure(PdfConvertException("not_ready", detail))
+                }
+                if (resp.code == 401) {
+                    return@withContext Result.failure(PdfConvertException("login_required", detail))
+                }
+                if (resp.code in 400..499) {
+                    return@withContext Result.failure(PdfConvertException(code.ifBlank { "failed" }, detail))
+                }
+                lastException = PdfConvertException(code, "HTTP ${resp.code}: $detail")
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+        Result.failure(lastException ?: PdfConvertException("failed", "网络请求失败"))
+    }
+
+    data class PdfConvertResult(
+        val epub: ByteArray,
+        val pages: Int,
+        val chapters: Int,
+        val paragraphs: Int,
+        val chars: Int,
+        val title: String,
+        val author: String,
+    )
+
+    /**
+     * PDF → 墨阅流式精读本 EPUB（服务端转换）
+     * 失败时若服务端给出可识别错误码，抛 PdfConvertException(code = scanned/too_large/empty)
+     */
+    suspend fun convertPdfToEpub(
+        pdfFile: File,
+        title: String? = null,
+        author: String? = null,
+    ): Result<PdfConvertResult> = withContext(Dispatchers.IO) {
+        if (!pdfFile.exists()) return@withContext Result.failure(PdfConvertException("missing", "文件不存在"))
+        if (!isLoggedIn()) return@withContext Result.failure(PdfConvertException("login_required", "未登录"))
+
+        var lastException: Exception? = null
+        for (server in getCandidateServerUrls()) {
+            try {
+                val url = "${server.trimEnd('/')}/sync/pdf/convert"
+                val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
+                    .addFormDataPart(
+                        "file", pdfFile.name,
+                        pdfFile.asRequestBody("application/pdf".toMediaType()),
+                    )
+                if (!title.isNullOrBlank()) builder.addFormDataPart("title", title)
+                if (!author.isNullOrBlank()) builder.addFormDataPart("author", author)
+                val req = Request.Builder().url(url)
+                    .addHeader("Authorization", "Bearer ${getToken() ?: ""}")
+                    .post(builder.build())
+                    .build()
+                val resp = longClient.newCall(req).execute()
+                if (resp.isSuccessful) {
+                    val bytes = resp.body?.bytes() ?: ByteArray(0)
+                    if (bytes.isEmpty()) {
+                        return@withContext Result.failure(PdfConvertException("empty", "转换结果为空"))
+                    }
+                    val decodedTitle = runCatching {
+                        String(android.util.Base64.decode(resp.header("X-Moreader-Title") ?: "", android.util.Base64.DEFAULT))
+                    }.getOrDefault(title ?: pdfFile.nameWithoutExtension)
+                    val decodedAuthor = runCatching {
+                        String(android.util.Base64.decode(resp.header("X-Moreader-Author") ?: "", android.util.Base64.DEFAULT))
+                    }.getOrDefault(author ?: "")
+                    return@withContext Result.success(
+                        PdfConvertResult(
+                            epub = bytes,
+                            pages = resp.header("X-Moreader-Pages")?.toIntOrNull() ?: 0,
+                            chapters = resp.header("X-Moreader-Chapters")?.toIntOrNull() ?: 0,
+                            paragraphs = resp.header("X-Moreader-Paragraphs")?.toIntOrNull() ?: 0,
+                            chars = resp.header("X-Moreader-Chars")?.toIntOrNull() ?: 0,
+                            title = decodedTitle,
+                            author = decodedAuthor,
+                        )
+                    )
+                }
+                val bodyText = resp.body?.string() ?: ""
+                val code = runCatching { JSONObject(bodyText).optString("code", "") }.getOrDefault("")
+                val detail = runCatching { JSONObject(bodyText).optString("detail", bodyText) }.getOrDefault(bodyText)
+                if (resp.code == 401) {
+                    return@withContext Result.failure(PdfConvertException("login_required", detail))
+                }
+                if (resp.code in 400..499) {
+                    // 业务性失败（扫描版 / 超大 / 无文字），无需换服务器重试
+                    return@withContext Result.failure(
+                        PdfConvertException(code.ifBlank { "failed" }, detail)
+                    )
+                }
+                lastException = PdfConvertException(code, "HTTP ${resp.code}: $detail")
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+        Result.failure(lastException ?: PdfConvertException("failed", "网络请求失败"))
     }
 
     // ── 上传书籍 ──────────────────────────────────────

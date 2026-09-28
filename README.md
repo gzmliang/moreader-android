@@ -6,6 +6,9 @@ Originally migrated from a browser extension (墨阅 Moreader), reimagined as a 
 
 ## Features
 
+- **Cloud Library with Cover Grid (v1.1.0)** — A dedicated cloud shelf page: 3-column cover grid, instant search, "on device" badges, one-tap download (bookmarks/highlights/progress restored) and long-press to remove. Covers are extracted automatically from each uploaded EPUB on the server (5-level fallback) and cached on both ends, so reopening is instant.
+- **PDF → Reading Edition (v1.1.0)** — Import a text-layer PDF and it is converted on the server into a standard EPUB (chapter detection reads the PDF outline when available), with a page-1 cover rendered in. The result is an ordinary book, so **TTS, sentence highlighting, bookmarks, highlights, vocabulary, AI summary, AI character graph and AI quizzes all work with no extra steps**. Scanned image-only PDFs are detected and reported instead of silently producing an empty book.
+- **Background PDF Jobs with Real Progress (v1.1.1)** — Large/scanned PDFs are converted by a cloud job queue instead of one long HTTP wait: the app shows a real percentage, page count and estimated time, can keep working in the background, resumes after the app is killed, and notifies when the book is on the shelf.
 - **EPUB Reading** — Renders EPUB content via WebView with customizable fonts, themes, and layout
 - **Footnote Preview & Precise Return-Jump (v2.9.44)** — 
   - Instant bottom sheet preview for both page-level and cross-chapter endnotes (no need to navigate away from reading text)

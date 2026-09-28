@@ -846,4 +846,62 @@ AI Voice（云端 TTS）：
     <string name="donate_kofi_btn">☕ 前往 Ko-fi 支持页面</string>
     <string name="donate_paypal_title">PayPal 收款邮箱：</string>
     <string name="donate_paypal_copied">已复制 PayPal 邮箱至剪贴板！</string>
+
+    <!-- 云端书库独立页面（v1.1.0） -->
+    <string name="cloud_shelf_title">云端书库</string>
+    <string name="cloud_shelf_count_fmt">共 %1$d 本</string>
+    <string name="cloud_shelf_refresh">刷新</string>
+    <string name="cloud_shelf_settings">同步设置</string>
+    <string name="cloud_shelf_login_hint">登录云端账号后即可浏览云端书库，封面和下载都在这里。</string>
+    <string name="cloud_shelf_login_btn">去登录</string>
+    <string name="cloud_shelf_empty">云端书库还没有书\n在书架里长按书籍即可上传</string>
+    <string name="cloud_shelf_search_hint">搜索云端书籍…</string>
+    <string name="cloud_shelf_no_match">没有匹配的书</string>
+    <string name="cloud_shelf_download_done">已下载「%1$s」（书签 %2$d / 高亮 %3$d）</string>
+    <string name="cloud_shelf_deleted">已从云端删除</string>
+    <string name="cloud_shelf_delete_confirm">确定要从云端删除「%1$s」吗？本地副本不受影响。</string>
+    <string name="cloud_shelf_open_now">打开阅读</string>
+    <string name="cloud_shelf_load_failed">云端书库加载失败：%1$s</string>
+    <string name="cloud_shelf_on_device">本地已有</string>
+    <string name="menu_cloud_shelf">云端书库</string>
+    <string name="menu_sync_settings">云同步设置</string>
+    <!-- PDF 导入（云端转精读本） -->
+    <string name="pdf_import_menu">导入 PDF 书籍</string>
+    <string name="pdf_convert_title">PDF 转换</string>
+    <string name="pdf_convert_hint">文字会完整保留并按章节重排，原始图表版式不保留。</string>
+    <string name="pdf_phase_uploading">正在上传 PDF…</string>
+    <string name="pdf_phase_converting">正在云端转换排版…</string>
+    <string name="pdf_phase_importing">正在加入书架…</string>
+    <string name="pdf_convert_done">已转换为精读本：%1$s</string>
+    <string name="pdf_error_login_required">PDF 转换需要使用云端服务，请先在「云同步设置」里登录。</string>
+    <string name="pdf_error_scanned">这本 PDF 是扫描图片版（没有文字层），暂时无法转换。</string>
+    <string name="pdf_error_too_large">PDF 超过 300MB，请先压缩或拆分后再导入。</string>
+    <string name="pdf_error_empty">这本 PDF 没有可提取的正文文字。</string>
+    <string name="pdf_error_failed">PDF 转换失败：%1$s</string>
+    <string name="pdf_error_generic">PDF 转换失败，请稍后再试。</string>
+    <string name="pdf_convert_close">关闭</string>
+    <!-- v1.1.1 后台任务 + 进度条 -->
+    <string name="pdf_phase_queued">已进入云端队列，等待处理…</string>
+    <string name="pdf_phase_analyzing">正在解析 PDF 结构…</string>
+    <string name="pdf_phase_ocr">本书是扫描版，正在逐页识别文字…</string>
+    <string name="pdf_phase_packaging">正在生成精读本…</string>
+    <string name="pdf_phase_downloading">正在下载到书架…</string>
+    <string name="pdf_progress_pages">第 %1$d / %2$d 页</string>
+    <string name="pdf_progress_eta">预计还需 %1$s</string>
+    <string name="pdf_progress_eta_unknown">剩余时间估算中…</string>
+    <string name="pdf_convert_background">后台继续</string>
+    <string name="pdf_convert_cancel">取消转换</string>
+    <string name="pdf_convert_background_hint">可以关掉这个窗口继续看书，转换在云端继续跑，完成后会通知你。</string>
+    <string name="pdf_banner_title">正在转换《%1$s》%2$d%%</string>
+    <string name="pdf_banner_queue">另有 %1$d 本在排队</string>
+    <string name="pdf_notify_channel">PDF 转换</string>
+    <string name="pdf_notify_done_body">《%1$s》已转为精读本，点开就能阅读</string>
+    <string name="pdf_notify_failed_body">《%1$s》转换失败，点开查看原因</string>
+    <string name="pdf_error_network">网络中断，暂时查不到转换进度，请检查网络后重试。</string>
+    <string name="pdf_error_import_failed">下载成功但加入书架失败：%1$s</string>
+    <string name="pdf_error_ocr_too_long">这本书页数太多，云端识别超时。建议在电脑上拆成几本再导入。</string>
+    <string name="pdf_error_ocr_unavailable">云端文字识别服务暂时不可用，请稍后再试。</string>
+    <string name="pdf_error_not_ready">云端还在转换中，请稍候。</string>
+    <string name="pdf_error_canceled">已取消转换。</string>
+    <string name="cloud_shelf_moved_hint">云端书库（带封面与搜索）已移到书架底部的云图标里。</string>
 </resources>

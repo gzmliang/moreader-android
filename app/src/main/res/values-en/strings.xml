@@ -723,4 +723,129 @@ Just change the Base URL and API Key</string>
     <string name="donate_kofi_btn">☕ Support on Ko-fi</string>
     <string name="donate_paypal_title">PayPal Email:</string>
     <string name="donate_paypal_copied">PayPal email copied to clipboard!</string>
+
+    <!-- Cloud library page (v1.1.0) -->
+    <string name="cloud_shelf_title">Cloud Library</string>
+    <string name="cloud_shelf_count_fmt">%1$d books</string>
+    <string name="cloud_shelf_refresh">Refresh</string>
+    <string name="cloud_shelf_settings">Sync settings</string>
+    <string name="cloud_shelf_login_hint">Sign in to your cloud account to browse the cloud library — covers and downloads live here.</string>
+    <string name="cloud_shelf_login_btn">Sign in</string>
+    <string name="cloud_shelf_empty">No books in the cloud yet.\nLong-press a book on your shelf to upload it.</string>
+    <string name="cloud_shelf_search_hint">Search cloud books…</string>
+    <string name="cloud_shelf_no_match">No matching books</string>
+    <string name="cloud_shelf_download_done">Downloaded "%1$s" (%2$d bookmarks / %3$d highlights)</string>
+    <string name="cloud_shelf_deleted">Removed from the cloud</string>
+    <string name="cloud_shelf_delete_confirm">Remove "%1$s" from the cloud? Your local copy is not affected.</string>
+    <string name="cloud_shelf_open_now">Read now</string>
+    <string name="cloud_shelf_load_failed">Could not load the cloud library: %1$s</string>
+    <string name="cloud_shelf_on_device">On device</string>
+    <string name="menu_cloud_shelf">Cloud library</string>
+    <string name="menu_sync_settings">Cloud sync settings</string>
+    <!-- PDF import (server-side conversion) -->
+    <string name="pdf_import_menu">Import PDF book</string>
+    <string name="pdf_convert_title">PDF conversion</string>
+    <string name="pdf_convert_hint">All text is preserved and re-flowed into chapters; the original layout is not kept.</string>
+    <string name="pdf_phase_uploading">Uploading PDF…</string>
+    <string name="pdf_phase_converting">Converting on the server…</string>
+    <string name="pdf_phase_importing">Adding to your shelf…</string>
+    <string name="pdf_convert_done">Converted to a reading edition: %1$s</string>
+    <string name="pdf_error_login_required">PDF conversion runs on the cloud service. Please sign in under Cloud sync settings first.</string>
+    <string name="pdf_error_scanned">This PDF is a scanned image file (no text layer) and cannot be converted yet.</string>
+    <string name="pdf_error_too_large">This PDF is larger than 300MB. Please compress or split it first.</string>
+    <string name="pdf_error_empty">No extractable body text was found in this PDF.</string>
+    <string name="pdf_error_failed">PDF conversion failed: %1$s</string>
+    <string name="pdf_error_generic">PDF conversion failed. Please try again later.</string>
+    <string name="pdf_convert_close">Close</string>
+    <!-- v1.1.1 background jobs + progress -->
+    <string name="pdf_phase_queued">Queued on the server, waiting to start…</string>
+    <string name="pdf_phase_analyzing">Analyzing the PDF structure…</string>
+    <string name="pdf_phase_ocr">This is a scanned book; recognizing text page by page…</string>
+    <string name="pdf_phase_packaging">Building your reading edition…</string>
+    <string name="pdf_phase_downloading">Downloading to your shelf…</string>
+    <string name="pdf_progress_pages">Page %1$d of %2$d</string>
+    <string name="pdf_progress_eta">About %1$s left</string>
+    <string name="pdf_progress_eta_unknown">Estimating time left…</string>
+    <string name="pdf_convert_background">Keep in background</string>
+    <string name="pdf_convert_cancel">Cancel conversion</string>
+    <string name="pdf_convert_background_hint">You can close this and keep reading \u2014 the conversion continues on the server and you\'ll be notified when it\'s done.</string>
+    <string name="pdf_banner_title">Converting %1$s — %2$d%%</string>
+    <string name="pdf_banner_queue">%1$d more queued</string>
+    <string name="pdf_notify_channel">PDF conversion</string>
+    <string name="pdf_notify_done_body">%1$s is ready to read</string>
+    <string name="pdf_notify_failed_body">%1$s failed to convert. Tap for details.</string>
+    <string name="pdf_error_network">Network interrupted, cannot check conversion progress. Please check your connection.</string>
+    <string name="pdf_error_import_failed">Downloaded, but adding to the shelf failed: %1$s</string>
+    <string name="pdf_error_ocr_too_long">This book has too many pages to recognize in one run. Please split it into smaller files first.</string>
+    <string name="pdf_error_ocr_unavailable">The server text-recognition service is temporarily unavailable. Please try again later.</string>
+    <string name="pdf_error_not_ready">Still converting on the server, please wait.</string>
+    <string name="pdf_error_canceled">Conversion canceled.</string>
+    <string name="cloud_shelf_moved_hint">The cloud library (with covers and search) now lives behind the cloud icon at the bottom of your shelf.</string>
+
+    <string name="vocabulary_add_custom">Add manually</string>
+    <string name="vocabulary_add_custom_title">Add a word</string>
+    <string name="vocabulary_add_custom_hint">Enter the word to add</string>
+    <string name="vocabulary_add_custom_empty">Please enter a word</string>
+    <string name="vocabulary_add_custom_success">Added: %1$s</string>
+    <string name="help_cloud_ai_content">Cloud translation uses an online API — fast and high quality.
+
+Default setup:
+• API: DeepSeek (api.deepseek.com)
+• Model: deepseek-chat
+• You only need to fill in your API Key
+
+How to get a DeepSeek API Key:
+1. Go to https://platform.deepseek.com
+2. Sign up with your phone number or email
+3. Click your avatar (top right) → API Keys
+4. Click "Create API Key" and copy it
+5. Paste it into the API Key field below
+
+Note: new DeepSeek accounts get CNY 5 of free credit — roughly 100,000 translations.
+
+Other OpenAI-compatible APIs also work:
+• Qwen: dashscope.aliyuncs.com
+• Moonshot: api.moonshot.cn
+• SiliconFlow: api.siliconflow.cn
+Just change the Base URL and API Key.</string>
+    <string name="help_local_ai_content">Moreader supports on-device AI translation — look up and translate words without an internet connection.
+
+How to use:
+1. Switch to "Local model"
+2. Tap the button below to pick a model file
+3. While reading, long-press to select text and tap "AI translate"
+
+Download a model (.gguf):
+Recommended: Qwen2.5-1.5B-Instruct-Q4_K_M.gguf (about 1GB, stable quality)
+  https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF
+  Mirror:
+  https://www.modelscope.cn/models/Qwen/Qwen2.5-1.5B-Instruct-GGUF
+
+Lightweight option: Qwen2.5-0.5B-Instruct-Q4_K_M.gguf (about 354MB)
+  https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+
+Speed reference (OnePlus 12, Snapdragon 8 Gen 3):
+• 0.5B: first token 0.7-1.3s, translation 4-8s
+• 1.5B: first token 1.3-2.1s, translation 6-15s
+• Bigger models are more accurate; 1.5B is the safe choice.</string>
+    <string name="help_tts_content">Moreader offers several TTS reading engines.
+
+Edge TTS (free, recommended):
+• Microsoft\'s free speech synthesis, great quality
+• Needs internet, no API Key required
+• Many languages and voices
+
+AI Voice (cloud TTS):
+• Uses a cloud TTS service such as SiliconFlow
+• Supports MOSS-TTSD, CosyVoice2 and more
+• Requires a server URL and API Key
+• Example: SiliconFlow — https://api.siliconflow.cn
+
+Custom TTS:
+• Compatible with the OpenAI TTS API format
+• Works with any OpenAI-compatible TTS service
+
+Speed:
+Drag the slider to adjust reading speed
+0.5x = slow, 1.0x = normal, 2.0x = fast</string>
 </resources>

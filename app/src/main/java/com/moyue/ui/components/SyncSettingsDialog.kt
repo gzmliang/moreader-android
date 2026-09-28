@@ -48,12 +48,6 @@ fun SyncSettingsDialog(
     var isLoggingIn by remember { mutableStateOf(false) }
     var loginError by remember { mutableStateOf<String?>(null) }
     var syncResult by remember { mutableStateOf<String?>(null) }
-    var cloudBooks by remember { mutableStateOf<List<SyncClient.BookInfo>?>(null) }
-    var isLoadingCloud by remember { mutableStateOf(false) }
-    var isDownloading by remember { mutableStateOf<Int?>(null) }
-    var isDeleting by remember { mutableStateOf<Int?>(null) }
-    var confirmDeleteBookId by remember { mutableStateOf<Int?>(null) }
-    var cloudSearchQuery by remember { mutableStateOf("") }
     var loggedInVersion by remember { mutableStateOf(0) }
     var showHelpDialog by remember { mutableStateOf(false) }
 
@@ -61,14 +55,6 @@ fun SyncSettingsDialog(
 
     val localIsLoggedIn by remember { derivedStateOf { loggedInVersion >= 0 && syncClient.isLoggedIn() } }
     val localLoggedEmail by remember { derivedStateOf { syncClient.getEmail() } }
-    val filteredCloudBooks = cloudBooks?.let { list ->
-        if (cloudSearchQuery.isBlank()) list
-        else list.filter { book ->
-            book.title.contains(cloudSearchQuery, ignoreCase = true) ||
-            book.author.contains(cloudSearchQuery, ignoreCase = true)
-        }
-    }
-
     val isLoggedIn = localIsLoggedIn
     val loggedEmail = localLoggedEmail
 
@@ -311,198 +297,12 @@ fun SyncSettingsDialog(
 
                     Spacer(Modifier.height(10.dp))
 
-                    // 查看云端书库
-                    OutlinedButton(
-                        onClick = {
-                            isLoadingCloud = true
-                            cloudBooks = null
-                            scope.launch {
-                                syncClient.listBooks().fold(
-                                    onSuccess = { books ->
-                                        cloudBooks = books
-                                        isLoadingCloud = false
-                                    },
-                                    onFailure = { e ->
-                                        cloudBooks = null
-                                        isLoadingCloud = false
-                                    },
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isLoadingCloud,
-                    ) {
-                        if (isLoadingCloud) {
-                            CircularProgressIndicator(Modifier.size(18.dp),
-                                color = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.width(4.dp))
-                        }
-                        Icon(Icons.Default.Cloud, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(if (isLoadingCloud) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_loading) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_view_cloud))
-                    }
-
-                    cloudBooks?.let { list ->
-                        Spacer(Modifier.height(8.dp))
-                        if (list.isEmpty()) {
-                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_cloud_shelf_empty), fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                        } else {
-                            OutlinedTextField(
-                                value = cloudSearchQuery,
-                                onValueChange = { cloudSearchQuery = it },
-                                placeholder = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_search_hint), fontSize = 13.sp) },
-                                singleLine = true,
-                                leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(18.dp)) },
-                                trailingIcon = {
-                                    if (cloudSearchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { cloudSearchQuery = "" }) {
-                                            Icon(Icons.Default.Close, null, Modifier.size(18.dp))
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth().height(48.dp),
-                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
-                                shape = RoundedCornerShape(8.dp),
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            val filteredList = filteredCloudBooks ?: list
-                            val totalCount = list.size
-                            val shownCount = filteredList.size
-                            val hasFilter = cloudSearchQuery.isNotBlank()
-                            Text(
-                                if (hasFilter) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_cloud_books_found_fmt, shownCount, totalCount)
-                                else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_cloud_books_total_fmt, totalCount),
-                                fontSize = 12.sp, fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            if (hasFilter && filteredList.isEmpty()) {
-                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_no_match), fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
-                            } else {
-                                Column(modifier = Modifier.heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
-                                    filteredList.forEach { book ->
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-                                            .clickable(enabled = isDownloading == null) {
-                                                isDownloading = book.id
-                                                scope.launch {
-                                                    val tmpFile = File(context.cacheDir, "download_${book.id}.epub")
-                                                    syncClient.downloadBook(book.id, tmpFile).fold(
-                                                        onSuccess = { file ->
-                                                            val repo = BookRepository(context)
-                                                            val localBook = repo.importEpubFile(file)
-                                                            val coverPath = repo.extractCover(localBook.id)
-                                                            if (coverPath != null) {
-                                                                repo.updateBookCover(localBook.id, coverPath)
-                                                            }
-                                                            file.delete()
-                                                            var restoredBm = 0
-                                                            var restoredHl = 0
-                                                            syncClient.pullBookMetadata(book.id).onSuccess { metaJson ->
-                                                                try {
-                                                                    val obj = org.json.JSONObject(metaJson)
-                                                                    if (obj.has("bookmarks")) {
-                                                                        val arr = obj.getJSONArray("bookmarks")
-                                                                        val bms = (0 until arr.length()).map { j ->
-                                                                            val b = arr.getJSONObject(j)
-                                                                            com.moyue.app.data.models.Bookmark(
-                                                                                bookId = localBook.id,
-                                                                                chapterIndex = b.optInt("chapter_index", 0),
-                                                                                chapterTitle = b.optString("chapter_title", null),
-                                                                                paragraphIndex = b.optInt("paragraph_index", 0),
-                                                                                paragraphText = b.optString("paragraph_text", null),
-                                                                                progress = b.optDouble("progress", 0.0).toFloat(),
-                                                                                createdAt = b.optLong("created_at", System.currentTimeMillis()),
-                                                                            )
-                                                                        }
-                                                                        repo.importBookmarks(bms)
-                                                                        restoredBm = bms.size
-                                                                    }
-                                                                    if (obj.has("highlights")) {
-                                                                        val arr = obj.getJSONArray("highlights")
-                                                                        val hls = (0 until arr.length()).map { j ->
-                                                                            val h = arr.getJSONObject(j)
-                                                                            com.moyue.app.data.models.Highlight(
-                                                                                bookId = localBook.id,
-                                                                                chapterIndex = h.optInt("chapter_index", 0),
-                                                                                startParagraph = h.optInt("start_paragraph", 0),
-                                                                                startOffset = h.optInt("start_offset", 0),
-                                                                                endParagraph = h.optInt("end_paragraph", 0),
-                                                                                endOffset = h.optInt("end_offset", 0),
-                                                                                text = h.optString("text", ""),
-                                                                                note = h.optString("note", null),
-                                                                                color = h.optInt("color", 0xFFFFFF00.toInt()),
-                                                                                createdAt = h.optLong("created_at", System.currentTimeMillis()),
-                                                                            )
-                                                                        }
-                                                                        repo.importHighlights(hls)
-                                                                        restoredHl = hls.size
-                                                                    }
-                                                                    if (obj.has("progress") && !obj.isNull("progress")) {
-                                                                        val p = obj.getJSONObject("progress")
-                                                                        val chIdx = p.optInt("chapter_index", -1)
-                                                                        if (chIdx >= 0) {
-                                                                            repo.updateProgress(localBook.id,
-                                                                                p.optString("chapter_href", null), chIdx,
-                                                                                p.optDouble("percentage", 0.0).toFloat(), null,
-                                                                                p.optInt("paragraph_index", 0), localBook.themeId, localBook.fontSize)
-                                                                        }
-                                                                    }
-                                                                } catch (e: Exception) {
-                                                                    android.util.Log.e("Sync", "Failed to apply metadata", e)
-                                                                }
-                                                            }
-                                                            val countMsg = if (restoredBm > 0 || restoredHl > 0) context.getString(com.moyue.app.R.string.sync_download_restored_summary, book.title, restoredBm, restoredHl) else book.title
-                                                            android.widget.Toast.makeText(context,
-                                                                "${context.getString(com.moyue.app.R.string.sync_download)}: $countMsg", android.widget.Toast.LENGTH_SHORT).show()
-                                                        },
-                                                        onFailure = { e ->
-                                                            android.widget.Toast.makeText(context,
-                                                                context.getString(com.moyue.app.R.string.sync_download_fail, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
-                                                        },
-                                                    )
-                                                    isDownloading = null
-                                                }
-                                            },
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = if (isDownloading == book.id) MaterialTheme.colorScheme.primaryContainer
-                                                else Color.Transparent,
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
-                                            if (isDownloading == book.id) {
-                                                CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
-                                                Spacer(Modifier.width(4.dp))
-                                            } else {
-                                                Icon(Icons.Default.Download, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
-                                                Spacer(Modifier.width(4.dp))
-                                            }
-                                            Text("${book.title} (${book.author})",
-                                                fontSize = 11.sp,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                                maxLines = 1,
-                                                modifier = Modifier.weight(1f),
-                                                overflow = TextOverflow.Ellipsis)
-                                            if (isDeleting == book.id) {
-                                                CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
-                                            } else {
-                                                IconButton(
-                                                    onClick = { confirmDeleteBookId = book.id },
-                                                    modifier = Modifier.size(20.dp),
-                                                ) {
-                                                    Icon(Icons.Default.Delete, androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete),
-                                                        Modifier.size(14.dp),
-                                                        tint = MaterialTheme.colorScheme.error)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            }
-                        }
-                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_moved_hint),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
 
                     Spacer(Modifier.height(8.dp))
                     HorizontalDivider()
@@ -657,44 +457,4 @@ fun SyncSettingsDialog(
         )
     }
 
-    // ── 确认删除云端书籍 ──
-    confirmDeleteBookId?.let { bookId ->
-        val book = cloudBooks?.find { it.id == bookId }
-        AlertDialog(
-            onDismissRequest = { confirmDeleteBookId = null },
-            title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_delete_confirm)) },
-            text = {
-                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_delete_book_confirm, book?.title ?: ""))
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        confirmDeleteBookId = null
-                        isDeleting = bookId
-                        scope.launch {
-                            syncClient.deleteCloudBook(bookId).fold(
-                                onSuccess = { msg ->
-                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-                                    syncClient.listBooks().fold(
-                                        onSuccess = { cloudBooks = it },
-                                        onFailure = {},
-                                    )
-                                },
-                                onFailure = { e ->
-                                    android.widget.Toast.makeText(context,
-                                        context.getString(com.moyue.app.R.string.sync_delete_fail, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
-                                },
-                            )
-                            isDeleting = null
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error),
-                ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDeleteBookId = null }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel)) }
-            },
-        )
-    }
 }

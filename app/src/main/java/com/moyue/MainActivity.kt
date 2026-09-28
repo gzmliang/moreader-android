@@ -26,8 +26,10 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import com.moyue.app.data.BookRepository
 import com.moyue.app.ui.BookmarksScreen
+import com.moyue.app.ui.CloudShelfScreen
 import com.moyue.app.ui.FlashcardScreen
 import com.moyue.app.ui.LibraryScreen
+import com.moyue.app.ui.LibraryViewModelFactory
 import com.moyue.app.ui.ReaderScreen
 import com.moyue.app.ui.VocabularyScreen
 import com.moyue.app.ui.theme.MoreaderTheme
@@ -130,6 +132,7 @@ sealed class Screen {
     data object Bookmarks : Screen()
     data object Vocabulary : Screen()
     data object Flashcards : Screen()
+    data object CloudShelf : Screen()
 }
 
 @Composable
@@ -162,6 +165,7 @@ fun MoreaderApp(
                 onOpenBookmarks = { navigateTo(Screen.Bookmarks) },
                 onOpenVocabulary = { navigateTo(Screen.Vocabulary) },
                 onOpenFlashcards = { navigateTo(Screen.Flashcards) },
+                onOpenCloudShelf = { navigateTo(Screen.CloudShelf) },
                 repository = repository,
                 sharedUris = sharedUris,
                 onSharedUrisConsumed = onSharedUrisConsumed,
@@ -198,6 +202,15 @@ fun MoreaderApp(
             FlashcardScreen(
                 repository = repository,
                 onBack = { navStack = navStack.dropLast(1) }
+            )
+        }
+        is Screen.CloudShelf -> {
+            CloudShelfScreen(
+                viewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                    factory = LibraryViewModelFactory(repository)
+                ),
+                onBack = { navStack = navStack.dropLast(1) },
+                onOpenBook = { bookId -> navigateTo(Screen.Reader(bookId)) },
             )
         }
     }

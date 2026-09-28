@@ -39,6 +39,8 @@ enum class BookSortOrder {
     PROGRESS,    // 阅读进度
 }
 
+/** PDF 导入（服务端转换）的进度状态见 com.moyue.app.sync.PdfImportManager */
+
 class LibraryViewModel(
     private val repository: BookRepository,
 ) : ViewModel() {
@@ -155,6 +157,28 @@ class LibraryViewModel(
             }
         }
     }
+    // ── PDF 导入 ────────────────────────────────────────
+    // v1.1.1 起 PDF 走「云端后台任务 + 进度轮询」，实现搬到 sync/PdfImportManager.kt
+    // （这里只保留 Uri 相关的工具方法）
+
+    /** 判断一个 Uri 是不是 PDF */
+    fun isPdfUri(context: Context, uri: Uri): Boolean {
+        val mime = context.contentResolver.getType(uri) ?: ""
+        if (mime.contains("pdf", ignoreCase = true)) return true
+        return queryDisplayName(context, uri)?.lowercase()?.endsWith(".pdf") == true
+    }
+
+    fun queryDisplayName(context: Context, uri: Uri): String? {
+        return try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && c.moveToFirst()) c.getString(idx) else null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
 
     fun deleteBook(context: Context, book: Book) {
         viewModelScope.launch {
@@ -291,7 +315,12 @@ class LibraryViewModel(
     }
 
     /** 下载云端独有书籍到本地（含书签和高亮） */
-    fun downloadCloudBook(context: Context, syncClient: SyncClient, bookInfo: SyncClient.BookInfo) {
+    fun downloadCloudBook(
+        context: Context,
+        syncClient: SyncClient,
+        bookInfo: SyncClient.BookInfo,
+        onDone: (String) -> Unit = {},
+    ) {
         viewModelScope.launch {
             val tmpFile = File(context.cacheDir, "download_${bookInfo.id}.epub")
             syncClient.downloadBook(bookInfo.id, tmpFile).fold(
@@ -307,16 +336,18 @@ class LibraryViewModel(
                     var restoredBm = 0
                     var restoredHl = 0
                     syncClient.pullBookMetadata(bookInfo.id).onSuccess { metaJson ->
-                        // 解析并写入元数据
                         val obj = org.json.JSONObject(metaJson)
                         restoredBm = obj.optJSONArray("bookmarks")?.length() ?: 0
                         restoredHl = obj.optJSONArray("highlights")?.length() ?: 0
                         applyPullMetadata(repo, localBook.id, metaJson)
                     }
                     android.widget.Toast.makeText(context,
-                        "Downloaded: ${bookInfo.title} (${restoredBm}BMs+${restoredHl}HLs)", android.widget.Toast.LENGTH_SHORT).show()
-                    // 刷新书架
+                        context.getString(com.moyue.app.R.string.cloud_shelf_download_done,
+                            bookInfo.title, restoredBm, restoredHl),
+                        android.widget.Toast.LENGTH_SHORT).show()
+                    // 刷新书架（从云端独有列表里移除）
                     _cloudBooks.value = _cloudBooks.value.filter { it.id != bookInfo.id }
+                    onDone(localBook.id)
                 },
                 onFailure = { e ->
                     android.widget.Toast.makeText(context,
