@@ -157,6 +157,83 @@ class LibraryViewModel(
             }
         }
     }
+    // ── TXT / 压缩包导入（v1.1.2 新增）────────────────────
+
+    /** 本地 EPUB 文件（例如压缩包里解出来的）直接入库 */
+    fun importLocalEpubFile(context: Context, epubFile: File) {
+        viewModelScope.launch {
+            try {
+                val book = repository.importEpubFile(epubFile)
+                repository.extractCover(book.id)?.let { repository.updateBookCover(book.id, it) }
+                if (repository.isRecentDuplicate) {
+                    toastShort(context, context.getString(com.moyue.app.R.string.import_duplicate_skip, book.title))
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Import", "本地 EPUB 导入失败", e)
+            }
+        }
+    }
+
+    /** TXT：上传服务端做编码识别 + 智能分章，转成 EPUB 再入库 */
+    fun importTxtFile(context: Context, txtFile: File) {
+        viewModelScope.launch {
+            val syncClient = SyncClient(context)
+            if (!syncClient.isLoggedIn()) {
+                txtFile.delete()
+                toastLong(context, context.getString(com.moyue.app.R.string.webdav_txt_need_login))
+                return@launch
+            }
+            val result = syncClient.convertTxtToEpub(txtFile, title = txtFile.name.substringBeforeLast('.'))
+            txtFile.delete()
+            result.fold(
+                onSuccess = { r ->
+                    val epubFile = File(context.cacheDir, "import_txt_${System.currentTimeMillis()}.epub")
+                    epubFile.writeBytes(r.epub)
+                    val book = repository.importEpubFile(epubFile)
+                    repository.extractCover(book.id)?.let { repository.updateBookCover(book.id, it) }
+                    toastShort(context, context.getString(com.moyue.app.R.string.webdav_imported_success, book.title, ""))
+                },
+                onFailure = { e ->
+                    val code = (e as? SyncClient.PdfConvertException)?.code
+                    val msg = when (code) {
+                        "not_text" -> context.getString(com.moyue.app.R.string.webdav_txt_not_text)
+                        "empty" -> context.getString(com.moyue.app.R.string.webdav_txt_empty)
+                        "too_large" -> context.getString(com.moyue.app.R.string.webdav_txt_too_large)
+                        "login_required" -> context.getString(com.moyue.app.R.string.webdav_txt_need_login)
+                        else -> context.getString(
+                            com.moyue.app.R.string.webdav_txt_failed_fmt,
+                            e.message ?: e.javaClass.simpleName
+                        )
+                    }
+                    toastLong(context, msg)
+                }
+            )
+        }
+    }
+
+    /** 把 content:// 拷到缓存目录，返回临时文件（失败返回 null） */
+    suspend fun copyUriToCache(context: Context, uri: Uri, fileName: String): File? =
+        withContext(Dispatchers.IO) {
+            try {
+                val safe = fileName.replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { "import.bin" }
+                val tmp = File(context.cacheDir, "import_${System.currentTimeMillis()}_$safe")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    tmp.outputStream().use { input.copyTo(it) }
+                } ?: return@withContext null
+                if (tmp.length() > 0) tmp else null
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+    private fun toastShort(context: Context, msg: String) {
+        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    private fun toastLong(context: Context, msg: String) {
+        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+    }
+
     // ── PDF 导入 ────────────────────────────────────────
     // v1.1.1 起 PDF 走「云端后台任务 + 进度轮询」，实现搬到 sync/PdfImportManager.kt
     // （这里只保留 Uri 相关的工具方法）

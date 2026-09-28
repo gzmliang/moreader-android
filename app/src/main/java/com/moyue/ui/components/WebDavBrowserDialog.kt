@@ -1,9 +1,9 @@
 package com.moyue.app.ui.components
-import android.util.Log
-import androidx.compose.ui.res.stringResource
-
 import android.content.Context
+import androidx.compose.ui.res.stringResource
 import android.net.Uri
+import android.util.Log
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -22,12 +23,26 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import com.moyue.app.data.BookRepository
+import com.moyue.app.sync.PdfImportManager
+import com.moyue.app.sync.SyncClient
 import com.moyue.app.sync.WebDavClient
+import com.moyue.app.util.DAV_HANDLED_EXTS
+import com.moyue.app.util.extOf
+import com.moyue.app.util.extractBooksFromZip
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
 import java.net.URLDecoder
+
+private fun iconFor(ext: String): ImageVector = when (ext) {
+    "epub" -> Icons.Default.Book
+    "txt" -> Icons.Default.Description
+    "pdf" -> Icons.Default.PictureAsPdf
+    "zip" -> Icons.Default.FolderZip
+    else -> Icons.Default.InsertDriveFile
+}
 
 @Composable
 fun WebDavBrowserDialog(
@@ -50,6 +65,10 @@ fun WebDavBrowserDialog(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var downloadingPath by remember { mutableStateOf<String?>(null) }
     var showHelpDialog by remember { mutableStateOf(false) }
+    /** 转换 / 解压中的提示文案，非空时禁止再次点击 */
+    var busyLabel by remember { mutableStateOf<String?>(null) }
+    /** 压缩包里有多本书时，弹出来让用户挑 */
+    var zipPick by remember { mutableStateOf<Pair<File, List<File>>?>(null) }
 
     var defaultUploadDir by remember { mutableStateOf(webDavClient.getDefaultUploadDir()) }
 
@@ -63,6 +82,13 @@ fun WebDavBrowserDialog(
     fun isAtRoot(path: String): Boolean {
         val p = path.trimEnd('/')
         return p.isBlank() || p == rootDavPath || p == "/"
+    }
+
+    fun toast(msg: String, long: Boolean = false) {
+        android.widget.Toast.makeText(
+            context, msg,
+            if (long) android.widget.Toast.LENGTH_LONG else android.widget.Toast.LENGTH_SHORT
+        ).show()
     }
 
     fun refreshList(path: String) {
@@ -82,6 +108,186 @@ fun WebDavBrowserDialog(
                 }
             )
         }
+    }
+
+    /** EPUB：入库 + 抽封面 + 恢复同名伴侣元数据（书签/高亮/进度） */
+    suspend fun importEpubFromFile(epubFile: File, remotePath: String, repo: BookRepository) {
+        val imported = repo.importEpubFile(epubFile)
+        val cover = repo.extractCover(imported.id)
+        if (cover != null) {
+            repo.updateBookCover(imported.id, cover)
+        }
+        epubFile.delete()
+
+        var restoredBm = 0
+        var restoredHl = 0
+        if (remotePath.isNotBlank()) {
+            val metaPath = remotePath.removeSuffix(".epub").removeSuffix(".EPUB") + ".moreader.json"
+            webDavClient.getTextFile(metaPath).onSuccess { metaJson ->
+                try {
+                    val obj = JSONObject(metaJson)
+                    if (obj.has("bookmarks")) {
+                        val arr = obj.getJSONArray("bookmarks")
+                        val bms = (0 until arr.length()).map { j ->
+                            val b = arr.getJSONObject(j)
+                            com.moyue.app.data.models.Bookmark(
+                                bookId = imported.id,
+                                chapterIndex = b.optInt("chapter_index", 0),
+                                chapterTitle = b.optString("chapter_title", null),
+                                paragraphIndex = b.optInt("paragraph_index", 0),
+                                paragraphText = b.optString("paragraph_text", null),
+                                progress = b.optDouble("progress", 0.0).toFloat(),
+                                createdAt = b.optLong("created_at", System.currentTimeMillis()),
+                            )
+                        }
+                        repo.importBookmarks(bms)
+                        restoredBm = bms.size
+                    }
+                    if (obj.has("highlights")) {
+                        val arr = obj.getJSONArray("highlights")
+                        val hls = (0 until arr.length()).map { j ->
+                            val h = arr.getJSONObject(j)
+                            com.moyue.app.data.models.Highlight(
+                                bookId = imported.id,
+                                chapterIndex = h.optInt("chapter_index", 0),
+                                startParagraph = h.optInt("start_paragraph", 0),
+                                startOffset = h.optInt("start_offset", 0),
+                                endParagraph = h.optInt("end_paragraph", 0),
+                                endOffset = h.optInt("end_offset", 0),
+                                text = h.optString("text", ""),
+                                note = h.optString("note", null),
+                                color = h.optInt("color", 0xFFFFFF00.toInt()),
+                                createdAt = h.optLong("created_at", System.currentTimeMillis()),
+                            )
+                        }
+                        repo.importHighlights(hls)
+                        restoredHl = hls.size
+                    }
+                    if (obj.has("progress") && !obj.isNull("progress")) {
+                        val p = obj.getJSONObject("progress")
+                        val chIdx = p.optInt("chapter_index", -1)
+                        if (chIdx >= 0) {
+                            repo.updateProgress(imported.id,
+                                p.optString("chapter_href", null), chIdx,
+                                p.optDouble("percentage", 0.0).toFloat(), null,
+                                p.optInt("paragraph_index", 0), imported.themeId, imported.fontSize)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("WebDAV", "Failed to restore companion metadata", e)
+                }
+            }
+        }
+
+        val extraMsg = if (restoredBm > 0 || restoredHl > 0)
+            context.getString(com.moyue.app.R.string.webdav_import_restored_meta, restoredBm, restoredHl) else ""
+        toast(context.getString(com.moyue.app.R.string.webdav_imported_success, imported.title, extraMsg))
+        onBookImported()
+    }
+
+    /** TXT：交给服务端做编码识别 + 智能分章，转成 EPUB 再入库 */
+    suspend fun importTxtFile(txtFile: File) {
+        val client = SyncClient(context)
+        if (!client.isLoggedIn()) {
+            toast(context.getString(com.moyue.app.R.string.webdav_txt_need_login), long = true)
+            txtFile.delete()
+            return
+        }
+        busyLabel = context.getString(com.moyue.app.R.string.webdav_txt_converting)
+        val result = client.convertTxtToEpub(
+            txtFile,
+            title = txtFile.name.substringBeforeLast('.'),
+        )
+        busyLabel = null
+        txtFile.delete()
+
+        result.fold(
+            onSuccess = { r ->
+                val tmpEpub = File(context.cacheDir, "webdav_txt_${System.currentTimeMillis()}.epub")
+                tmpEpub.writeBytes(r.epub)
+                importEpubFromFile(tmpEpub, "", BookRepository(context))
+            },
+            onFailure = { e ->
+                val code = (e as? SyncClient.PdfConvertException)?.code
+                val msg = when (code) {
+                    "not_text" -> context.getString(com.moyue.app.R.string.webdav_txt_not_text)
+                    "empty" -> context.getString(com.moyue.app.R.string.webdav_txt_empty)
+                    "too_large" -> context.getString(com.moyue.app.R.string.webdav_txt_too_large)
+                    "login_required" -> context.getString(com.moyue.app.R.string.webdav_txt_need_login)
+                    else -> context.getString(
+                        com.moyue.app.R.string.webdav_txt_failed_fmt,
+                        e.message ?: e.javaClass.simpleName
+                    )
+                }
+                toast(msg, long = true)
+            }
+        )
+    }
+
+    /** PDF：投递到现有的云端转换队列（本地导入 PDF 用的是同一条通道） */
+    fun submitPdfFile(pdfFile: File) {
+        val client = SyncClient(context)
+        if (!client.isLoggedIn()) {
+            toast(context.getString(com.moyue.app.R.string.webdav_pdf_need_login), long = true)
+            pdfFile.delete()
+            return
+        }
+        val uri = runCatching {
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdfFile)
+        }.getOrNull()
+        if (uri == null) {
+            toast(context.getString(com.moyue.app.R.string.webdav_pdf_prepare_failed), long = true)
+            pdfFile.delete()
+            return
+        }
+        PdfImportManager.submit(context, listOf(uri), listOf(pdfFile.name))
+        toast(context.getString(com.moyue.app.R.string.webdav_pdf_queued), long = true)
+        onDismiss()
+    }
+
+    /** 本地文件（已下载/已解压）按扩展名分派 */
+    suspend fun importLocalBook(file: File, remotePath: String = "") {
+        when (extOf(file.name)) {
+            "epub" -> importEpubFromFile(file, remotePath, BookRepository(context))
+            "txt" -> importTxtFile(file)
+            "pdf" -> submitPdfFile(file)
+        }
+    }
+
+    /** 远端条目：先下载到缓存，再按类型分派 */
+    suspend fun handleRemoteItem(item: WebDavClient.DavItem) {
+        val ext = extOf(item.name)
+        val tmp = File(context.cacheDir, "webdav_${System.currentTimeMillis()}.$ext")
+        webDavClient.downloadFile(item.path, tmp).fold(
+            onSuccess = { file ->
+                when (ext) {
+                    "epub", "txt", "pdf" -> importLocalBook(file, item.path)
+                    "zip" -> {
+                        busyLabel = context.getString(com.moyue.app.R.string.webdav_zip_extracting)
+                        val (dir, books) = extractBooksFromZip(context, file)
+                        busyLabel = null
+                        file.delete()
+                        when {
+                            books.isEmpty() -> {
+                                dir.deleteRecursively()
+                                toast(context.getString(com.moyue.app.R.string.webdav_zip_empty), long = true)
+                            }
+                            books.size == 1 -> {
+                                try {
+                                    importLocalBook(books[0])
+                                } finally {
+                                    dir.deleteRecursively()
+                                }
+                            }
+                            else -> zipPick = Pair(dir, books)
+                        }
+                    }
+                }
+            },
+            onFailure = { err ->
+                toast(context.getString(com.moyue.app.R.string.webdav_download_failed_fmt, err.message ?: ""), long = true)
+            }
+        )
     }
 
     LaunchedEffect(isConfigured) {
@@ -228,6 +434,17 @@ fun WebDavBrowserDialog(
 
                     Spacer(Modifier.height(8.dp))
 
+                    busyLabel?.let { label ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(6.dp))
+                            Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+
                     if (isLoading) {
                         Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(Modifier.size(32.dp))
@@ -263,98 +480,26 @@ fun WebDavBrowserDialog(
                                 )
 
                                 for (item in sorted) {
-                                    val isEpub = item.name.endsWith(".epub", ignoreCase = true)
+                                    val ext = extOf(item.name)
+                                    val isBook = !item.isDirectory && ext in DAV_HANDLED_EXTS
                                     val isDownloadingThis = downloadingPath == item.path
+                                    val clickable = downloadingPath == null && busyLabel == null
 
                                     Surface(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(vertical = 2.dp)
-                                            .clickable(enabled = downloadingPath == null) {
+                                            .clickable(enabled = clickable) {
                                                 if (item.isDirectory) {
                                                     refreshList(item.path)
-                                                } else if (isEpub) {
+                                                } else if (isBook) {
                                                     downloadingPath = item.path
                                                     scope.launch {
-                                                        val tmpFile = File(context.cacheDir, "webdav_${System.currentTimeMillis()}.epub")
-                                                        webDavClient.downloadFile(item.path, tmpFile).fold(
-                                                            onSuccess = { file ->
-                                                                val repo = BookRepository(context)
-                                                                val imported = repo.importEpubFile(file)
-                                                                val cover = repo.extractCover(imported.id)
-                                                                if (cover != null) {
-                                                                    repo.updateBookCover(imported.id, cover)
-                                                                }
-                                                                file.delete()
-
-                                                                // 检查是否存在伴侣元数据文件并恢复书签/高亮/进度
-                                                                val metaPath = item.path.removeSuffix(".epub").removeSuffix(".EPUB") + ".moreader.json"
-                                                                var restoredBm = 0
-                                                                var restoredHl = 0
-                                                                webDavClient.getTextFile(metaPath).onSuccess { metaJson ->
-                                                                    try {
-                                                                        val obj = JSONObject(metaJson)
-                                                                        if (obj.has("bookmarks")) {
-                                                                            val arr = obj.getJSONArray("bookmarks")
-                                                                            val bms = (0 until arr.length()).map { j ->
-                                                                                val b = arr.getJSONObject(j)
-                                                                                com.moyue.app.data.models.Bookmark(
-                                                                                    bookId = imported.id,
-                                                                                    chapterIndex = b.optInt("chapter_index", 0),
-                                                                                    chapterTitle = b.optString("chapter_title", null),
-                                                                                    paragraphIndex = b.optInt("paragraph_index", 0),
-                                                                                    paragraphText = b.optString("paragraph_text", null),
-                                                                                    progress = b.optDouble("progress", 0.0).toFloat(),
-                                                                                    createdAt = b.optLong("created_at", System.currentTimeMillis()),
-                                                                                )
-                                                                            }
-                                                                            repo.importBookmarks(bms)
-                                                                            restoredBm = bms.size
-                                                                        }
-                                                                        if (obj.has("highlights")) {
-                                                                            val arr = obj.getJSONArray("highlights")
-                                                                            val hls = (0 until arr.length()).map { j ->
-                                                                                val h = arr.getJSONObject(j)
-                                                                                com.moyue.app.data.models.Highlight(
-                                                                                    bookId = imported.id,
-                                                                                    chapterIndex = h.optInt("chapter_index", 0),
-                                                                                    startParagraph = h.optInt("start_paragraph", 0),
-                                                                                    startOffset = h.optInt("start_offset", 0),
-                                                                                    endParagraph = h.optInt("end_paragraph", 0),
-                                                                                    endOffset = h.optInt("end_offset", 0),
-                                                                                    text = h.optString("text", ""),
-                                                                                    note = h.optString("note", null),
-                                                                                    color = h.optInt("color", 0xFFFFFF00.toInt()),
-                                                                                    createdAt = h.optLong("created_at", System.currentTimeMillis()),
-                                                                                )
-                                                                            }
-                                                                            repo.importHighlights(hls)
-                                                                            restoredHl = hls.size
-                                                                        }
-                                                                        if (obj.has("progress") && !obj.isNull("progress")) {
-                                                                            val p = obj.getJSONObject("progress")
-                                                                            val chIdx = p.optInt("chapter_index", -1)
-                                                                            if (chIdx >= 0) {
-                                                                                repo.updateProgress(imported.id,
-                                                                                    p.optString("chapter_href", null), chIdx,
-                                                                                    p.optDouble("percentage", 0.0).toFloat(), null,
-                                                                                    p.optInt("paragraph_index", 0), imported.themeId, imported.fontSize)
-                                                                            }
-                                                                        }
-                                                                    } catch (e: Exception) {
-                                                                        Log.e("WebDAV", "Failed to restore companion metadata", e)
-                                                                    }
-                                                                }
-
-                                                                val extraMsg = if (restoredBm > 0 || restoredHl > 0) context.getString(com.moyue.app.R.string.webdav_import_restored_meta, restoredBm, restoredHl) else ""
-                                                                android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.webdav_imported_success, imported.title, extraMsg), android.widget.Toast.LENGTH_SHORT).show()
-                                                                onBookImported()
-                                                            },
-                                                            onFailure = { err ->
-                                                                android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.webdav_download_failed_fmt, err.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
-                                                            }
-                                                        )
-                                                        downloadingPath = null
+                                                        try {
+                                                            handleRemoteItem(item)
+                                                        } finally {
+                                                            downloadingPath = null
+                                                        }
                                                     }
                                                 }
                                             },
@@ -369,10 +514,12 @@ fun WebDavBrowserDialog(
                                                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                                             } else if (item.isDirectory) {
                                                 Icon(Icons.Default.Folder, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                                            } else if (isEpub) {
-                                                Icon(Icons.Default.Book, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.secondary)
                                             } else {
-                                                Icon(Icons.Default.InsertDriveFile, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                                                Icon(
+                                                    iconFor(ext), null, Modifier.size(18.dp),
+                                                    tint = if (isBook) MaterialTheme.colorScheme.secondary
+                                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                                )
                                             }
 
                                             Spacer(Modifier.width(8.dp))
@@ -384,7 +531,7 @@ fun WebDavBrowserDialog(
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
                                                     fontWeight = if (item.isDirectory) FontWeight.Medium else FontWeight.Normal,
-                                                    color = if (isEpub || item.isDirectory) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                                    color = if (isBook || item.isDirectory) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                                                 )
                                                 if (!item.isDirectory && item.size > 0) {
                                                     val mb = item.size / (1024.0 * 1024.0)
@@ -392,7 +539,7 @@ fun WebDavBrowserDialog(
                                                 }
                                             }
 
-                                            if (isEpub && !isDownloadingThis) {
+                                            if (isBook && !isDownloadingThis) {
                                                 Icon(Icons.Default.Download, contentDescription = stringResource(com.moyue.app.R.string.sync_download), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                                             }
                                         }
@@ -424,6 +571,30 @@ fun WebDavBrowserDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(com.moyue.app.R.string.close)) }
         }
     )
+
+    // ── 压缩包里的多本书：让用户挑一本 ──
+    zipPick?.let { pick ->
+        val dir = pick.first
+        val books = pick.second
+        ZipBookPickerDialog(
+            books = books,
+            enabled = downloadingPath == null && busyLabel == null,
+            onPick = { book ->
+                zipPick = null
+                scope.launch {
+                    try {
+                        importLocalBook(book)
+                    } finally {
+                        dir.deleteRecursively()
+                    }
+                }
+            },
+            onDismiss = {
+                zipPick = null
+                dir.deleteRecursively()
+            },
+        )
+    }
 
     // ── 帮助与详细教程弹窗 ──
     if (showHelpDialog) {

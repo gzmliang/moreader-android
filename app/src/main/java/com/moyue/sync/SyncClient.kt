@@ -392,6 +392,76 @@ class SyncClient(private val context: Context) {
     )
 
     /**
+     * TXT → 墨阅流式精读本 EPUB（服务端转换：编码自动识别 + 智能分章）
+     * 失败时若服务端给出可识别错误码，抛 PdfConvertException(code = not_text/empty/too_large/login_required)
+     */
+    suspend fun convertTxtToEpub(
+        txtFile: File,
+        title: String? = null,
+        author: String? = null,
+    ): Result<PdfConvertResult> = withContext(Dispatchers.IO) {
+        if (!txtFile.exists()) return@withContext Result.failure(PdfConvertException("missing", "文件不存在"))
+        if (!isLoggedIn()) return@withContext Result.failure(PdfConvertException("login_required", "未登录"))
+
+        var lastException: Exception? = null
+        for (server in getCandidateServerUrls()) {
+            try {
+                val url = "${server.trimEnd('/')}/sync/txt/convert"
+                val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
+                    .addFormDataPart(
+                        "file", txtFile.name,
+                        txtFile.asRequestBody("text/plain".toMediaType()),
+                    )
+                if (!title.isNullOrBlank()) builder.addFormDataPart("title", title)
+                if (!author.isNullOrBlank()) builder.addFormDataPart("author", author)
+                val req = Request.Builder().url(url)
+                    .addHeader("Authorization", "Bearer ${getToken() ?: ""}")
+                    .post(builder.build())
+                    .build()
+                val resp = longClient.newCall(req).execute()
+                if (resp.isSuccessful) {
+                    val bytes = resp.body?.bytes() ?: ByteArray(0)
+                    if (bytes.isEmpty()) {
+                        return@withContext Result.failure(PdfConvertException("empty", "转换结果为空"))
+                    }
+                    val decodedTitle = runCatching {
+                        String(android.util.Base64.decode(resp.header("X-Moreader-Title") ?: "", android.util.Base64.DEFAULT))
+                    }.getOrDefault(title ?: txtFile.nameWithoutExtension)
+                    val decodedAuthor = runCatching {
+                        String(android.util.Base64.decode(resp.header("X-Moreader-Author") ?: "", android.util.Base64.DEFAULT))
+                    }.getOrDefault(author ?: "")
+                    return@withContext Result.success(
+                        PdfConvertResult(
+                            epub = bytes,
+                            pages = 0,
+                            chapters = resp.header("X-Moreader-Chapters")?.toIntOrNull() ?: 0,
+                            paragraphs = resp.header("X-Moreader-Paragraphs")?.toIntOrNull() ?: 0,
+                            chars = resp.header("X-Moreader-Chars")?.toIntOrNull() ?: 0,
+                            title = decodedTitle,
+                            author = decodedAuthor,
+                        )
+                    )
+                }
+                val bodyText = resp.body?.string() ?: ""
+                val code = runCatching { JSONObject(bodyText).optString("code", "") }.getOrDefault("")
+                val detail = runCatching { JSONObject(bodyText).optString("detail", bodyText) }.getOrDefault(bodyText)
+                if (resp.code == 401) {
+                    return@withContext Result.failure(PdfConvertException("login_required", detail))
+                }
+                if (resp.code in 400..499) {
+                    return@withContext Result.failure(
+                        PdfConvertException(code.ifBlank { "failed" }, detail)
+                    )
+                }
+                lastException = PdfConvertException(code, "HTTP ${resp.code}: $detail")
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+        Result.failure(lastException ?: PdfConvertException("failed", "网络请求失败"))
+    }
+
+    /**
      * PDF → 墨阅流式精读本 EPUB（服务端转换）
      * 失败时若服务端给出可识别错误码，抛 PdfConvertException(code = scanned/too_large/empty)
      */

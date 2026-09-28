@@ -807,6 +807,19 @@ AI Voice（云端 TTS）：
     <string name="sync_upload_to_webdav_btn">批量备份全部书籍至 WebDAV</string>
     <string name="sync_open_webdav_browser">打开 WebDAV 网盘书库</string>
     <string name="sync_webdav_uploading">正在上传至 WebDAV…</string>
+    <!-- 网盘书库：TXT / PDF / ZIP 导入 -->
+    <string name="webdav_txt_converting">正在识别编码并转换 TXT…</string>
+    <string name="webdav_txt_need_login">导入 TXT 需要登录墨阅云（用于在线转换），请先在「云同步设置」中登录</string>
+    <string name="webdav_txt_not_text">这不是文本文件（可能是二进制/加密文件，或已损坏）</string>
+    <string name="webdav_txt_empty">TXT 内容为空或无法识别</string>
+    <string name="webdav_txt_too_large">TXT 文件过大，建议拆分后再试</string>
+    <string name="webdav_txt_failed_fmt">TXT 转换失败：%1$s</string>
+    <string name="webdav_pdf_need_login">导入 PDF 需要登录墨阅云（用于云端转换），请先在「云同步设置」中登录</string>
+    <string name="webdav_pdf_prepare_failed">无法准备该 PDF 文件</string>
+    <string name="webdav_pdf_queued">已加入 PDF 转换队列，进度可在通知栏查看</string>
+    <string name="webdav_zip_extracting">正在解压压缩包…</string>
+    <string name="webdav_zip_empty">压缩包里没有找到可读的电子书</string>
+    <string name="webdav_zip_pick_title">压缩包内的电子书</string>
     <string name="sync_webdav_upload_success">已上传至 WebDAV (%1$s)</string>
     <string name="sync_webdav_upload_fail">上传至 WebDAV 失败: %1$s</string>
     <string name="sync_upload_single_cloud_default">上传至云端 (按默认目标)</string>

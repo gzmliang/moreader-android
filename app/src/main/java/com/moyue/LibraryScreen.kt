@@ -42,7 +42,12 @@ import com.moyue.app.sync.SyncClient
 import com.moyue.app.sync.WebDavClient
 import com.moyue.app.ui.components.SyncSettingsDialog
 import com.moyue.app.ui.components.WebDavBrowserDialog
+import com.moyue.app.ui.components.ZipBookPickerDialog
 import com.moyue.app.util.LocaleHelper
+import com.moyue.app.util.extOf
+import com.moyue.app.util.extractBooksFromZip
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.moyue.ai.ui.AiSettingsDialog
 import com.moyue.ai.data.AiCacheRepository
 import java.io.File
@@ -109,16 +114,66 @@ fun LibraryScreen(
         PdfImportManager.submit(context, uris, names)
     }
 
+    /** 压缩包里有多本书时，弹出来让用户挑 */
+    var zipPickLocal by remember { mutableStateOf<Pair<File, List<File>>?>(null) }
+
+    /** 已落地到本地的书文件（如压缩包解出来的）按类型入库 */
+    fun importLocalBookFile(file: File) {
+        when (extOf(file.name)) {
+            "epub" -> viewModel.importLocalEpubFile(context, file)
+            "txt" -> viewModel.importTxtFile(context, file)
+            "pdf" -> {
+                val uri = runCatching {
+                    FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                }.getOrNull()
+                if (uri != null) submitPdfUris(listOf(uri))
+            }
+        }
+    }
+
+    /** 统一导入入口：epub / txt / pdf / zip 各走各的通道 */
+    fun dispatchImport(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        uris.forEach { uri ->
+            val name = viewModel.queryDisplayName(context, uri) ?: ""
+            when (extOf(name)) {
+                "txt" -> coroutineScope.launch {
+                    viewModel.copyUriToCache(context, uri, name)?.let { viewModel.importTxtFile(context, it) }
+                }
+                "zip" -> coroutineScope.launch {
+                    val zf = viewModel.copyUriToCache(context, uri, name) ?: return@launch
+                    val (dir, books) = withContext(Dispatchers.IO) { extractBooksFromZip(context, zf) }
+                    zf.delete()
+                    when {
+                        books.isEmpty() -> {
+                            dir.deleteRecursively()
+                            android.widget.Toast.makeText(
+                                context,
+                                context.getString(com.moyue.app.R.string.webdav_zip_empty),
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        books.size == 1 -> importLocalBookFile(books[0])
+                        else -> zipPickLocal = Pair(dir, books)
+                    }
+                }
+                "pdf" -> submitPdfUris(listOf(uri))
+                else -> {
+                    if (viewModel.isPdfUri(context, uri)) {
+                        submitPdfUris(listOf(uri))
+                    } else {
+                        viewModel.importBook(context, uri)
+                    }
+                }
+            }
+        }
+        coroutineScope.launch { gridState.animateScrollToItem(0) }
+    }
+
     // Handle shared files from other apps
     LaunchedEffect(sharedUris) {
         if (sharedUris.isNotEmpty()) {
-            sharedUris.forEach { uri ->
-                if (viewModel.isPdfUri(context, uri)) {
-                    submitPdfUris(listOf(uri))
-                } else {
-                    viewModel.importBook(context, uri)
-                }
-            }
+            dispatchImport(sharedUris)
             onSharedUrisConsumed()
             // 导入后滚动到顶部
             coroutineScope.launch {
@@ -139,18 +194,11 @@ fun LibraryScreen(
         PdfImportManager.resume(context)
     }
 
-    // File picker for EPUB import (multiple files)
+    // File picker for EPUB / TXT / PDF / ZIP import (multiple files)
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
-        uris.forEach { uri ->
-            viewModel.importBook(context, uri)
-        }
-        if (uris.isNotEmpty()) {
-            coroutineScope.launch {
-                gridState.animateScrollToItem(0)
-            }
-        }
+        dispatchImport(uris)
     }
 
     // File picker for PDF import（PDF 需上传到云端转成精读本）
@@ -215,7 +263,16 @@ fun LibraryScreen(
 
                             // 2. 添加图书
                             IconButton(onClick = {
-                                importLauncher.launch(arrayOf("application/epub+zip"))
+                                importLauncher.launch(
+                                    arrayOf(
+                                        "application/epub+zip",
+                                        "text/plain",
+                                        "application/pdf",
+                                        "application/zip",
+                                        "application/x-zip-compressed",
+                                        "application/octet-stream",
+                                    )
+                                )
                             }, modifier = Modifier.size(36.dp)) {
                                 Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.import_book), modifier = Modifier.size(22.dp))
                             }
@@ -462,6 +519,24 @@ fun LibraryScreen(
                                     gridState.animateScrollToItem(0)
                                 }
                             }
+                        )
+                    }
+
+                    // 压缩包里的多本书：挑一本后删除解压目录
+                    zipPickLocal?.let { pick ->
+                        val dir = pick.first
+                        val books = pick.second
+                        ZipBookPickerDialog(
+                            books = books,
+                            onPick = { book ->
+                                zipPickLocal = null
+                                importLocalBookFile(book)
+                                dir.deleteRecursively()
+                            },
+                            onDismiss = {
+                                zipPickLocal = null
+                                dir.deleteRecursively()
+                            },
                         )
                     }
 
@@ -806,7 +881,18 @@ fun LibraryScreen(
                     )
                     Spacer(Modifier.height(24.dp))
                     Button(
-                        onClick = { importLauncher.launch(arrayOf("application/epub+zip")) },
+                        onClick = {
+                            importLauncher.launch(
+                                arrayOf(
+                                    "application/epub+zip",
+                                    "text/plain",
+                                    "application/pdf",
+                                    "application/zip",
+                                    "application/x-zip-compressed",
+                                    "application/octet-stream",
+                                )
+                            )
+                        },
                         shape = RoundedCornerShape(12.dp),
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))

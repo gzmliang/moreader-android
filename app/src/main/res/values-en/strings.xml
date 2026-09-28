@@ -684,6 +684,19 @@ Just change the Base URL and API Key</string>
     <string name="sync_upload_to_webdav_btn">Backup All Books to WebDAV</string>
     <string name="sync_open_webdav_browser">Open WebDAV Library</string>
     <string name="sync_webdav_uploading">Uploading to WebDAV…</string>
+    <!-- WebDAV library: TXT / PDF / ZIP import -->
+    <string name="webdav_txt_converting">Detecting encoding and converting TXT…</string>
+    <string name="webdav_txt_need_login">Sign in to Moreader Cloud first (needed for TXT conversion). Open Sync Settings to sign in.</string>
+    <string name="webdav_txt_not_text">This is not a text file (binary, encrypted, or corrupted)</string>
+    <string name="webdav_txt_empty">The TXT file is empty or unreadable</string>
+    <string name="webdav_txt_too_large">The TXT file is too large; please split it and try again</string>
+    <string name="webdav_txt_failed_fmt">TXT conversion failed: %1$s</string>
+    <string name="webdav_pdf_need_login">Sign in to Moreader Cloud first (needed for cloud conversion). Open Sync Settings to sign in.</string>
+    <string name="webdav_pdf_prepare_failed">Could not prepare this PDF file</string>
+    <string name="webdav_pdf_queued">Added to the PDF conversion queue; check the notification for progress</string>
+    <string name="webdav_zip_extracting">Extracting archive…</string>
+    <string name="webdav_zip_empty">No readable books found in this archive</string>
+    <string name="webdav_zip_pick_title">Books in this archive</string>
     <string name="sync_webdav_upload_success">Uploaded to WebDAV (%1$s)</string>
     <string name="sync_webdav_upload_fail">WebDAV upload failed: %1$s</string>
     <string name="sync_upload_single_cloud_default">Upload to Cloud (Default Target)</string>
