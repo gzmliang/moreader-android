@@ -13,8 +13,8 @@ android {
         applicationId = "com.moyue.app.tingshu"
         minSdk = 26
         targetSdk = 36
-        versionCode = 20148
-        versionName = "1.1.2"
+        versionCode = 20149
+        versionName = "1.1.3"
 
         // Local AI NDK config (disabled — no NDK in test env)
         /*externalNativeBuild {
@@ -117,6 +117,9 @@ dependencies {
     // Network (TTS + AI translation)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    // JVM 单测（上传进度/卡死看门狗的字节级验证，不需要真机）
+    testImplementation("junit:junit:4.13.2")
 
     // EPUB parsing
     implementation("org.jsoup:jsoup:1.19.1")

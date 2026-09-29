@@ -718,6 +718,20 @@ fun LibraryScreen(
                                 "${focusEntry.percent}%  ·  " + androidx.compose.ui.res.stringResource(pdfStageRes(focusEntry)),
                                 fontSize = 13.sp,
                             )
+                            if (focusEntry.phase == PdfImportManager.Phase.UPLOADING &&
+                                focusEntry.stage == PdfImportManager.STAGE_UPLOAD &&
+                                focusEntry.uploadTotalBytes > 0
+                            ) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    androidx.compose.ui.res.stringResource(
+                                        com.moyue.app.R.string.pdf_progress_uploaded,
+                                        pdfFormatBytes(focusEntry.uploadSentBytes),
+                                        pdfFormatBytes(focusEntry.uploadTotalBytes)),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                )
+                            }
                             if (focusEntry.pagesTotal > 0) {
                                 Spacer(Modifier.height(4.dp))
                                 Text(
@@ -804,6 +818,8 @@ fun LibraryScreen(
                             "ocr_too_long" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_ocr_too_long)
                             "ocr_unavailable" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_ocr_unavailable)
                             "network" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_network)
+                            "network_stalled" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_stalled)
+                            "prepare_failed" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_prepare_failed)
                             "import_failed" -> androidx.compose.ui.res.stringResource(
                                 com.moyue.app.R.string.pdf_error_import_failed, focusEntry.message ?: "")
                             else -> androidx.compose.ui.res.stringResource(
@@ -1250,14 +1266,23 @@ private fun PdfJobBanner(
 
 /** 转换阶段 → 本地化文案（服务端只回英文阶段名，本地化由 App 负责，不显示服务端中文） */
 private fun pdfStageRes(e: PdfImportManager.Entry): Int = when {
-    e.phase == PdfImportManager.Phase.PENDING ||
-        e.phase == PdfImportManager.Phase.UPLOADING -> com.moyue.app.R.string.pdf_phase_uploading
+    e.phase == PdfImportManager.Phase.PENDING -> com.moyue.app.R.string.pdf_phase_uploading
+    e.phase == PdfImportManager.Phase.UPLOADING -> if (e.stage == PdfImportManager.STAGE_COPY)
+        com.moyue.app.R.string.pdf_phase_copying else com.moyue.app.R.string.pdf_phase_uploading
     e.phase == PdfImportManager.Phase.DOWNLOADING -> com.moyue.app.R.string.pdf_phase_downloading
     e.phase == PdfImportManager.Phase.IMPORTING -> com.moyue.app.R.string.pdf_phase_importing
     e.stage == "queued" -> com.moyue.app.R.string.pdf_phase_queued
     e.stage == "ocr" -> com.moyue.app.R.string.pdf_phase_ocr
     e.stage == "build" || e.stage == "done" -> com.moyue.app.R.string.pdf_phase_packaging
     else -> com.moyue.app.R.string.pdf_phase_analyzing
+}
+
+/** 字节数 → "12.3 MB"（语言无关，不额外增加 i18n 词条） */
+private fun pdfFormatBytes(bytes: Long): String {
+    if (bytes <= 0) return "0 MB"
+    val mb = bytes / 1048576.0
+    return if (mb >= 1) String.format(java.util.Locale.US, "%.1f MB", mb)
+    else String.format(java.util.Locale.US, "%.0f KB", bytes / 1024.0)
 }
 
 /** 预计剩余时间 → m:ss / h:mm:ss（语言无关，不额外增加 i18n 词条） */

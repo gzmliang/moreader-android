@@ -883,6 +883,7 @@ AI Voice（云端 TTS）：
     <string name="pdf_convert_title">PDF 转换</string>
     <string name="pdf_convert_hint">文字会完整保留并按章节重排，原始图表版式不保留。</string>
     <string name="pdf_phase_uploading">正在上传 PDF…</string>
+    <string name="pdf_phase_copying">正在准备文件…</string>
     <string name="pdf_phase_converting">正在云端转换排版…</string>
     <string name="pdf_phase_importing">正在加入书架…</string>
     <string name="pdf_convert_done">已转换为精读本：%1$s</string>
@@ -911,6 +912,9 @@ AI Voice（云端 TTS）：
     <string name="pdf_notify_done_body">《%1$s》已转为精读本，点开就能阅读</string>
     <string name="pdf_notify_failed_body">《%1$s》转换失败，点开查看原因</string>
     <string name="pdf_error_network">网络中断，暂时查不到转换进度，请检查网络后重试。</string>
+    <string name="pdf_error_stalled">上传中途断了（网络抖动），已自动重试仍失败。请在网络稳定时再点一次。</string>
+    <string name="pdf_error_prepare_failed">读不到所选的 PDF 文件，请重新选择一次。</string>
+    <string name="pdf_progress_uploaded">已上传 %1$s / %2$s</string>
     <string name="pdf_error_import_failed">下载成功但加入书架失败：%1$s</string>
     <string name="pdf_error_ocr_too_long">这本书页数太多，云端识别超时。建议在电脑上拆成几本再导入。</string>
     <string name="pdf_error_ocr_unavailable">云端文字识别服务暂时不可用，请稍后再试。</string>

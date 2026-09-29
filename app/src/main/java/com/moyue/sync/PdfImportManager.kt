@@ -42,6 +42,10 @@ object PdfImportManager {
 
     enum class Phase { PENDING, UPLOADING, CONVERTING, DOWNLOADING, IMPORTING, DONE, FAILED, CANCELED }
 
+    /** UPLOADING 阶段的两个子步骤：先在手机本地准备文件，再往云端上传 */
+    const val STAGE_COPY = "copy"
+    const val STAGE_UPLOAD = "upload"
+
     data class Entry(
         val localId: String,
         val fileName: String,
@@ -58,6 +62,9 @@ object PdfImportManager {
         val bookId: String? = null,
         val chapters: Int = 0,
         val chars: Int = 0,
+        /** 真实上传字节数 / 总字节数（UPLOADING 阶段用，0 表示还没开始传） */
+        val uploadSentBytes: Long = 0,
+        val uploadTotalBytes: Long = 0,
     ) {
         val isFinished: Boolean
             get() = phase == Phase.DONE || phase == Phase.FAILED || phase == Phase.CANCELED
@@ -241,25 +248,72 @@ object PdfImportManager {
             return
         }
         // 1) 拷到自己的缓存文件（content:// 不能直接当文件上传）
-        update(localId) { it.copy(phase = Phase.UPLOADING, percent = 0) }
+        //    以前这一步不报进度，界面一直是 0%，看不出在动 —— 现在分「准备文件 / 上传」两个子步骤显进度
         val entry0 = _state.value.entries.firstOrNull { it.localId == localId } ?: return
         val safeName = entry0.fileName.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-        val srcFile = File(ctx.cacheDir, "import_$safeName")
+        // 缓存文件名带上本条任务的 id：同名文件排队转换时不会互相覆盖/互删
+        val srcFile = File(ctx.cacheDir, "import_${localId}_$safeName")
+        val uriSize = queryUriSize(ctx, uri)
+        update(localId) {
+            it.copy(phase = Phase.UPLOADING, stage = STAGE_COPY, percent = 0,
+                uploadSentBytes = 0, uploadTotalBytes = 0)
+        }
         val copied = runCatching {
             ctx.contentResolver.openInputStream(uri)?.use { input ->
-                srcFile.outputStream().use { out -> input.copyTo(out) }
-            } ?: throw IllegalStateException("无法读取所选文件")
+                srcFile.outputStream().use { out ->
+                    val buf = ByteArray(256 * 1024)
+                    var done = 0L
+                    var lastPct = -1
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n <= 0) break
+                        out.write(buf, 0, n)
+                        done += n
+                        if (uriSize > 0) {
+                            val pct = ((done * 100) / uriSize).toInt().coerceIn(0, 99)
+                            if (pct != lastPct) {
+                                lastPct = pct
+                                update(localId) { it.copy(stage = STAGE_COPY, percent = pct) }
+                            }
+                        }
+                    }
+                }
+            } ?: throw IllegalStateException("cannot read the selected file")
         }
         if (copied.isFailure) {
             update(localId) {
-                it.copy(phase = Phase.FAILED, errorCode = "failed", message = copied.exceptionOrNull()?.message)
+                it.copy(phase = Phase.FAILED, errorCode = "prepare_failed", message = copied.exceptionOrNull()?.message)
             }
             notifyResult(ctx, _state.value.entries.firstOrNull { it.localId == localId })
             return
         }
+        // 用户在准备阶段按了取消：别再往上抛任务了
+        if (_state.value.entries.firstOrNull { it.localId == localId }?.phase == Phase.CANCELED) {
+            runCatching { srcFile.delete() }
+            return
+        }
 
-        // 2) 投递后台任务
-        val created = client.createPdfJob(srcFile, title = title.ifBlank { null })
+        // 2) 投递后台任务（带真实上传百分比 + 卡死自动重连）
+        val totalBytes = if (uriSize > 0) uriSize else runCatching { srcFile.length() }.getOrDefault(0L)
+        update(localId) {
+            it.copy(stage = STAGE_UPLOAD, percent = 0, uploadSentBytes = 0, uploadTotalBytes = totalBytes)
+        }
+        var lastUploadPct = -1
+        val created = client.createPdfJob(
+            srcFile,
+            title = title.ifBlank { null },
+            onProgress = { sent, total ->
+                val tot = if (total > 0) total else totalBytes
+                val pct = if (tot > 0) ((sent * 100) / tot).toInt().coerceIn(0, 99) else 0
+                if (pct != lastUploadPct || sent >= tot) {
+                    lastUploadPct = pct
+                    update(localId) {
+                        it.copy(stage = STAGE_UPLOAD, percent = pct,
+                            uploadSentBytes = sent, uploadTotalBytes = tot)
+                    }
+                }
+            },
+        )
         runCatching { srcFile.delete() }
         val job = created.getOrElse { e ->
             update(localId) {
@@ -270,6 +324,11 @@ object PdfImportManager {
                 )
             }
             notifyResult(ctx, _state.value.entries.firstOrNull { it.localId == localId })
+            return
+        }
+        // 上传期间用户按了取消：任务已经建出来了，顺手在服务端撤掉
+        if (_state.value.entries.firstOrNull { it.localId == localId }?.phase == Phase.CANCELED) {
+            runCatching { client.cancelPdfJob(job.id) }
             return
         }
         update(localId) {
@@ -411,6 +470,22 @@ object PdfImportManager {
         _state.value = _state.value.let { st ->
             st.copy(entries = st.entries.map { if (it.localId == localId) block(it) else it })
         }
+    }
+
+    /** 问 content:// 要文件大小（拿不到就返回 -1，进度条退化为不确定态） */
+    private fun queryUriSize(ctx: Context, uri: Uri): Long {
+        runCatching {
+            ctx.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val idx = c.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (idx >= 0 && c.moveToFirst()) {
+                    val v = c.getLong(idx)
+                    if (v > 0) return v
+                }
+            }
+        }
+        return runCatching {
+            ctx.contentResolver.openAssetFileDescriptor(uri, "r")?.use { fd -> fd.length }
+        }.getOrNull() ?: -1L
     }
 
     // ── 完成通知 ──────────────────────────────────────────

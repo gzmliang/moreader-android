@@ -760,6 +760,7 @@ Just change the Base URL and API Key</string>
     <string name="pdf_convert_title">PDF conversion</string>
     <string name="pdf_convert_hint">All text is preserved and re-flowed into chapters; the original layout is not kept.</string>
     <string name="pdf_phase_uploading">Uploading PDF…</string>
+    <string name="pdf_phase_copying">Preparing file…</string>
     <string name="pdf_phase_converting">Converting on the server…</string>
     <string name="pdf_phase_importing">Adding to your shelf…</string>
     <string name="pdf_convert_done">Converted to a reading edition: %1$s</string>
@@ -788,6 +789,9 @@ Just change the Base URL and API Key</string>
     <string name="pdf_notify_done_body">%1$s is ready to read</string>
     <string name="pdf_notify_failed_body">%1$s failed to convert. Tap for details.</string>
     <string name="pdf_error_network">Network interrupted, cannot check conversion progress. Please check your connection.</string>
+    <string name="pdf_error_stalled">The upload was interrupted (network hiccup) and automatic retries did not get through. Please try again on a stable connection.</string>
+    <string name="pdf_error_prepare_failed">Could not read the selected PDF file. Please pick it again.</string>
+    <string name="pdf_progress_uploaded">Uploaded %1$s / %2$s</string>
     <string name="pdf_error_import_failed">Downloaded, but adding to the shelf failed: %1$s</string>
     <string name="pdf_error_ocr_too_long">This book has too many pages to recognize in one run. Please split it into smaller files first.</string>
     <string name="pdf_error_ocr_unavailable">The server text-recognition service is temporarily unavailable. Please try again later.</string>

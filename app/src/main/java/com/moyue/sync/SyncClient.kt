@@ -54,7 +54,9 @@ class SyncClient(private val context: Context) {
     private val longClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(600, TimeUnit.SECONDS)
-        .writeTimeout(600, TimeUnit.SECONDS)
+        // 写超时只管「单次写阻塞」：正常上传里每一小段都在动，不会误杀；
+        // 服务端不读（接收窗口收 0）时 60 秒内必失败，交给看门狗/换线逻辑救。
+        .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
     // ── 认证状态 ──────────────────────────────────────
@@ -272,49 +274,81 @@ class SyncClient(private val context: Context) {
     /**
      * 投递 PDF 转换后台任务（大书不再受 600 秒等待限制）。
      * 返回任务状态，后续用 [getPdfJob] 轮询，完成后用 [downloadPdfJobResult] 取 EPUB。
+     *
+     * @param onProgress 真实上传进度回调（已传字节, 总字节），在 OkHttp 写线程上触发。
+     * @param stallTimeoutMs 上传中途「连续多久没有任何字节推进」就判定卡死（见 [UploadStallWatchdog]）。
      */
     suspend fun createPdfJob(
         pdfFile: File,
         title: String? = null,
         author: String? = null,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null,
+        stallTimeoutMs: Long = UploadStallWatchdog.DEFAULT_STALL_TIMEOUT_MS,
     ): Result<PdfJobInfo> = withContext(Dispatchers.IO) {
         if (!pdfFile.exists()) return@withContext Result.failure(PdfConvertException("missing", "文件不存在"))
         if (!isLoggedIn()) return@withContext Result.failure(PdfConvertException("login_required", "未登录"))
 
         var lastException: Exception? = null
+        var lastWasStall = false
         for (server in getCandidateServerUrls()) {
-            try {
-                val url = "${server.trimEnd('/')}/sync/pdf/jobs"
-                val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
-                    .addFormDataPart(
-                        "file", pdfFile.name,
-                        pdfFile.asRequestBody("application/pdf".toMediaType()),
-                    )
-                if (!title.isNullOrBlank()) builder.addFormDataPart("title", title)
-                if (!author.isNullOrBlank()) builder.addFormDataPart("author", author)
-                val req = Request.Builder().url(url)
-                    .addHeader("Authorization", "Bearer ${getToken() ?: ""}")
-                    .post(builder.build())
-                    .build()
-                val resp = longClient.newCall(req).execute()
-                val bodyText = resp.body?.string() ?: ""
-                if (resp.isSuccessful) {
-                    return@withContext Result.success(parseJob(bodyText))
+            // 同一条线路最多试 2 次：上传中途卡死多半是链路抖动（家庭回环 NAT / 手机省电断流），
+            // 原样再来一次往往就过去了；两条线路合计最多 4 次，之后才判失败。
+            var attempt = 0
+            while (attempt < 2) {
+                attempt++
+                var call: Call? = null
+                val watchdog = UploadStallWatchdog(stallTimeoutMs, onAbort = { call?.cancel() })
+                try {
+                    val url = "${server.trimEnd('/')}/sync/pdf/jobs"
+                    val fileBody = pdfFile.asRequestBody("application/pdf".toMediaType())
+                    val watchedBody = UploadProgressRequestBody(fileBody) { sent, total ->
+                        watchdog.progress()
+                        onProgress?.invoke(sent, total)
+                    }
+                    val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
+                        .addFormDataPart("file", pdfFile.name, watchedBody)
+                    if (!title.isNullOrBlank()) builder.addFormDataPart("title", title)
+                    if (!author.isNullOrBlank()) builder.addFormDataPart("author", author)
+                    val req = Request.Builder().url(url)
+                        .addHeader("Authorization", "Bearer ${getToken() ?: ""}")
+                        .post(builder.build())
+                        .build()
+                    call = longClient.newCall(req)
+                    watchdog.start()
+                    val resp = call!!.execute()
+                    val bodyText = resp.body?.string() ?: ""
+                    if (resp.isSuccessful) {
+                        return@withContext Result.success(parseJob(bodyText))
+                    }
+                    val code = runCatching { JSONObject(bodyText).optString("code", "") }.getOrDefault("")
+                    val detail = runCatching { JSONObject(bodyText).optString("detail", bodyText) }.getOrDefault(bodyText)
+                    if (resp.code == 401) {
+                        return@withContext Result.failure(PdfConvertException("login_required", detail))
+                    }
+                    if (resp.code in 400..499) {
+                        return@withContext Result.failure(PdfConvertException(code.ifBlank { "failed" }, detail))
+                    }
+                    // 5xx：服务端自己的问题，换线路试，不必在同一条线上重来
+                    lastException = PdfConvertException(code, "HTTP ${resp.code}: $detail")
+                    lastWasStall = false
+                    break
+                } catch (e: Exception) {
+                    lastException = e
+                    lastWasStall = watchdog.stalled()
+                } finally {
+                    watchdog.stop()
                 }
-                val code = runCatching { JSONObject(bodyText).optString("code", "") }.getOrDefault("")
-                val detail = runCatching { JSONObject(bodyText).optString("detail", bodyText) }.getOrDefault(bodyText)
-                if (resp.code == 401) {
-                    return@withContext Result.failure(PdfConvertException("login_required", detail))
-                }
-                if (resp.code in 400..499) {
-                    return@withContext Result.failure(PdfConvertException(code.ifBlank { "failed" }, detail))
-                }
-                lastException = PdfConvertException(code, "HTTP ${resp.code}: $detail")
-            } catch (e: Exception) {
-                lastException = e
             }
         }
-        Result.failure(lastException ?: PdfConvertException("failed", "网络请求失败"))
+        Result.failure(
+            when {
+                lastWasStall -> PdfConvertException("network_stalled", "upload stalled")
+                lastException is PdfConvertException -> lastException
+                // 纯网络异常（连不上/读写超时）就给通用网络错误码，不把底层英文报错丢给用户看
+                lastException != null -> PdfConvertException("network", lastException!!.message ?: "network")
+                else -> PdfConvertException("network", "network unavailable")
+            }
+        )
     }
 
     /** 查后台任务进度（App 每 2~3 秒轮询一次） */
