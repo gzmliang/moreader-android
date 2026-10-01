@@ -970,4 +970,10 @@ AI Voice（云端 TTS）：
     <string name="sync_settings_save">保存配置</string>
     <string name="sync_settings_disconnect">断开 / 清除配置</string>
     <string name="sync_config_saved">配置已保存</string>
+    <string name="sync_browse_cloud_dir">浏览云端目录</string>
+    <string name="sync_browse_cloud_btn">浏览</string>
+    <string name="sync_select_this_dir">选择当前目录</string>
+    <string name="sync_selected_dir_fmt">已选择目录：%1$s</string>
+    <string name="sync_please_configure_first">请先填写服务器地址和账号密码</string>
+    <string name="sync_no_subfolders">当前目录下无子文件夹</string>
 </resources>

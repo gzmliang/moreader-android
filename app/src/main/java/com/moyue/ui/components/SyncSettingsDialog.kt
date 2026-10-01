@@ -53,6 +53,7 @@ fun SyncSettingsDialog(
     var testResult by remember { mutableStateOf<String?>(null) }
     var isTestSuccess by remember { mutableStateOf(false) }
     var showHelpDialog by remember { mutableStateOf(false) }
+    var showDirPicker by remember { mutableStateOf(false) }
     var isConfigured by remember { mutableStateOf(webDavClient.isConfigured()) }
     var syncResultMsg by remember { mutableStateOf<String?>(null) }
 
@@ -219,14 +220,41 @@ fun SyncSettingsDialog(
 
                 Spacer(Modifier.height(8.dp))
 
-                OutlinedTextField(
-                    value = uploadDir,
-                    onValueChange = { uploadDir = it; testResult = null },
-                    label = { Text(stringResource(R.string.sync_dir_label)) },
-                    placeholder = { Text(stringResource(R.string.sync_dir_hint)) },
-                    singleLine = true,
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    OutlinedTextField(
+                        value = uploadDir,
+                        onValueChange = { uploadDir = it; testResult = null },
+                        label = { Text(stringResource(R.string.sync_dir_label)) },
+                        placeholder = { Text(stringResource(R.string.sync_dir_hint)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            if (serverUrl.isBlank() || user.isBlank()) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    context.getString(R.string.sync_please_configure_first),
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                // 临时暂存当前配置以便探测
+                                webDavClient.saveConfig(serverUrl, user, password, preset, uploadDir)
+                                showDirPicker = true
+                            }
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(top = 6.dp)
+                    ) {
+                        Icon(Icons.Default.FolderOpen, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.sync_browse_cloud_btn), fontSize = 12.sp)
+                    }
+                }
 
                 // ── 测试连接与保存按钮 ──
                 Spacer(Modifier.height(12.dp))
@@ -238,8 +266,10 @@ fun SyncSettingsDialog(
                     OutlinedButton(
                         onClick = {
                             if (serverUrl.isBlank() || user.isBlank()) {
-                                testResult = context.getString(R.string.webdav_fill_url_and_user)
+                                val msg = context.getString(R.string.webdav_fill_url_and_user)
+                                testResult = msg
                                 isTestSuccess = false
+                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
                                 return@OutlinedButton
                             }
                             isTesting = true
@@ -252,12 +282,16 @@ fun SyncSettingsDialog(
                                 res.fold(
                                     onSuccess = {
                                         isTestSuccess = true
-                                        testResult = context.getString(R.string.sync_test_success)
+                                        val okMsg = context.getString(R.string.sync_test_success)
+                                        testResult = okMsg
                                         isConfigured = true
+                                        android.widget.Toast.makeText(context, okMsg, android.widget.Toast.LENGTH_SHORT).show()
                                     },
                                     onFailure = { e ->
                                         isTestSuccess = false
-                                        testResult = context.getString(R.string.sync_test_fail, e.message ?: "")
+                                        val errMsg = context.getString(R.string.sync_test_fail, e.message ?: "")
+                                        testResult = errMsg
+                                        android.widget.Toast.makeText(context, errMsg, android.widget.Toast.LENGTH_LONG).show()
                                     }
                                 )
                             }
@@ -460,4 +494,253 @@ fun SyncSettingsDialog(
             }
         )
     }
+
+    // ── 图形化目录选择器弹窗 ──
+    if (showDirPicker) {
+        WebDavDirPickerDialog(
+            webDavClient = webDavClient,
+            initialDir = uploadDir,
+            onDirSelected = { chosenPath ->
+                uploadDir = chosenPath
+                showDirPicker = false
+                testResult = null
+                android.widget.Toast.makeText(
+                    context,
+                    context.getString(R.string.sync_selected_dir_fmt, if (chosenPath.isBlank()) "/" else chosenPath),
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            },
+            onDismiss = { showDirPicker = false }
+        )
+    }
+}
+
+/**
+ * 专门用于图形化浏览并选取 WebDAV 目录的轻量弹窗
+ */
+@Composable
+fun WebDavDirPickerDialog(
+    webDavClient: WebDavClient,
+    initialDir: String,
+    onDirSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var currentPath by remember { mutableStateOf(initialDir.trim()) }
+    var folders by remember { mutableStateOf<List<WebDavClient.DavItem>?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val baseUri = remember(webDavClient.getServerUrl()) {
+        try { android.net.Uri.parse(webDavClient.getServerUrl()) } catch (e: Exception) { null }
+    }
+    val rootDavPath = remember(baseUri) {
+        (baseUri?.path ?: "").trimEnd('/')
+    }
+
+    fun isAtRoot(path: String): Boolean {
+        val p = path.trimEnd('/')
+        return p.isBlank() || p == rootDavPath || p == "/"
+    }
+
+    fun loadFolders(path: String) {
+        isLoading = true
+        errorMessage = null
+        currentPath = path
+        scope.launch {
+            webDavClient.listFiles(path).fold(
+                onSuccess = { list ->
+                    // 仅列出目录文件夹，排除文件和隐藏伴侣
+                    folders = list.filter { it.isDirectory && !it.name.startsWith(".") }
+                    isLoading = false
+                },
+                onFailure = { e ->
+                    errorMessage = e.message ?: context.getString(R.string.error_parse_failed)
+                    isLoading = false
+                }
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        loadFolders(currentPath)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.FolderOpen, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    stringResource(R.string.sync_browse_cloud_dir),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 380.dp)
+            ) {
+                // 当前路径导航栏与返回上一级
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = if (isAtRoot(currentPath)) stringResource(R.string.webdav_root_dir) else currentPath,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (!isAtRoot(currentPath)) {
+                            TextButton(
+                                onClick = {
+                                    val p = currentPath.trimEnd('/')
+                                    val parent = p.substringBeforeLast('/', "")
+                                    if (parent.isBlank() || parent == rootDavPath) {
+                                        loadFolders("")
+                                    } else {
+                                        loadFolders(parent)
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.ArrowBack, null, Modifier.size(14.dp))
+                                Spacer(Modifier.width(2.dp))
+                                Text(stringResource(R.string.webdav_parent_dir), fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // 内容列表
+                if (isLoading) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .height(180.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(Modifier.size(32.dp))
+                    }
+                } else if (errorMessage != null) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .height(180.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(errorMessage ?: "", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = { loadFolders(currentPath) }) {
+                            Text(stringResource(R.string.retry), fontSize = 12.sp)
+                        }
+                    }
+                } else {
+                    val list = folders ?: emptyList()
+                    if (list.isEmpty()) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .weight(1f, fill = false)
+                                .height(160.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                stringResource(R.string.sync_no_subfolders),
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f, fill = false)
+                                .heightIn(max = 240.dp)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            for (item in list) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp)
+                                        .clickable {
+                                            loadFolders(item.path)
+                                        },
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Folder,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text = item.name,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Icon(
+                                            Icons.Default.ChevronRight,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val selected = if (isAtRoot(currentPath)) "" else currentPath
+                    onDirSelected(selected)
+                }
+            ) {
+                Icon(Icons.Default.Check, null, Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.sync_select_this_dir), fontSize = 12.sp)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close), fontSize = 12.sp)
+            }
+        }
+    )
 }
