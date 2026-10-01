@@ -15,17 +15,21 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.moyue.app.R
 import com.moyue.app.data.BookRepository
-import com.moyue.app.sync.SyncClient
+import com.moyue.app.data.models.Book
 import com.moyue.app.sync.WebDavClient
 import com.moyue.app.ui.components.SyncSettingsDialog
 import com.moyue.app.ui.components.WebDavBrowserDialog
@@ -33,13 +37,14 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /**
- * 云端书库独立页面 —— 3 列封面网格，秒看、秒找、秒下。
- *
- * 与旧版「云同步设置」对话框里的文字列表相比：
- *  · 有封面（服务器从 EPUB 里抽的小图，最长边 320px）
- *  · 三列大卡片，搜索栏常驻
- *  · 邮箱等账号信息只在同步设置里出现，不再常驻书架顶部
+ * 云端书库页面 —— 全面直连 WebDAV（AList / 坚果云 / 群晖），3 列网格展示，一键秒下秒读。
  */
+data class WebDavBookDisplay(
+    val title: String,
+    val davItem: WebDavClient.DavItem,
+    val localBook: Book?,
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CloudShelfScreen(
@@ -49,64 +54,67 @@ fun CloudShelfScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val syncClient = remember { SyncClient(context) }
     val webDavClient = remember { WebDavClient(context) }
+    val repo = remember { BookRepository(context) }
 
     val localBooks by viewModel.books.collectAsStateWithLifecycle()
 
-    var cloudBooks by remember { mutableStateOf<List<SyncClient.BookInfo>?>(null) }
+    var cloudBooks by remember { mutableStateOf<List<WebDavBookDisplay>?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
-    var downloadingId by remember { mutableStateOf<Int?>(null) }
-    var deleteTarget by remember { mutableStateOf<SyncClient.BookInfo?>(null) }
-    var loggedInVersion by remember { mutableIntStateOf(0) }
+    var downloadingTitle by remember { mutableStateOf<String?>(null) }
+    var deleteTarget by remember { mutableStateOf<WebDavBookDisplay?>(null) }
+    var configVersion by remember { mutableIntStateOf(0) }
     var showSyncSettings by remember { mutableStateOf(false) }
     var showWebDavDialog by remember { mutableStateOf(false) }
-    var covers by remember { mutableStateOf<Map<Int, File>>(emptyMap()) }
-    val isLoggedIn = remember(loggedInVersion) { syncClient.isLoggedIn() }
+
+    val isConfigured = remember(configVersion) { webDavClient.isConfigured() }
 
     fun reload() {
-        if (!syncClient.isLoggedIn()) return
+        if (!webDavClient.isConfigured()) {
+            cloudBooks = null
+            return
+        }
         isLoading = true
         errorMessage = null
         scope.launch {
-            syncClient.listBooks().fold(
-                onSuccess = { list ->
-                    cloudBooks = list
+            val dir = webDavClient.getDefaultUploadDir()
+            webDavClient.listFiles(dir).fold(
+                onSuccess = { items ->
+                    val epubs = items.filter { item ->
+                        !item.isDirectory && item.name.endsWith(".epub", ignoreCase = true)
+                    }.map { item ->
+                        val cleanTitle = item.name.removeSuffix(".epub").removeSuffix(".EPUB")
+                        val matchedLocal = localBooks.find { lb ->
+                            lb.title.equals(cleanTitle, ignoreCase = true) ||
+                            item.name.equals(File(lb.filePath).name, ignoreCase = true)
+                        }
+                        WebDavBookDisplay(
+                            title = cleanTitle,
+                            davItem = item,
+                            localBook = matchedLocal
+                        )
+                    }
+                    cloudBooks = epubs
                     isLoading = false
                 },
                 onFailure = { e ->
                     errorMessage = e.message ?: ""
                     isLoading = false
-                },
+                }
             )
         }
     }
 
-    LaunchedEffect(loggedInVersion) {
-        if (syncClient.isLoggedIn()) reload() else cloudBooks = null
+    LaunchedEffect(configVersion, localBooks) {
+        if (webDavClient.isConfigured()) reload() else cloudBooks = null
     }
 
-    // 逐本按需拉封面（服务端会缓存，手机端再落一层磁盘缓存）
-    LaunchedEffect(cloudBooks) {
-        val list = cloudBooks ?: return@LaunchedEffect
-        val missing = list.filter { it.hasCover && covers[it.id] == null }
-        for (b in missing) {
-            val bytes = syncClient.fetchBookCover(b.id)
-            if (bytes != null) {
-                covers = covers + (b.id to syncClient.coverCacheFile(b.id))
-            }
-        }
-    }
-
-    val localTitles = remember(localBooks) { localBooks.associateBy { it.title } }
     val filtered = remember(cloudBooks, query) {
         val list = cloudBooks ?: emptyList()
         if (query.isBlank()) list
-        else list.filter {
-            it.title.contains(query, ignoreCase = true) || it.author.contains(query, ignoreCase = true)
-        }
+        else list.filter { it.title.contains(query, ignoreCase = true) }
     }
 
     Scaffold(
@@ -115,14 +123,13 @@ fun CloudShelfScreen(
                 title = {
                     Column {
                         Text(
-                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_title),
+                            stringResource(R.string.cloud_shelf_title),
                             fontWeight = FontWeight.Bold,
                             fontSize = 19.sp,
                         )
                         cloudBooks?.let {
                             Text(
-                                androidx.compose.ui.res.stringResource(
-                                    com.moyue.app.R.string.cloud_shelf_count_fmt, it.size),
+                                stringResource(R.string.cloud_shelf_count_fmt, it.size),
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             )
@@ -135,11 +142,11 @@ fun CloudShelfScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { reload() }, enabled = !isLoading && isLoggedIn) {
-                        Icon(Icons.Default.Refresh, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_refresh))
+                    IconButton(onClick = { reload() }, enabled = !isLoading && isConfigured) {
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.cloud_shelf_refresh))
                     }
                     IconButton(onClick = { showSyncSettings = true }) {
-                        Icon(Icons.Default.Settings, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_settings))
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.cloud_shelf_settings))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -150,36 +157,52 @@ fun CloudShelfScreen(
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (!isLoggedIn) {
+            if (!isConfigured) {
+                // ── 未配置 WebDAV 引导页 ──
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(32.dp),
                     ) {
-                        Icon(Icons.Default.CloudOff, contentDescription = null,
-                            modifier = Modifier.size(56.dp),
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
-                        Spacer(Modifier.height(14.dp))
-                        Text(
-                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_login_hint),
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        Icon(
+                            Icons.Default.CloudQueue,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                         )
-                        Spacer(Modifier.height(18.dp))
-                        Button(onClick = { showSyncSettings = true }, shape = RoundedCornerShape(12.dp)) {
-                            Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            stringResource(R.string.sync_shelf_not_configured_title),
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            stringResource(R.string.sync_shelf_not_configured_desc),
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        Button(
+                            onClick = { showSyncSettings = true },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_login_btn))
+                            Text(stringResource(R.string.sync_shelf_configure_now))
                         }
                     }
                 }
             } else {
+                // ── 搜索框 ──
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
                     placeholder = {
-                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_search_hint), fontSize = 14.sp)
+                        Text(stringResource(R.string.cloud_shelf_search_hint), fontSize = 14.sp)
                     },
                     singleLine = true,
                     leadingIcon = { Icon(Icons.Default.Search, null, Modifier.size(20.dp)) },
@@ -205,57 +228,87 @@ fun CloudShelfScreen(
                     errorMessage != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                             Text(
-                                androidx.compose.ui.res.stringResource(
-                                    com.moyue.app.R.string.cloud_shelf_load_failed, errorMessage ?: ""),
+                                stringResource(R.string.cloud_shelf_load_failed, errorMessage ?: ""),
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.error,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                textAlign = TextAlign.Center,
                             )
                             Spacer(Modifier.height(12.dp))
                             OutlinedButton(onClick = { reload() }) {
-                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_refresh))
+                                Text(stringResource(R.string.cloud_shelf_refresh))
                             }
                         }
                     }
                     (cloudBooks?.isEmpty() ?: false) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_empty),
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+                            Icon(Icons.Default.FolderOpen, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outline)
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                stringResource(R.string.sync_shelf_empty_title),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                stringResource(R.string.sync_shelf_empty_desc),
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                     filtered.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_no_match),
+                            stringResource(R.string.cloud_shelf_no_match),
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                         )
                     }
                     else -> LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(filtered, key = { it.id }) { book ->
-                            CloudBookCard(
-                                book = book,
-                                coverFile = covers[book.id],
-                                isDownloading = downloadingId == book.id,
-                                isOnDevice = localTitles.containsKey(book.title),
+                        items(filtered, key = { it.davItem.path }) { item ->
+                            WebDavBookCard(
+                                item = item,
+                                isDownloading = downloadingTitle == item.title,
                                 onOpenLocal = {
-                                    localTitles[book.title]?.let { onOpenBook(it.id) }
+                                    item.localBook?.let { onOpenBook(it.id) }
                                 },
                                 onDownload = {
-                                    downloadingId = book.id
-                                    viewModel.downloadCloudBook(context, syncClient, book) { bookId ->
-                                        downloadingId = null
-                                        onOpenBook(bookId)
+                                    downloadingTitle = item.title
+                                    scope.launch {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            context.getString(R.string.sync_shelf_downloading),
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                        webDavClient.downloadBookAndRestore(item.davItem, repo).fold(
+                                            onSuccess = { importedBook ->
+                                                downloadingTitle = null
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    context.getString(R.string.sync_shelf_download_success),
+                                                    android.widget.Toast.LENGTH_SHORT
+                                                ).show()
+                                                onOpenBook(importedBook.id)
+                                            },
+                                            onFailure = { e ->
+                                                downloadingTitle = null
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    context.getString(R.string.webdav_download_failed_fmt, e.message ?: ""),
+                                                    android.widget.Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        )
                                     }
                                 },
-                                onLongClick = { deleteTarget = book },
+                                onLongClick = { deleteTarget = item },
                             )
                         }
                     }
@@ -266,26 +319,17 @@ fun CloudShelfScreen(
 
     if (showSyncSettings) {
         SyncSettingsDialog(
-            syncClient = syncClient,
             onDismiss = {
                 showSyncSettings = false
-                loggedInVersion++
+                configVersion++
             },
             onUpload = { onResult ->
-                val target = webDavClient.getDefaultCloudTarget()
-                if (target == "WEBDAV") {
-                    if (webDavClient.isConfigured()) {
-                        viewModel.uploadAllToWebDav(context, webDavClient)
-                        onResult(context.getString(com.moyue.app.R.string.sync_webdav_uploading))
-                    } else {
-                        onResult(context.getString(com.moyue.app.R.string.webdav_not_configured))
-                    }
+                if (webDavClient.isConfigured()) {
+                    viewModel.uploadAllToWebDav(context, webDavClient)
+                    onResult(context.getString(R.string.sync_webdav_uploading))
                 } else {
-                    viewModel.uploadToCloud(context, syncClient, onResult)
+                    onResult(context.getString(R.string.webdav_not_configured))
                 }
-            },
-            onDownload = { onResult ->
-                viewModel.downloadFromCloud(context, syncClient, onResult)
             },
             onOpenWebDav = {
                 showSyncSettings = false
@@ -304,73 +348,78 @@ fun CloudShelfScreen(
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text(target.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            title = { Text(stringResource(R.string.sync_shelf_delete_title)) },
             text = {
                 Text(
-                    androidx.compose.ui.res.stringResource(
-                        com.moyue.app.R.string.cloud_shelf_delete_confirm, target.title),
+                    stringResource(R.string.sync_shelf_delete_confirm, target.title),
                     fontSize = 14.sp,
+                    lineHeight = 20.sp
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
+                    val toDelete = target
                     deleteTarget = null
                     scope.launch {
-                        syncClient.deleteCloudBook(target.id).fold(
+                        webDavClient.deleteBookWithMetadata(toDelete.davItem.path).fold(
                             onSuccess = {
                                 android.widget.Toast.makeText(
                                     context,
-                                    context.getString(com.moyue.app.R.string.cloud_shelf_deleted),
+                                    context.getString(R.string.sync_shelf_deleted),
                                     android.widget.Toast.LENGTH_SHORT,
                                 ).show()
-                                cloudBooks = cloudBooks?.filter { it.id != target.id }
-                                viewModel.loadCloudBooks(syncClient)
+                                reload()
                             },
                             onFailure = { e ->
                                 android.widget.Toast.makeText(
                                     context,
-                                    context.getString(com.moyue.app.R.string.sync_delete_fail, e.message ?: ""),
+                                    context.getString(R.string.sync_fail, e.message ?: ""),
                                     android.widget.Toast.LENGTH_LONG,
                                 ).show()
-                            },
+                            }
                         )
                     }
                 }) {
                     Text(
-                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete),
+                        stringResource(R.string.delete),
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) {
-                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel))
+                    Text(stringResource(R.string.cancel))
                 }
             },
         )
     }
 }
 
-/** 云端书库卡片：封面 + 书名 + 作者（本地已有角标） */
+/** 云端网盘书籍卡片：封面 + 书名 + 本地已有徽章 + 下载转圈 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CloudBookCard(
-    book: SyncClient.BookInfo,
-    coverFile: File?,
+private fun WebDavBookCard(
+    item: WebDavBookDisplay,
     isDownloading: Boolean,
-    isOnDevice: Boolean,
     onOpenLocal: () -> Unit,
     onDownload: () -> Unit,
     onLongClick: () -> Unit,
 ) {
+    val isOnDevice = item.localBook != null
+    val localCoverFile = item.localBook?.coverPath?.let { File(it) }?.takeIf { it.exists() }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
-                onClick = { if (!isDownloading) { if (isOnDevice) onOpenLocal() else onDownload() } },
+                onClick = {
+                    if (!isDownloading) {
+                        if (isOnDevice) onOpenLocal() else onDownload()
+                    }
+                },
                 onLongClick = onLongClick,
             ),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(10.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
@@ -379,69 +428,95 @@ private fun CloudBookCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(3f / 4f)
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                            )
+                        )
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
-                if (coverFile != null && coverFile.exists()) {
+                if (localCoverFile != null) {
                     AsyncImage(
-                        model = coverFile,
-                        contentDescription = book.title,
+                        model = localCoverFile,
+                        contentDescription = item.title,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
                     )
                 } else {
-                    Icon(
-                        Icons.Default.MenuBook,
-                        contentDescription = book.title,
-                        modifier = Modifier.size(34.dp),
-                        tint = Color.Gray.copy(alpha = 0.45f),
-                    )
+                    // 无封面时的优雅书籍占位
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Book,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = item.title,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            lineHeight = 14.sp
+                        )
+                    }
                 }
+
+                // 右上角：本地已有角标
+                if (isOnDevice) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFF16A34A),
+                    ) {
+                        Text(
+                            stringResource(R.string.sync_shelf_in_library),
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+
+                // 下载中状态遮罩
                 if (isDownloading) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.35f)),
+                            .background(Color.Black.copy(alpha = 0.5f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(26.dp),
-                            strokeWidth = 2.5.dp,
                             color = Color.White,
-                        )
-                    }
-                }
-                if (isOnDevice && !isDownloading) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-                        shape = RoundedCornerShape(bottomEnd = 8.dp),
-                        modifier = Modifier.align(Alignment.TopStart),
-                    ) {
-                        Text(
-                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_on_device),
-                            fontSize = 10.sp,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            modifier = Modifier.size(32.dp),
+                            strokeWidth = 3.dp
                         )
                     }
                 }
             }
-            Column(modifier = Modifier.padding(8.dp)) {
+
+            // 底部书名
+            Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp)) {
                 Text(
-                    book.title,
-                    fontSize = 13.sp,
+                    text = item.title,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    book.author,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 16.sp,
                 )
             }
         }

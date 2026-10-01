@@ -243,6 +243,12 @@ class SyncClient(private val context: Context) {
         val paragraphs: Int,
         val chars: Int,
         val source: String,
+        /** AI 纠错结果摘要（L1/L2/L3；0 表示没做或没清到东西） */
+        val llmLevel: Int = 0,
+        val llmCutLines: Int = 0,
+        val llmOcrFixes: Int = 0,
+        /** 没清掉的：AI 提了但本地拿不出证据，最后没动的处数（用来提示升档重跑） */
+        val llmUncleared: Int = 0,
     ) {
         val isFinished: Boolean get() = status == "done" || status == "failed" || status == "canceled"
 
@@ -264,6 +270,10 @@ class SyncClient(private val context: Context) {
                 paragraphs = o.optInt("paragraphs", 0),
                 chars = o.optInt("chars", 0),
                 source = o.optString("source", ""),
+                llmLevel = o.optInt("llm_level", 0),
+                llmCutLines = o.optInt("llm_cut_lines", 0),
+                llmOcrFixes = o.optInt("llm_ocr_fixes", 0),
+                llmUncleared = o.optInt("llm_uncleared", 0),
             )
         }
     }
@@ -282,6 +292,8 @@ class SyncClient(private val context: Context) {
         pdfFile: File,
         title: String? = null,
         author: String? = null,
+        llmLevel: Int = 0,
+        fixOcr: Boolean = false,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
         stallTimeoutMs: Long = UploadStallWatchdog.DEFAULT_STALL_TIMEOUT_MS,
     ): Result<PdfJobInfo> = withContext(Dispatchers.IO) {
@@ -309,6 +321,12 @@ class SyncClient(private val context: Context) {
                         .addFormDataPart("file", pdfFile.name, watchedBody)
                     if (!title.isNullOrBlank()) builder.addFormDataPart("title", title)
                     if (!author.isNullOrBlank()) builder.addFormDataPart("author", author)
+                    // AI 纠错分级（用户在导入时选）：0=不做 1=L1只审标题 2=L2通读正文 3=L3精读复核
+                    // 同时发 llm_chapters（=level>=1）兼容还没升级的服务器
+                    builder.addFormDataPart("llm_level", llmLevel.coerceIn(0, 3).toString())
+                    builder.addFormDataPart("llm_chapters", if (llmLevel >= 1) "1" else "0")
+                    // OCR 修字：单独开关（默认关），只有 L2/L3 才有意义
+                    builder.addFormDataPart("fix_ocr", if (fixOcr && llmLevel >= 2) "1" else "0")
                     val req = Request.Builder().url(url)
                         .addHeader("Authorization", "Bearer ${getToken() ?: ""}")
                         .post(builder.build())

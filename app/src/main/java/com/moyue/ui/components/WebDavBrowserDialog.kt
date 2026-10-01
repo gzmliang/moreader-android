@@ -49,6 +49,8 @@ fun WebDavBrowserDialog(
     webDavClient: WebDavClient,
     onDismiss: () -> Unit,
     onBookImported: () -> Unit = {},
+    /** 选了 PDF 之后交给调用方（好让用户先在「AI 纠错级别」小窗里选一档）；缺省走 L1 直达转换 */
+    onPickPdf: ((Uri, String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -238,6 +240,11 @@ fun WebDavBrowserDialog(
         if (uri == null) {
             toast(context.getString(com.moyue.app.R.string.webdav_pdf_prepare_failed), long = true)
             pdfFile.delete()
+            return
+        }
+        if (onPickPdf != null) {
+            onPickPdf(uri, pdfFile.name)
+            onDismiss()
             return
         }
         PdfImportManager.submit(context, listOf(uri), listOf(pdfFile.name))

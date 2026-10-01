@@ -92,6 +92,15 @@ fun LibraryScreen(
     val syncClientForUpload = remember { SyncClient(context) }
     val webDavClient = remember { WebDavClient(context) }
 
+    /** 待确认转换选项的 PDF（非空 = 那个小窗正在显示） */
+    var pdfOptionsUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+
+    /** 小窗里的选择：本书的 AI 纠错级别（1=L1快速 2=L2通读 3=L3精读，默认 L1） */
+    var pdfLlmLevel by remember { mutableStateOf(1) }
+
+    /** 小窗里的开关：顺手修 OCR 认错的字（单独开关，默认关，仅 L2/L3 可用） */
+    var pdfFixOcr by remember { mutableStateOf(false) }
+
     // Android 13+ 通知权限（后台转换完成后的提醒；拒绝也不影响功能）
     val notifPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -106,12 +115,18 @@ fun LibraryScreen(
         }
     }
 
-    /** 选好的 PDF 交给后台任务管理器（上传→云端排队转换→轮询进度→自动入库） */
+    /** 选好的 PDF 交给后台任务管理器（上传→云端排队转换→轮询进度→自动入库）
+     *  先弹一个「转换选项」小窗：本书是否用大模型校对章节（每本书单独选，默认开） */
     fun submitPdfUris(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        pdfOptionsUris = uris
+    }
+
+    fun startPdfImport(uris: List<Uri>, llmLevel: Int, fixOcr: Boolean) {
         if (uris.isEmpty()) return
         val names = uris.map { viewModel.queryDisplayName(context, it) ?: "document.pdf" }
         askNotificationPermission()
-        PdfImportManager.submit(context, uris, names)
+        PdfImportManager.submit(context, uris, names, llmLevel = llmLevel, fixOcr = fixOcr)
     }
 
     /** 压缩包里有多本书时，弹出来让用户挑 */
@@ -393,30 +408,29 @@ fun LibraryScreen(
                                     )
 
                                     // 云端同步全部上传
-                                    val currentCloudTarget = webDavClient.getDefaultCloudTarget()
-                                    val canUploadAll = if (currentCloudTarget == "WEBDAV") webDavClient.isConfigured() else syncClientForUpload.isLoggedIn()
-                                    if (canUploadAll) {
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    if (currentCloudTarget == "WEBDAV") androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_webdav_title)
-                                                    else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_desc),
-                                                    fontSize = 13.sp
-                                                )
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    if (currentCloudTarget == "WEBDAV") Icons.Default.Storage else Icons.Default.CloudUpload,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            },
-                                            onClick = {
-                                                showMoreMenu = false
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_webdav_title),
+                                                fontSize = 13.sp
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.CloudUpload,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            if (webDavClient.isConfigured()) {
                                                 showUploadAllConfirm = true
+                                            } else {
+                                                showSyncSettings = true
                                             }
-                                        )
-                                    }
+                                        }
+                                    )
                                     // 请作者喝杯咖啡 / 赞赏支持
                                     HorizontalDivider()
                                     DropdownMenuItem(
@@ -518,7 +532,9 @@ fun LibraryScreen(
                                 coroutineScope.launch {
                                     gridState.animateScrollToItem(0)
                                 }
-                            }
+                            },
+                            // 网盘里的 PDF 也走「先选 AI 纠错级别」的小窗（与本地导入同一口径）
+                            onPickPdf = { uri, _ -> submitPdfUris(listOf(uri)) }
                         )
                     }
 
@@ -551,22 +567,12 @@ fun LibraryScreen(
                             syncClient = syncClientForSync,
                             onDismiss = { showSyncSettings = false },
                             onUpload = { onResult ->
-                                val currentTarget = webDavClient.getDefaultCloudTarget()
-                                if (currentTarget == "WEBDAV") {
-                                    if (webDavClient.isConfigured()) {
-                                        viewModel.uploadAllToWebDav(context, webDavClient)
-                                        onResult(context.getString(com.moyue.app.R.string.sync_webdav_uploading))
-                                    } else {
-                                        onResult(context.getString(com.moyue.app.R.string.webdav_not_configured))
-                                    }
+                                if (webDavClient.isConfigured()) {
+                                    viewModel.uploadAllToWebDav(context, webDavClient)
+                                    onResult(context.getString(com.moyue.app.R.string.sync_webdav_uploading))
                                 } else {
-                                    viewModel.uploadToCloud(context,
-                                        syncClientForSync, onResult)
+                                    onResult(context.getString(com.moyue.app.R.string.webdav_not_configured))
                                 }
-                            },
-                            onDownload = { onResult ->
-                                viewModel.downloadFromCloud(context,
-                                    syncClientForSync, onResult)
                             },
                             onOpenWebDav = {
                                 showSyncSettings = false
@@ -638,14 +644,12 @@ fun LibraryScreen(
 
         // 云端全部上传确认对话框
         if (showUploadAllConfirm) {
-            val currentCloudTarget = webDavClient.getDefaultCloudTarget()
             AlertDialog(
                 onDismissRequest = { if (!isUploading) showUploadAllConfirm = false },
                 title = {
                     Text(
                         if (isUploading) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_uploading)
-                        else if (currentCloudTarget == "WEBDAV") androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_webdav_title)
-                        else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_title)
+                        else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_webdav_title)
                     )
                 },
                 text = {
@@ -659,24 +663,14 @@ fun LibraryScreen(
                             )
                         }
                     } else {
-                        Text(
-                            if (currentCloudTarget == "WEBDAV") androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_webdav_confirm)
-                            else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_confirm)
-                        )
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_all_webdav_confirm))
                     }
                 },
                 confirmButton = {
                     if (!isUploading) {
                         TextButton(onClick = {
-                            if (currentCloudTarget == "WEBDAV") {
-                                uploadScope.launch {
-                                    viewModel.uploadAllToWebDav(context, webDavClient)
-                                }
-                            } else {
-                                val client = SyncClient(context)
-                                uploadScope.launch {
-                                    viewModel.uploadAllToCloud(context, client)
-                                }
+                            uploadScope.launch {
+                                viewModel.uploadAllToWebDav(context, webDavClient)
                             }
                         }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload), color = MaterialTheme.colorScheme.primary) }
                     }
@@ -692,6 +686,89 @@ fun LibraryScreen(
         }
         if (showDonateDialog) {
             com.moyue.ui.components.DonateDialog(onDismiss = { showDonateDialog = false })
+        }
+
+        // ── 导入 PDF：转换选项（每本书确认一次）──
+        if (pdfOptionsUris.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = { pdfOptionsUris = emptyList() },
+                title = {
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_options_title), fontSize = 15.sp)
+                },
+                text = {
+                    Column {
+                        Text(
+                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_options_ai_hint),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        // AI 纠错级别：L1 最快，L2/L3 逐行通读正文（梁老师定的默认＝L1 快速）
+                        listOf(
+                            0 to com.moyue.app.R.string.pdf_options_off,
+                            1 to com.moyue.app.R.string.pdf_options_l1,
+                            2 to com.moyue.app.R.string.pdf_options_l2,
+                            3 to com.moyue.app.R.string.pdf_options_l3
+                        ).forEach { (level, res) ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { pdfLlmLevel = level }
+                            ) {
+                                RadioButton(
+                                    selected = pdfLlmLevel == level,
+                                    onClick = { pdfLlmLevel = level },
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    androidx.compose.ui.res.stringResource(res),
+                                    fontSize = 13.sp,
+                                    color = if (pdfLlmLevel == level) MaterialTheme.colorScheme.onSurface
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_options_ocr_fix),
+                                    fontSize = 13.sp,
+                                    color = if (pdfLlmLevel >= 2) MaterialTheme.colorScheme.onSurface
+                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                                Text(
+                                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_options_ocr_fix_hint),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            Switch(
+                                checked = pdfFixOcr && pdfLlmLevel >= 2,
+                                onCheckedChange = { pdfFixOcr = it },
+                                enabled = pdfLlmLevel >= 2
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        val picked = pdfOptionsUris
+                        pdfOptionsUris = emptyList()
+                        startPdfImport(picked, pdfLlmLevel, pdfFixOcr)
+                    }) {
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_options_start))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pdfOptionsUris = emptyList() }) {
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel))
+                    }
+                },
+            )
         }
 
         // ── PDF 后台转换：进度弹窗（可「后台继续」）+ 结果提示 ──
@@ -784,11 +861,35 @@ fun LibraryScreen(
                     onDismissRequest = { PdfImportManager.clearFinished() },
                     title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_convert_title)) },
                     text = {
-                        Text(
-                            androidx.compose.ui.res.stringResource(
-                                com.moyue.app.R.string.pdf_convert_done, focusEntry.title),
-                            fontSize = 14.sp,
-                        )
+                        Column {
+                            Text(
+                                androidx.compose.ui.res.stringResource(
+                                    com.moyue.app.R.string.pdf_convert_done, focusEntry.title),
+                                fontSize = 14.sp,
+                            )
+                            // AI 纠错干了多少活（L1/L2/L3）：清了水印/广告多少处、修了多少 OCR 错字
+                            if (focusEntry.llmCutLines > 0 || focusEntry.llmOcrFixes > 0) {
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    androidx.compose.ui.res.stringResource(
+                                        com.moyue.app.R.string.pdf_convert_ai_report,
+                                        focusEntry.llmCutLines, focusEntry.llmOcrFixes),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            // 没清掉多少也要说：拿不出证据、本档没敢动的那批（提示可以升档重跑）
+                            if (focusEntry.llmUncleared > 0) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    androidx.compose.ui.res.stringResource(
+                                        com.moyue.app.R.string.pdf_convert_ai_uncleared,
+                                        focusEntry.llmUncleared),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                     },
                     confirmButton = {
                         TextButton(onClick = {
@@ -995,18 +1096,13 @@ fun LibraryScreen(
                             book = book,
                             onClick = { onOpenBook(book.id) },
                             onDelete = { viewModel.deleteBook(context, book) },
-                            onUploadToCloud = {
-                                val client = SyncClient(context)
-                                val target = webDavClientForUpload.getDefaultCloudTarget()
-                                if (target == "WEBDAV" && webDavClientForUpload.isConfigured()) {
+                            onUploadToWebDav = {
+                                if (webDavClientForUpload.isConfigured()) {
                                     viewModel.uploadSingleBookToWebDav(context, webDavClientForUpload, book.id)
                                 } else {
-                                    viewModel.uploadSingleBook(context, client, book.id)
+                                    showSyncSettings = true
                                 }
-                            },
-                            onUploadToWebDav = if (webDavClientForUpload.isConfigured()) {
-                                { viewModel.uploadSingleBookToWebDav(context, webDavClientForUpload, book.id) }
-                            } else null
+                            }
                         )
                     }
                 }
@@ -1022,8 +1118,7 @@ private fun BookCard(
     book: Book,
     onClick: () -> Unit,
     onDelete: () -> Unit,
-    onUploadToCloud: () -> Unit = {},
-    onUploadToWebDav: (() -> Unit)? = null,
+    onUploadToWebDav: () -> Unit = {},
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -1036,22 +1131,12 @@ private fun BookCard(
                     Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.select_action))
                     Spacer(Modifier.height(8.dp))
                     TextButton(
-                        onClick = { showMenu = false; onUploadToCloud() },
+                        onClick = { showMenu = false; onUploadToWebDav() },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.CloudUpload, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_single_cloud_default), modifier = Modifier.weight(1f))
-                    }
-                    if (onUploadToWebDav != null) {
-                        TextButton(
-                            onClick = { showMenu = false; onUploadToWebDav() },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.Storage, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_upload_single_webdav), modifier = Modifier.weight(1f))
-                        }
+                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.sync_backup_single_btn), modifier = Modifier.weight(1f))
                     }
                 }
             },

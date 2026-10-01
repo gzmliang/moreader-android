@@ -263,8 +263,8 @@ AI Voice（云端 TTS）：
     <string name="tts_log_switch_engine">切换 TTS 引擎: %1$s</string>
     <string name="tts_log_offset_inc">[设置] 高亮偏移 +1 = %1$d</string>
     <string name="tts_log_offset_dec">[设置] 高亮偏移 -1 = %1$d</string>
-    <string name="tts_log_recording_started">🎙️ 开始录制：%s（%d 段）</string>
-    <string name="tts_log_recording_done">🎙️ 录制完成：%s（%d KB）</string>
+    <string name="tts_log_recording_started">🎙️ 开始录制：%1$s（%2$d 段）</string>
+    <string name="tts_log_recording_done">🎙️ 录制完成：%1$s（%2$d KB）</string>
     <string name="tts_log_edge_config">[设置] Edge TTS: voice=%1$s</string>
     <string name="tts_log_ai_config">[设置] AI Voice: voice=%1$s</string>
     <string name="tts_log_engine_error">[TTS] ❌ onError idx=%1$d: %2$s</string>
@@ -550,7 +550,7 @@ AI Voice（云端 TTS）：
     <string name="recording_segment_info">%1$d / %2$d 段 (%3$d%%) · %4$.1f MB</string>
     <string name="recording_cancel">取消录制</string>
     <string name="recording_done">录制完成！</string>
-    <string name="recording_done_info">%d 个音频段落 · %d KB</string>
+    <string name="recording_done_info">%1$d 个音频段落 · %2$d KB</string>
     <string name="recording_play">播放</string>
     <string name="recording_close">关闭</string>
     <string name="recording_error">录制失败</string>
@@ -741,6 +741,12 @@ AI Voice（云端 TTS）：
     <string name="ai_quiz_your_choice">您的选择: %1$s</string>
     <string name="ai_quiz_correct_choice">标准答案: %1$s</string>
     <string name="ai_quiz_unanswered_warning">还有未作答题目，请完成所有题目后再提交。</string>
+    <string name="ai_quiz_redo_btn">🔄 重做本卷</string>
+    <string name="ai_quiz_locked_hint">本题已作答，答案已锁定，做完最后一题后整体提交。</string>
+    <string name="ai_tts_read_question">朗读题目</string>
+    <string name="ai_tts_read_option">朗读该选项</string>
+    <string name="ai_tts_read_analysis">朗读解析</string>
+    <string name="ai_tts_unavailable">朗读服务暂时不可用，请稍后再试。</string>
 
     <!-- Reports Tab -->
     <string name="ai_reports_title">答题成绩单</string>
@@ -880,6 +886,16 @@ AI Voice（云端 TTS）：
     <string name="menu_sync_settings">云同步设置</string>
     <!-- PDF 导入（云端转精读本） -->
     <string name="pdf_import_menu">导入 PDF 书籍</string>
+    <string name="pdf_options_title">导入 PDF</string>
+    <string name="pdf_options_ai">AI 校对章节</string>
+    <string name="pdf_options_ai_hint">用大模型清掉水印、广告这类噪声。级别越高越干净，也越费时间。</string>
+    <string name="pdf_options_off">不纠错（最快）</string>
+    <string name="pdf_options_l1">L1 快速 · 只校章节标题</string>
+    <string name="pdf_options_l2">L2 通读 · 逐行清理正文里的水印广告</string>
+    <string name="pdf_options_l3">L3 精读 · 两遍复核，最干净（推荐）</string>
+    <string name="pdf_options_ocr_fix">顺手修复 OCR 认错的字</string>
+    <string name="pdf_options_ocr_fix_hint">需选 L2 及以上。只改形近误认的字（如「今本在线」→「绘本在线」），默认关闭。</string>
+    <string name="pdf_options_start">开始转换</string>
     <string name="pdf_convert_title">PDF 转换</string>
     <string name="pdf_convert_hint">文字会完整保留并按章节重排，原始图表版式不保留。</string>
     <string name="pdf_phase_uploading">正在上传 PDF…</string>
@@ -887,6 +903,8 @@ AI Voice（云端 TTS）：
     <string name="pdf_phase_converting">正在云端转换排版…</string>
     <string name="pdf_phase_importing">正在加入书架…</string>
     <string name="pdf_convert_done">已转换为精读本：%1$s</string>
+    <string name="pdf_convert_ai_report">AI 顺手清理了 %1$d 处水印/广告，修正了 %2$d 处 OCR 错字</string>
+    <string name="pdf_convert_ai_uncleared">还有 %1$d 处疑似水印没敢动（拿不出证据）；嫌不干净可改选「L3 精读」重转</string>
     <string name="pdf_error_login_required">PDF 转换需要使用云端服务，请先在「云同步设置」里登录。</string>
     <string name="pdf_error_scanned">这本 PDF 是扫描图片版（没有文字层），暂时无法转换。</string>
     <string name="pdf_error_too_large">PDF 超过 300MB，请先压缩或拆分后再导入。</string>
@@ -921,4 +939,35 @@ AI Voice（云端 TTS）：
     <string name="pdf_error_not_ready">云端还在转换中，请稍候。</string>
     <string name="pdf_error_canceled">已取消转换。</string>
     <string name="cloud_shelf_moved_hint">云端书库（带封面与搜索）已移到书架底部的云图标里。</string>
+
+    <!-- WebDAV 同步与云书架强化 -->
+    <string name="sync_preset_alist">AList</string>
+    <string name="sync_preset_jianguo">坚果云</string>
+    <string name="sync_preset_custom">自定义</string>
+    <string name="sync_preset_alist_desc">个人网盘聚合挂载神器（支持百度/阿里/本地磁盘）</string>
+    <string name="sync_preset_jianguo_desc">国内常用免自建 WebDAV 网盘（需在坚果云开启应用密码）</string>
+    <string name="sync_preset_custom_desc">适合群晖 NAS、Nextcloud 等标准 WebDAV 服务</string>
+    <string name="sync_test_connection">测试连接</string>
+    <string name="sync_testing">正在测试连通性…</string>
+    <string name="sync_test_success">连接成功 ✓</string>
+    <string name="sync_test_fail">连接失败：%1$s</string>
+    <string name="sync_dir_label">云端存放目录</string>
+    <string name="sync_dir_hint">如 /books 或留空保存在根目录</string>
+    <string name="sync_shelf_not_configured_title">未连接云端网盘</string>
+    <string name="sync_shelf_not_configured_desc">墨阅支持通过 AList、坚果云、群晖等标准 WebDAV 网盘无感同步书籍、阅读进度与书签高亮，多端互通。</string>
+    <string name="sync_shelf_configure_now">立即连接网盘</string>
+    <string name="sync_shelf_empty_title">云端网盘暂无书籍</string>
+    <string name="sync_shelf_empty_desc">您可以点击右上角菜单将本地书架备份至网盘。</string>
+    <string name="sync_shelf_in_library">已在书架</string>
+    <string name="sync_shelf_opening">已在书架，正在打开…</string>
+    <string name="sync_shelf_downloading">正在从网盘下载并恢复进度…</string>
+    <string name="sync_shelf_download_success">下载成功，已加入书架并还原进度！</string>
+    <string name="sync_shelf_delete_title">从云端网盘删除</string>
+    <string name="sync_shelf_delete_confirm">确定要从网盘中删除《%1$s》吗？（将同时清除远程电子书与伴侣进度文件）</string>
+    <string name="sync_shelf_deleted">已从云端网盘删除</string>
+    <string name="sync_backup_all_btn">备份全部书籍至网盘</string>
+    <string name="sync_backup_single_btn">备份至云端网盘</string>
+    <string name="sync_settings_save">保存配置</string>
+    <string name="sync_settings_disconnect">断开 / 清除配置</string>
+    <string name="sync_config_saved">配置已保存</string>
 </resources>

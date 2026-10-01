@@ -120,6 +120,11 @@ class AiCacheRepository(private val context: Context) {
     fun getLanguageDisplayMode(): String = prefs.getString("ai_language_display_mode", "bilingual") ?: "bilingual"
     fun setLanguageDisplayMode(mode: String) = prefs.edit().putString("ai_language_display_mode", mode).apply()
 
+    // Quiz feedback mode："submit" = 完卷提交（默认）· "instant" = 即时反馈
+    // 记住用户上次手动选的那一个，下次进来不退回默认。
+    fun getQuizFeedbackMode(): String = prefs.getString("ai_quiz_feedback_mode", "submit") ?: "submit"
+    fun setQuizFeedbackMode(mode: String) = prefs.edit().putString("ai_quiz_feedback_mode", mode).apply()
+
     // Summary Cache (Strict bookId + scope + ratio + level + mode key)
     fun getSummary(bookId: String, chapterIndex: Int, scope: String, ratio: Int, level: String = "standard", mode: String = "bilingual"): AiSummaryResult? {
         val primaryKey = if (scope == "book") {

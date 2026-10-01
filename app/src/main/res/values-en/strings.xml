@@ -344,8 +344,8 @@ Just change the Base URL and API Key</string>
     <string name="tts_log_offset_inc">[Setting] Highlight offset +1 = %1$d</string>
     <string name="tts_log_offset_dec">[Setting] Highlight offset -1 = %1$d</string>
     <string name="tts_log_pause">[TTS] ⏸ Paused idx=%1$d</string>
-    <string name="tts_log_recording_started">🎙️ Recording started: %s (%d segments)</string>
-    <string name="tts_log_recording_done">🎙️ Recording complete: %s (%d KB)</string>
+    <string name="tts_log_recording_started">🎙️ Recording started: %1$s (%2$d segments)</string>
+    <string name="tts_log_recording_done">🎙️ Recording complete: %1$s (%2$d KB)</string>
     <string name="tts_log_read_from_paragraph">========== Reading from paragraph %1$d ==========</string>
     <string name="tts_log_resume">[TTS] ▶ Resume</string>
     <string name="tts_generating">Generating audio, please wait…</string>
@@ -427,7 +427,7 @@ Just change the Base URL and API Key</string>
     <string name="recording_segment_info">%1$d / %2$d segments (%3$d%%) · %4$.1f MB</string>
     <string name="recording_cancel">Cancel Recording</string>
     <string name="recording_done">Recording Complete!</string>
-    <string name="recording_done_info">%d audio segments · %d KB</string>
+    <string name="recording_done_info">%1$d audio segments · %2$d KB</string>
     <string name="recording_play">Play</string>
     <string name="recording_close">Close</string>
     <string name="recording_error">Recording Failed</string>
@@ -618,6 +618,12 @@ Just change the Base URL and API Key</string>
     <string name="ai_quiz_your_choice">Your Choice: %1$s</string>
     <string name="ai_quiz_correct_choice">Correct Answer: %1$s</string>
     <string name="ai_quiz_unanswered_warning">Please answer all questions before submitting.</string>
+    <string name="ai_quiz_redo_btn">🔄 Redo this quiz</string>
+    <string name="ai_quiz_locked_hint">Answer locked. Submit the whole quiz after the last question.</string>
+    <string name="ai_tts_read_question">Read the question aloud</string>
+    <string name="ai_tts_read_option">Read this option aloud</string>
+    <string name="ai_tts_read_analysis">Read the explanation aloud</string>
+    <string name="ai_tts_unavailable">Read-aloud service is unavailable right now. Please try again later.</string>
 
     <!-- Reports Tab -->
     <string name="ai_reports_title">History and Reports</string>
@@ -757,6 +763,16 @@ Just change the Base URL and API Key</string>
     <string name="menu_sync_settings">Cloud sync settings</string>
     <!-- PDF import (server-side conversion) -->
     <string name="pdf_import_menu">Import PDF book</string>
+    <string name="pdf_options_title">Import PDF</string>
+    <string name="pdf_options_ai">AI chapter cleanup</string>
+    <string name="pdf_options_ai_hint">Uses AI to strip watermarks, ads and other junk. Higher levels are cleaner but slower.</string>
+    <string name="pdf_options_off">No cleanup (fastest)</string>
+    <string name="pdf_options_l1">L1 Fast · headings only</string>
+    <string name="pdf_options_l2">L2 Read-through · cleans junk inside the body text</string>
+    <string name="pdf_options_l3">L3 Close read · double-checked, cleanest (recommended)</string>
+    <string name="pdf_options_ocr_fix">Also fix OCR-misread characters</string>
+    <string name="pdf_options_ocr_fix_hint">Requires L2 or L3. Only fixes look-alike misreads; off by default.</string>
+    <string name="pdf_options_start">Convert</string>
     <string name="pdf_convert_title">PDF conversion</string>
     <string name="pdf_convert_hint">All text is preserved and re-flowed into chapters; the original layout is not kept.</string>
     <string name="pdf_phase_uploading">Uploading PDF…</string>
@@ -764,6 +780,8 @@ Just change the Base URL and API Key</string>
     <string name="pdf_phase_converting">Converting on the server…</string>
     <string name="pdf_phase_importing">Adding to your shelf…</string>
     <string name="pdf_convert_done">Converted to a reading edition: %1$s</string>
+    <string name="pdf_convert_ai_report">AI also removed %1$d watermark/ad item(s) and fixed %2$d OCR misread(s)</string>
+    <string name="pdf_convert_ai_uncleared">%1$d suspected watermark(s) were left untouched (not enough evidence); re-import with “L3 Deep” for a cleaner copy</string>
     <string name="pdf_error_login_required">PDF conversion runs on the cloud service. Please sign in under Cloud sync settings first.</string>
     <string name="pdf_error_scanned">This PDF is a scanned image file (no text layer) and cannot be converted yet.</string>
     <string name="pdf_error_too_large">This PDF is larger than 300MB. Please compress or split it first.</string>
@@ -865,4 +883,35 @@ Custom TTS:
 Speed:
 Drag the slider to adjust reading speed
 0.5x = slow, 1.0x = normal, 2.0x = fast</string>
+
+    <!-- WebDAV Sync & Cloud Shelf Enhancements -->
+    <string name="sync_preset_alist">AList</string>
+    <string name="sync_preset_jianguo">Nutstore</string>
+    <string name="sync_preset_custom">Custom</string>
+    <string name="sync_preset_alist_desc">Multi-cloud aggregator (Baidu, Aliyun, local storage, etc.)</string>
+    <string name="sync_preset_jianguo_desc">Popular WebDAV cloud drive (requires App Password)</string>
+    <string name="sync_preset_custom_desc">Synology NAS, Nextcloud, or standard WebDAV servers</string>
+    <string name="sync_test_connection">Test Connection</string>
+    <string name="sync_testing">Testing connection…</string>
+    <string name="sync_test_success">Connection successful ✓</string>
+    <string name="sync_test_fail">Connection failed: %1$s</string>
+    <string name="sync_dir_label">Cloud Folder</string>
+    <string name="sync_dir_hint">e.g. /books or leave blank for root</string>
+    <string name="sync_shelf_not_configured_title">Cloud Drive Not Connected</string>
+    <string name="sync_shelf_not_configured_desc">MoReader supports syncing books, progress, and bookmarks via AList, Nutstore, Synology, and standard WebDAV.</string>
+    <string name="sync_shelf_configure_now">Connect Cloud Drive</string>
+    <string name="sync_shelf_empty_title">No Books in Cloud</string>
+    <string name="sync_shelf_empty_desc">You can back up local books to your cloud drive from the shelf menu.</string>
+    <string name="sync_shelf_in_library">In Library</string>
+    <string name="sync_shelf_opening">Already in library, opening…</string>
+    <string name="sync_shelf_downloading">Downloading and restoring progress…</string>
+    <string name="sync_shelf_download_success">Downloaded and added to library!</string>
+    <string name="sync_shelf_delete_title">Delete from Cloud</string>
+    <string name="sync_shelf_delete_confirm">Are you sure you want to delete \"%1$s\" from your cloud drive? (Both the book and metadata will be removed)</string>
+    <string name="sync_shelf_deleted">Deleted from cloud drive</string>
+    <string name="sync_backup_all_btn">Back Up All Books to Cloud</string>
+    <string name="sync_backup_single_btn">Back Up to Cloud Drive</string>
+    <string name="sync_settings_save">Save Config</string>
+    <string name="sync_settings_disconnect">Disconnect / Clear</string>
+    <string name="sync_config_saved">Configuration saved</string>
 </resources>

@@ -48,6 +48,8 @@ fun AiReadingScreen(
     edgeTTS: EdgeTTSProvider?,
     isEinkMode: Boolean = false,
     bookRepository: BookRepository? = null,
+    edgeEndpoint: String = "",
+    edgeVoice: String = "zh-CN-XiaoxiaoNeural",
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -362,6 +364,8 @@ fun AiReadingScreen(
                             textSizeSp = textSizeSp,
                             displayMode = displayMode,
                             bookRepository = bookRepository,
+                            edgeEndpoint = edgeEndpoint,
+                            edgeVoice = edgeVoice,
                             onDisplayModeChange = onDisplayModeChange,
                             onQuizCompleted = {
                                 // switch to reports or stay

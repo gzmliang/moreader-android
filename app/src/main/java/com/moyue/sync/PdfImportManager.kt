@@ -62,9 +62,17 @@ object PdfImportManager {
         val bookId: String? = null,
         val chapters: Int = 0,
         val chars: Int = 0,
+        /** AI 纠错结果摘要：清理了几处水印/广告、修正了几处 OCR 错字 */
+        val llmCutLines: Int = 0,
+        val llmOcrFixes: Int = 0,
+        /** 没清掉的：AI 提了但本地拿不出证据、最后没动的处数 */
+        val llmUncleared: Int = 0,
         /** 真实上传字节数 / 总字节数（UPLOADING 阶段用，0 表示还没开始传） */
         val uploadSentBytes: Long = 0,
         val uploadTotalBytes: Long = 0,
+        /** 本书是否用大模型校对章节（导入时勾选，逐本记录） */
+        val llmLevel: Int = 1,
+        val fixOcr: Boolean = false,
     ) {
         val isFinished: Boolean
             get() = phase == Phase.DONE || phase == Phase.FAILED || phase == Phase.CANCELED
@@ -134,7 +142,8 @@ object PdfImportManager {
     // ── 对外操作 ──────────────────────────────────────────
 
     /** 用户选了一批 PDF：逐个排队转换（串行，避免同时拖垮服务器 OCR） */
-    fun submit(context: Context, uris: List<Uri>, displayNames: List<String>) {
+    fun submit(context: Context, uris: List<Uri>, displayNames: List<String>,
+               llmLevel: Int = 1, fixOcr: Boolean = false) {
         val ctx = context.applicationContext
         contextRef = ctx
         if (repository == null) repository = BookRepository(ctx)
@@ -144,6 +153,8 @@ object PdfImportManager {
                 fileName = displayNames.getOrElse(i) { "document.pdf" },
                 title = humanizePdfTitle(displayNames.getOrElse(i) { "document.pdf" }),
                 phase = Phase.PENDING,
+                llmLevel = llmLevel,
+                fixOcr = fixOcr,
             )
         }
         _state.value = _state.value.let { st ->
@@ -155,7 +166,7 @@ object PdfImportManager {
         }
         // 本地串行：一次只跑一条（runLocal 内部有队列闸门）
         for ((i, e) in newEntries.withIndex()) {
-            scope.launch { runLocal(ctx, e.localId, uris[i], e.title) }
+            scope.launch { runLocal(ctx, e.localId, uris[i], e.title, e.llmLevel, e.fixOcr) }
         }
     }
 
@@ -220,12 +231,13 @@ object PdfImportManager {
 
     // ── 内部实现 ──────────────────────────────────────────
 
-    private suspend fun runLocal(ctx: Context, localId: String, uri: Uri, title: String) {
+    private suspend fun runLocal(ctx: Context, localId: String, uri: Uri, title: String,
+                                 llmLevel: Int, fixOcr: Boolean) {
         val client = SyncClient(ctx)
         localQueue.withLock {
             if (_state.value.entries.firstOrNull { it.localId == localId }?.phase == Phase.CANCELED) return
             try {
-                processOne(ctx, client, localId, uri, title)
+                processOne(ctx, client, localId, uri, title, llmLevel, fixOcr)
             } catch (e: Exception) {
                 android.util.Log.e("PdfImport", "PDF 后台导入失败", e)
                 update(localId) {
@@ -242,6 +254,8 @@ object PdfImportManager {
         localId: String,
         uri: Uri,
         title: String,
+        llmLevel: Int,
+        fixOcr: Boolean,
     ) {
         if (!client.isLoggedIn()) {
             update(localId) { it.copy(phase = Phase.FAILED, errorCode = "login_required") }
@@ -302,6 +316,8 @@ object PdfImportManager {
         val created = client.createPdfJob(
             srcFile,
             title = title.ifBlank { null },
+            llmLevel = llmLevel,
+            fixOcr = fixOcr,
             onProgress = { sent, total ->
                 val tot = if (total > 0) total else totalBytes
                 val pct = if (tot > 0) ((sent * 100) / tot).toInt().coerceIn(0, 99) else 0
@@ -432,7 +448,9 @@ object PdfImportManager {
             runCatching { epubFile.delete() }
             update(localId) {
                 it.copy(phase = Phase.DONE, percent = 100, bookId = localBook.id,
-                    title = localBook.title, chapters = job.chapters, chars = job.chars)
+                    title = localBook.title, chapters = job.chapters, chars = job.chars,
+                    llmCutLines = job.llmCutLines, llmOcrFixes = job.llmOcrFixes,
+                    llmUncleared = job.llmUncleared)
             }
             markImported(ctx, job.id)
         } catch (e: Exception) {

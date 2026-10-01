@@ -1039,6 +1039,8 @@ fun ReaderScreen(
                     edgeTTS = currentEdgeTTS,
                     isEinkMode = state.isEinkMode,
                     bookRepository = repository,
+                    edgeEndpoint = state.edgeTtsEndpoint,
+                    edgeVoice = state.edgeTtsVoice,
                     onDismiss = { 
                         showAiCompanion = false 
                         viewModel.refreshEinkMode()

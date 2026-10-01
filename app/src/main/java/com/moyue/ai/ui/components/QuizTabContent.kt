@@ -14,6 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.moyue.ai.data.AiCacheRepository
@@ -30,11 +33,13 @@ import com.moyue.ai.model.AiConfig
 import com.moyue.ai.model.AiQuizResult
 import com.moyue.ai.model.QuizQuestion
 import com.moyue.ai.model.QuizReportRecord
+import com.moyue.ai.model.QuizRules
 import com.moyue.ai.service.AiPromptBuilder
 import com.moyue.ai.service.BookTextExtractor
 import com.moyue.ai.service.LlmClient
 import com.moyue.app.R
 import com.moyue.app.data.BookRepository
+import com.moyue.app.tts.SegmentTtsPlayer
 import kotlinx.coroutines.launch
 
 @Composable
@@ -50,6 +55,8 @@ fun QuizTabContent(
     textSizeSp: Float,
     displayMode: String = "bilingual",
     bookRepository: BookRepository? = null,
+    edgeEndpoint: String = "",
+    edgeVoice: String = "zh-CN-XiaoxiaoNeural",
     onDisplayModeChange: (String) -> Unit = {},
     onQuizCompleted: () -> Unit
 ) {
@@ -59,7 +66,7 @@ fun QuizTabContent(
     var selectedScope by remember { mutableStateOf("chapter") } // "chapter" or "book"
     var questionCount by remember { mutableIntStateOf(5) }
     var difficulty by remember { mutableStateOf("Intermediate") } // "Basic", "Intermediate", "Advanced"
-    var feedbackMode by remember { mutableStateOf("instant") } // "instant" or "submit"
+    var feedbackMode by remember { mutableStateOf(QuizRules.normalizeMode(repository.getQuizFeedbackMode())) } // "submit"(默认) or "instant"
 
     var quizResult by remember {
         mutableStateOf(repository.getQuiz(bookId, chapterIndex, selectedScope, questionCount, difficulty))
@@ -71,29 +78,58 @@ fun QuizTabContent(
     val userAnswers = remember { mutableStateMapOf<Int, String>() }
     var isSubmitted by remember { mutableStateOf(false) }
 
+    // ── 题目朗读（独立播放器：不占用、不修改阅读器正在用的音色）──
+    val ttsPlayer = remember(edgeEndpoint, edgeVoice) { SegmentTtsPlayer(edgeEndpoint, edgeVoice) }
+    var speakingKey by remember { mutableStateOf<String?>(null) }
+    val ttsUnavailable = stringResource(R.string.ai_tts_unavailable)
+    DisposableEffect(Unit) {
+        onDispose { ttsPlayer.destroy() }
+    }
+
+    fun speak(key: String, segments: List<String>) {
+        if (speakingKey == key) {          // 再点一次同一个喇叭 = 停止
+            ttsPlayer.stop()
+            speakingKey = null
+            return
+        }
+        speakingKey = key
+        ttsPlayer.speak(
+            texts = segments,
+            onStart = { speakingKey = key },
+            onDone = { if (speakingKey == key) speakingKey = null },
+            onError = {
+                if (speakingKey == key) speakingKey = null
+                Toast.makeText(context, ttsUnavailable, Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    fun stopSpeaking() {
+        ttsPlayer.stop()
+        speakingKey = null
+    }
+
     LaunchedEffect(bookId, chapterIndex, selectedScope, questionCount, difficulty) {
         quizResult = repository.getQuiz(bookId, chapterIndex, selectedScope, questionCount, difficulty)
         userAnswers.clear()
         isSubmitted = false
+        stopSpeaking()
     }
 
     val warningUnanswered = stringResource(R.string.ai_quiz_unanswered_warning)
+    val lockedHint = stringResource(R.string.ai_quiz_locked_hint)
 
     fun submitAll() {
+        if (isSubmitted) return              // ★ 提交后不再重复记分（旧版即时模式每点一下记一条）
         val questions = quizResult?.questions ?: return
-        if (userAnswers.size < questions.size) {
+        if (!QuizRules.canSubmit(userAnswers.size, questions.size)) {
             Toast.makeText(context, warningUnanswered, Toast.LENGTH_SHORT).show()
             return
         }
 
-        var correctCount = 0
-        for (q in questions) {
-            val ans = userAnswers[q.id]
-            if (ans != null && (ans.equals(q.correctAnswer, ignoreCase = true) || q.correctAnswer.startsWith(ans, ignoreCase = true))) {
-                correctCount++
-            }
-        }
+        val correctCount = QuizRules.score(questions, userAnswers.toMap())
 
+        stopSpeaking()
         isSubmitted = true
 
         // Save report to history
@@ -151,8 +187,8 @@ fun QuizTabContent(
         "Advanced" -> stringResource(R.string.ai_quiz_diff_advanced_short)
         else -> stringResource(R.string.ai_quiz_diff_intermediate_short)
     }
-    val modeShortLabel = when (feedbackMode) {
-        "submit" -> stringResource(R.string.ai_quiz_mode_submit_short)
+    val modeShortLabel = when (QuizRules.normalizeMode(feedbackMode)) {
+        QuizRules.MODE_SUBMIT -> stringResource(R.string.ai_quiz_mode_submit_short)
         else -> stringResource(R.string.ai_quiz_mode_instant_short)
     }
 
@@ -377,8 +413,8 @@ fun QuizTabContent(
                         onDismissRequest = { modeMenuExpanded = false }
                     ) {
                         listOf(
-                            "instant" to stringResource(R.string.ai_quiz_mode_instant),
-                            "submit" to stringResource(R.string.ai_quiz_mode_submit)
+                            QuizRules.MODE_INSTANT to stringResource(R.string.ai_quiz_mode_instant),
+                            QuizRules.MODE_SUBMIT to stringResource(R.string.ai_quiz_mode_submit)
                         ).forEach { (mKey, mLabel) ->
                             DropdownMenuItem(
                                 text = {
@@ -391,6 +427,7 @@ fun QuizTabContent(
                                 },
                                 onClick = {
                                     feedbackMode = mKey
+                                    repository.setQuizFeedbackMode(mKey)
                                     modeMenuExpanded = false
                                 }
                             )
@@ -484,22 +521,25 @@ fun QuizTabContent(
                                 isEink = isEink,
                                 textSizeSp = textSizeSp,
                                 displayMode = displayMode,
+                                speakingKey = speakingKey,
+                                onSpeak = { key, segments -> speak(key, segments) },
                                 onSelectOption = { opt ->
-                                    if (feedbackMode == "submit" && isSubmitted) return@QuizQuestionItem
-                                    userAnswers[question.id] = opt
-                                    if (feedbackMode == "instant") {
-                                        // in instant mode, if all answered, record report
-                                        if (userAnswers.size == result.questions.size) {
-                                            submitAll()
-                                        }
+                                    // 已提交 → 一律锁定；即时反馈模式 → 第一击即锁定（错了也不给改），
+                                    // 但仍会当场亮出正确答案与解析。
+                                    val alreadyAnswered = userAnswers[question.id] != null
+                                    when {
+                                        !QuizRules.canSelectOption(feedbackMode, isSubmitted, alreadyAnswered) ->
+                                            if (!isSubmitted) Toast.makeText(context, lockedHint, Toast.LENGTH_SHORT).show()
+                                        else -> userAnswers[question.id] = opt
                                     }
                                 }
                             )
                             Spacer(modifier = Modifier.height(14.dp))
                         }
 
-                        // Submit button in "submit" mode
-                        if (feedbackMode == "submit" && !isSubmitted) {
+                        // Submit button：完卷提交模式随时可点（未答完会提示）；
+                        // 即时反馈模式做完最后一题才出现（答完再整体提交、记一次成绩）。
+                        if (QuizRules.shouldShowSubmitButton(feedbackMode, isSubmitted, userAnswers.size, result.questions.size)) {
                             item {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Button(
@@ -514,14 +554,11 @@ fun QuizTabContent(
                             }
                         }
 
-                        // Score summary banner after submission
-                        if (isSubmitted || (feedbackMode == "instant" && userAnswers.size == result.questions.size)) {
+                        // Score summary banner after submission + 重做入口
+                        if (isSubmitted) {
                             item {
-                                val correctCount = result.questions.count { q ->
-                                    val ans = userAnswers[q.id]
-                                    ans != null && (ans.equals(q.correctAnswer, ignoreCase = true) || q.correctAnswer.startsWith(ans, ignoreCase = true))
-                                }
-                                val percent = if (result.questions.isNotEmpty()) (correctCount * 100) / result.questions.size else 0
+                                val correctCount = QuizRules.score(result.questions, userAnswers.toMap())
+                                val percent = QuizRules.scorePercent(correctCount, result.questions.size)
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
                                     color = if (isEink) Color.White else MaterialTheme.colorScheme.primaryContainer,
@@ -539,6 +576,23 @@ fun QuizTabContent(
                                         )
                                     }
                                 }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // 重做本卷：清空答案重新做同一套题（不重新生成）
+                                OutlinedButton(
+                                    onClick = {
+                                        stopSpeaking()
+                                        userAnswers.clear()
+                                        isSubmitted = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = if (isEink) ButtonDefaults.outlinedButtonColors(contentColor = Color.Black)
+                                    else ButtonDefaults.outlinedButtonColors()
+                                ) {
+                                    Text(stringResource(R.string.ai_quiz_redo_btn))
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
                             }
                         }
                     }
@@ -685,12 +739,25 @@ private fun QuizQuestionItem(
     isEink: Boolean,
     textSizeSp: Float,
     displayMode: String,
+    speakingKey: String?,
+    onSpeak: (String, List<String>) -> Unit,
     onSelectOption: (String) -> Unit
 ) {
-    val showFeedback = (feedbackMode == "instant" && selectedOption != null) || (feedbackMode == "submit" && isSubmitted)
+    val showFeedback = (QuizRules.normalizeMode(feedbackMode) == QuizRules.MODE_INSTANT && selectedOption != null) ||
+        (QuizRules.normalizeMode(feedbackMode) == QuizRules.MODE_SUBMIT && isSubmitted)
 
     val showOrig = displayMode == "bilingual" || displayMode == "orig" || question.questionTranslation.isBlank()
     val showTrans = (displayMode == "bilingual" || displayMode == "target") && question.questionTranslation.isNotBlank()
+
+    // 朗读内容严格跟随屏幕上显示的内容（屏幕上没显示的就不念）
+    val questionSegments = buildList {
+        if (showOrig && question.questionOriginal.isNotBlank()) add(question.questionOriginal)
+        if (showTrans && question.questionTranslation.isNotBlank()) add(question.questionTranslation)
+    }
+    val questionKey = "q${question.id}"
+    val questionReadLabel = stringResource(R.string.ai_tts_read_question)
+    val optionReadLabel = stringResource(R.string.ai_tts_read_option)
+    val analysisReadLabel = stringResource(R.string.ai_tts_read_analysis)
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -701,22 +768,32 @@ private fun QuizQuestionItem(
             .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(12.dp)) else Modifier)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Question Title (Orig + Trans based on displayMode)
-            if (showOrig) {
-                Text(
-                    text = "${question.id}. ${question.questionOriginal}",
-                    fontSize = (textSizeSp).sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
-                )
-            }
-            if (showTrans) {
-                if (showOrig) Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = if (!showOrig) "${question.id}. ${question.questionTranslation}" else question.questionTranslation,
-                    fontSize = (if (!showOrig) textSizeSp else textSizeSp * 0.9f).sp,
-                    fontWeight = if (!showOrig) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isEink) (if (!showOrig) Color.Black else Color.DarkGray) else (if (!showOrig) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+            // Question Title (Orig + Trans based on displayMode) + 题目朗读
+            Row(verticalAlignment = Alignment.Top) {
+                Column(modifier = Modifier.weight(1f)) {
+                    if (showOrig) {
+                        Text(
+                            text = "${question.id}. ${question.questionOriginal}",
+                            fontSize = (textSizeSp).sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    if (showTrans) {
+                        if (showOrig) Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (!showOrig) "${question.id}. ${question.questionTranslation}" else question.questionTranslation,
+                            fontSize = (if (!showOrig) textSizeSp else textSizeSp * 0.9f).sp,
+                            fontWeight = if (!showOrig) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isEink) (if (!showOrig) Color.Black else Color.DarkGray) else (if (!showOrig) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                        )
+                    }
+                }
+                QuizSpeakerButton(
+                    isPlaying = speakingKey == questionKey,
+                    isEink = isEink,
+                    contentDescription = questionReadLabel,
+                    onClick = { onSpeak(questionKey, questionSegments) }
                 )
             }
 
@@ -780,8 +857,22 @@ private fun QuizQuestionItem(
 
                         Text(
                             text = opt,
+                            modifier = Modifier.weight(1f),
                             fontSize = (textSizeSp * 0.95f).sp,
                             color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                        )
+
+                        // 该选项单独朗读（内层按钮自己吃掉点击，不会误选答案）
+                        QuizSpeakerButton(
+                            isPlaying = speakingKey == "${questionKey}_$optPrefix",
+                            isEink = isEink,
+                            contentDescription = optionReadLabel,
+                            onClick = {
+                                onSpeak(
+                                    "${questionKey}_$optPrefix",
+                                    listOf(opt.replace(Regex("^\\s*[A-Za-z][.、．:：)]\\s*"), ""))
+                                )
+                            }
                         )
                     }
                 }
@@ -791,6 +882,11 @@ private fun QuizQuestionItem(
             if (showFeedback && (question.analysisOriginal.isNotBlank() || question.analysisTranslation.isNotBlank())) {
                 val showAnalysisOrig = displayMode == "bilingual" || displayMode == "orig" || question.analysisTranslation.isBlank()
                 val showAnalysisTrans = (displayMode == "bilingual" || displayMode == "target") && question.analysisTranslation.isNotBlank()
+                val analysisSegments = buildList {
+                    if (showAnalysisOrig && question.analysisOriginal.isNotBlank()) add(question.analysisOriginal)
+                    if (showAnalysisTrans && question.analysisTranslation.isNotBlank()) add(question.analysisTranslation)
+                }
+                val analysisKey = "a${question.id}"
 
                 Spacer(modifier = Modifier.height(12.dp))
                 Surface(
@@ -801,12 +897,21 @@ private fun QuizQuestionItem(
                         .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(8.dp)) else Modifier)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = stringResource(R.string.ai_quiz_analysis_title),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = stringResource(R.string.ai_quiz_analysis_title),
+                                modifier = Modifier.weight(1f),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
+                            )
+                            QuizSpeakerButton(
+                                isPlaying = speakingKey == analysisKey,
+                                isEink = isEink,
+                                contentDescription = analysisReadLabel,
+                                onClick = { onSpeak(analysisKey, analysisSegments) }
+                            )
+                        }
                         if (showAnalysisOrig && question.analysisOriginal.isNotBlank()) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
@@ -827,5 +932,27 @@ private fun QuizQuestionItem(
                 }
             }
         }
+    }
+}
+
+/** 小喇叭按钮：正常=朗读，正在朗读时变成停止，再点一下即停。 */
+@Composable
+private fun QuizSpeakerButton(
+    isPlaying: Boolean,
+    isEink: Boolean,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(30.dp)) {
+        Icon(
+            imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.VolumeUp,
+            contentDescription = contentDescription,
+            tint = when {
+                isEink -> Color.Black
+                isPlaying -> Color(0xFFEF4444)
+                else -> MaterialTheme.colorScheme.primary
+            },
+            modifier = Modifier.size(17.dp)
+        )
     }
 }

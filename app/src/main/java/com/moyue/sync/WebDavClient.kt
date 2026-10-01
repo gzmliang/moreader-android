@@ -34,6 +34,7 @@ class WebDavClient(private val context: Context) {
         private const val KEY_PASSWORD = "webdav_password"
         private const val KEY_DEFAULT_UPLOAD_DIR = "webdav_default_upload_dir"
         private const val KEY_DEFAULT_CLOUD_TARGET = "sync_default_cloud_target" // "MOYUE" or "WEBDAV"
+        private const val KEY_PRESET = "webdav_preset" // "alist", "jianguo", "custom"
     }
 
     data class DavItem(
@@ -53,6 +54,11 @@ class WebDavClient(private val context: Context) {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
+    fun getPreset(): String = prefs.getString(KEY_PRESET, "alist") ?: "alist"
+    fun setPreset(preset: String) {
+        prefs.edit().putString(KEY_PRESET, preset).apply()
+    }
+
     fun getServerUrl(): String = prefs.getString(KEY_SERVER_URL, "") ?: ""
     fun getUser(): String = prefs.getString(KEY_USER, "") ?: ""
     fun getPassword(): String = prefs.getString(KEY_PASSWORD, "") ?: ""
@@ -69,11 +75,14 @@ class WebDavClient(private val context: Context) {
         prefs.edit().putString(KEY_DEFAULT_CLOUD_TARGET, target).apply()
     }
 
-    fun saveConfig(url: String, user: String, pass: String) {
+    fun saveConfig(url: String, user: String, pass: String, preset: String = "alist", defaultDir: String = "") {
         prefs.edit()
             .putString(KEY_SERVER_URL, url.trim().trimEnd('/'))
             .putString(KEY_USER, user.trim())
             .putString(KEY_PASSWORD, pass)
+            .putString(KEY_PRESET, preset)
+            .putString(KEY_DEFAULT_UPLOAD_DIR, defaultDir.trim())
+            .putString(KEY_DEFAULT_CLOUD_TARGET, "WEBDAV")
             .apply()
     }
 
@@ -83,6 +92,7 @@ class WebDavClient(private val context: Context) {
             .remove(KEY_USER)
             .remove(KEY_PASSWORD)
             .remove(KEY_DEFAULT_UPLOAD_DIR)
+            .remove(KEY_PRESET)
             .apply()
     }
 
@@ -99,6 +109,7 @@ class WebDavClient(private val context: Context) {
      */
     fun buildFullUrl(subPath: String): String {
         val base = getServerUrl().trimEnd('/')
+        if (base.isBlank()) return ""
         if (subPath.isBlank() || subPath == "/") return base
         if (subPath.startsWith("http://") || subPath.startsWith("https://")) return subPath
 
@@ -111,12 +122,198 @@ class WebDavClient(private val context: Context) {
         val basePath = (baseUri?.path ?: "").trimEnd('/')
         val cleanSub = if (subPath.startsWith("/")) subPath else "/$subPath"
 
-        return if (basePath.isNotBlank() && cleanSub.startsWith(basePath)) {
+        val rawCombined = if (basePath.isNotBlank() && cleanSub.startsWith(basePath)) {
             val rest = cleanSub.substring(basePath.length)
             val cleanRest = if (rest.startsWith("/")) rest else "/$rest"
             base + cleanRest
         } else {
             base + cleanSub
+        }
+
+        return try {
+            val uri = Uri.parse(rawCombined)
+            val scheme = uri.scheme ?: "http"
+            val authority = uri.authority ?: ""
+            val path = uri.path ?: ""
+            val encodedPath = Uri.encode(path, "/")
+            "$scheme://$authority$encodedPath"
+        } catch (e: Exception) {
+            rawCombined
+        }
+    }
+
+    /**
+     * 测试 WebDAV 连通性与鉴权
+     */
+    suspend fun testConnection(): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            if (!isConfigured()) return@withContext Result.failure(Exception("WebDAV 未配置"))
+            val targetDir = getDefaultUploadDir()
+            val url = buildFullUrl(targetDir)
+
+            val req = Request.Builder()
+                .url(url)
+                .method("PROPFIND", "".toRequestBody(null))
+                .addHeader("Authorization", getAuthHeader())
+                .addHeader("Depth", "0")
+                .build()
+
+            val resp = client.newCall(req).execute()
+            when (resp.code) {
+                207, 200 -> Result.success("OK")
+                401 -> Result.failure(Exception("HTTP 401"))
+                404 -> Result.failure(Exception("HTTP 404"))
+                else -> Result.failure(Exception("HTTP ${resp.code}"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "testConnection failed", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 删除 WebDAV 上的文件 (DELETE)
+     */
+    suspend fun deleteFile(remotePath: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val targetUrl = buildFullUrl(remotePath)
+            val req = Request.Builder()
+                .url(targetUrl)
+                .delete()
+                .addHeader("Authorization", getAuthHeader())
+                .build()
+
+            val resp = client.newCall(req).execute()
+            if (resp.isSuccessful || resp.code == 204 || resp.code == 404) {
+                Result.success(true)
+            } else {
+                Result.failure(Exception("HTTP ${resp.code}"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "WebDAV deleteFile failed", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 从 WebDAV 删除书籍及其伴侣元数据 JSON
+     */
+    suspend fun deleteBookWithMetadata(remoteEpubPath: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val epubRes = deleteFile(remoteEpubPath)
+            val metaPath = remoteEpubPath.removeSuffix(".epub").removeSuffix(".EPUB") + ".moreader.json"
+            deleteFile(metaPath) // 静默删除伴侣文件
+            epubRes
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 从 WebDAV 下载书籍并完整恢复阅读进度、书签和高亮笔记
+     */
+    suspend fun downloadBookAndRestore(
+        remoteItem: DavItem,
+        repo: BookRepository
+    ): Result<Book> = withContext(Dispatchers.IO) {
+        val tempFile = File(context.cacheDir, "webdav_dl_${System.currentTimeMillis()}_${remoteItem.name}")
+        try {
+            val dlRes = downloadFile(remoteItem.path, tempFile)
+            if (dlRes.isFailure) {
+                return@withContext Result.failure(dlRes.exceptionOrNull() ?: Exception("下载失败"))
+            }
+
+            val imported = repo.importBook(Uri.fromFile(tempFile))
+
+            // 尝试读取同名伴侣文件并恢复
+            val metaPath = remoteItem.path.removeSuffix(".epub").removeSuffix(".EPUB") + ".moreader.json"
+            getTextFile(metaPath).onSuccess { metaJson ->
+                applyCompanionMetadata(repo, imported.id, metaJson)
+            }
+
+            Result.success(imported)
+        } catch (e: Exception) {
+            Log.e(TAG, "downloadBookAndRestore failed", e)
+            Result.failure(e)
+        } finally {
+            try {
+                if (tempFile.exists()) tempFile.delete()
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * 将伴侣元数据 JSON 恢复至本地书籍
+     */
+    suspend fun applyCompanionMetadata(repo: BookRepository, localBookId: String, jsonStr: String) {
+        try {
+            val obj = JSONObject(jsonStr)
+            val bookmarks = mutableListOf<com.moyue.app.data.models.Bookmark>()
+            if (obj.has("bookmarks")) {
+                val arr = obj.getJSONArray("bookmarks")
+                for (j in 0 until arr.length()) {
+                    val b = arr.getJSONObject(j)
+                    bookmarks.add(
+                        com.moyue.app.data.models.Bookmark(
+                            bookId = localBookId,
+                            chapterIndex = b.optInt("chapter_index", 0),
+                            chapterTitle = b.optString("chapter_title", null),
+                            paragraphIndex = b.optInt("paragraph_index", 0),
+                            paragraphText = b.optString("paragraph_text", null),
+                            progress = b.optDouble("progress", 0.0).toFloat(),
+                            createdAt = b.optLong("created_at", System.currentTimeMillis()),
+                        )
+                    )
+                }
+            }
+            if (bookmarks.isNotEmpty()) {
+                repo.importBookmarks(bookmarks)
+            }
+
+            val highlights = mutableListOf<com.moyue.app.data.models.Highlight>()
+            if (obj.has("highlights")) {
+                val arr = obj.getJSONArray("highlights")
+                for (j in 0 until arr.length()) {
+                    val h = arr.getJSONObject(j)
+                    highlights.add(
+                        com.moyue.app.data.models.Highlight(
+                            bookId = localBookId,
+                            chapterIndex = h.optInt("chapter_index", 0),
+                            startParagraph = h.optInt("start_paragraph", 0),
+                            startOffset = h.optInt("start_offset", 0),
+                            endParagraph = h.optInt("end_paragraph", 0),
+                            endOffset = h.optInt("end_offset", 0),
+                            text = h.optString("text", ""),
+                            note = h.optString("note", null).takeIf { it?.isNotBlank() == true },
+                            color = h.optInt("color", 0xFFFFFF00.toInt()),
+                            createdAt = h.optLong("created_at", System.currentTimeMillis()),
+                        )
+                    )
+                }
+            }
+            if (highlights.isNotEmpty()) {
+                repo.importHighlights(highlights)
+            }
+
+            if (obj.has("progress") && !obj.isNull("progress")) {
+                val p = obj.getJSONObject("progress")
+                val chIdx = p.optInt("chapter_index", -1)
+                if (chIdx >= 0) {
+                    val localBook = repo.getBook(localBookId) ?: return
+                    repo.updateProgress(
+                        localBookId,
+                        p.optString("chapter_href", null),
+                        chIdx,
+                        p.optDouble("percentage", 0.0).toFloat(),
+                        null,
+                        p.optInt("paragraph_index", 0),
+                        localBook.themeId,
+                        localBook.fontSize
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "applyCompanionMetadata failed", e)
         }
     }
 
