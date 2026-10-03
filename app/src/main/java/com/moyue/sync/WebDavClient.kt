@@ -225,13 +225,20 @@ class WebDavClient(private val context: Context) {
 
             val imported = repo.importBook(Uri.fromFile(tempFile))
 
+            // 立即提取封面并更新
+            val coverPath = repo.extractCover(imported.id)
+            if (coverPath != null) {
+                repo.updateBookCover(imported.id, coverPath)
+            }
+
             // 尝试读取同名伴侣文件并恢复
             val metaPath = remoteItem.path.removeSuffix(".epub").removeSuffix(".EPUB") + ".moreader.json"
             getTextFile(metaPath).onSuccess { metaJson ->
                 applyCompanionMetadata(repo, imported.id, metaJson)
             }
 
-            Result.success(imported)
+            val finalBook = repo.getBook(imported.id) ?: imported
+            Result.success(finalBook)
         } catch (e: Exception) {
             Log.e(TAG, "downloadBookAndRestore failed", e)
             Result.failure(e)

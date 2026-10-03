@@ -204,9 +204,10 @@ fun LibraryScreen(
         }
     }
 
-    // 接上云端还没跑完的 PDF 转换任务（App 被杀掉/重新打开也不会白等）
+    // 接上云端还没跑完的 PDF 转换任务（App 被杀掉/重新打开也不会白等），并静默检查补齐缺失封面
     LaunchedEffect(Unit) {
         PdfImportManager.resume(context)
+        viewModel.repairMissingCovers()
     }
 
     // File picker for EPUB / TXT / PDF / ZIP import (multiple files)

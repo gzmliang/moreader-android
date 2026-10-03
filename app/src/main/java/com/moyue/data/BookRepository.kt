@@ -303,41 +303,96 @@ class BookRepository(private val context: Context) {
             val opfBytes = zip.getInputStream(opfEntry).readBytes()
             val opfDoc = db.parse(opfBytes.inputStream())
 
-            // Find <meta name="cover" content="..."/>
+            var coverHref: String? = null
+
+            // 1) EPUB 2: Find <meta name="cover" content="..."/>
             var coverId: String? = null
             val metas = opfDoc.getElementsByTagNameNS("*", "meta")
             for (i in 0 until metas.length) {
                 val meta = metas.item(i)
                 if (meta.nodeType == org.w3c.dom.Node.ELEMENT_NODE) {
-                    if ("cover" == meta.attributes.getNamedItem("name")?.textContent) {
-                        coverId = meta.attributes.getNamedItem("content")?.textContent
+                    val nameVal = meta.attributes?.getNamedItem("name")?.textContent
+                    if ("cover".equals(nameVal, ignoreCase = true)) {
+                        coverId = meta.attributes?.getNamedItem("content")?.textContent
                         break
                     }
                 }
             }
 
-            if (coverId == null) { zip.close(); return@withContext null }
-
-            // Find the manifest item with that id
             val manifest = opfDoc.getElementsByTagNameNS("*", "manifest").item(0)
-                ?: run { zip.close(); return@withContext null }
-            val items = manifest.childNodes
-            var coverHref: String? = null
-            for (i in 0 until items.length) {
-                val item = items.item(i)
-                if (item.nodeType == org.w3c.dom.Node.ELEMENT_NODE) {
-                    if (coverId == item.attributes.getNamedItem("id")?.textContent) {
-                        coverHref = item.attributes.getNamedItem("href")?.textContent
+            if (manifest != null) {
+                val items = manifest.childNodes
+                val manifestItems = mutableListOf<org.w3c.dom.Node>()
+                for (i in 0 until items.length) {
+                    val item = items.item(i)
+                    if (item.nodeType == org.w3c.dom.Node.ELEMENT_NODE) {
+                        manifestItems.add(item)
+                    }
+                }
+
+                // 2) 如果有 coverId，优先在 manifest 里找对应 id 的 item
+                if (!coverId.isNullOrBlank()) {
+                    val matched = manifestItems.firstOrNull {
+                        coverId == it.attributes?.getNamedItem("id")?.textContent
+                    }
+                    coverHref = matched?.attributes?.getNamedItem("href")?.textContent
+                }
+
+                // 3) EPUB 3 标准: properties="cover-image"
+                if (coverHref == null) {
+                    val matched = manifestItems.firstOrNull {
+                        val props = it.attributes?.getNamedItem("properties")?.textContent ?: ""
+                        props.contains("cover-image", ignoreCase = true)
+                    }
+                    coverHref = matched?.attributes?.getNamedItem("href")?.textContent
+                }
+
+                // 4) 常见规范: id 命名为 cover / cover-image 且为图片类型
+                if (coverHref == null) {
+                    val matched = manifestItems.firstOrNull {
+                        val id = it.attributes?.getNamedItem("id")?.textContent?.lowercase() ?: ""
+                        val media = it.attributes?.getNamedItem("media-type")?.textContent?.lowercase() ?: ""
+                        (id == "cover" || id == "cover-image" || id == "cover_image") && media.startsWith("image/")
+                    }
+                    coverHref = matched?.attributes?.getNamedItem("href")?.textContent
+                }
+
+                // 5) 常见规范: href 包含 cover 且为图片类型
+                if (coverHref == null) {
+                    val matched = manifestItems.firstOrNull {
+                        val href = it.attributes?.getNamedItem("href")?.textContent?.lowercase() ?: ""
+                        val media = it.attributes?.getNamedItem("media-type")?.textContent?.lowercase() ?: ""
+                        media.startsWith("image/") && (href.contains("cover") || href.contains("fengmian"))
+                    }
+                    coverHref = matched?.attributes?.getNamedItem("href")?.textContent
+                }
+            }
+
+            // 6) 从 zip entry 尝试获取对应图片
+            var coverEntry: java.util.zip.ZipEntry? = null
+            if (!coverHref.isNullOrBlank()) {
+                val fullPath = if (baseDir.isNotEmpty()) "$baseDir/$coverHref" else coverHref
+                coverEntry = zip.getEntry(fullPath) ?: zip.getEntry(coverHref)
+            }
+
+            // 7) 启发式回退：直接在 zip 中找常见的封面文件名
+            if (coverEntry == null) {
+                val candidateNames = listOf(
+                    "cover.jpg", "cover.jpeg", "cover.png",
+                    "images/cover.jpg", "images/cover.jpeg", "images/cover.png",
+                    "OEBPS/cover.jpg", "OEBPS/cover.jpeg", "OEBPS/cover.png", "OEBPS/images/cover.jpg"
+                )
+                for (cName in candidateNames) {
+                    val path = if (baseDir.isNotEmpty()) "$baseDir/$cName" else cName
+                    val entry = zip.getEntry(path) ?: zip.getEntry(cName)
+                    if (entry != null) {
+                        coverEntry = entry
                         break
                     }
                 }
             }
 
-            if (coverHref == null) { zip.close(); return@withContext null }
-
-            val fullPath = if (baseDir.isNotEmpty()) "$baseDir/$coverHref" else coverHref
-            val coverEntry = zip.getEntry(fullPath) ?: zip.getEntry(coverHref)
-                ?: run { zip.close(); return@withContext null }
+            if (coverEntry == null) { zip.close(); return@withContext null }
 
             val coverFile = File(bookDir, "cover_$bookId.jpg")
             zip.getInputStream(coverEntry).use { input ->

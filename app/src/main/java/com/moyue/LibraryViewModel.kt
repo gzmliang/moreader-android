@@ -45,6 +45,36 @@ class LibraryViewModel(
     private val repository: BookRepository,
 ) : ViewModel() {
 
+    init {
+        repairMissingCovers()
+    }
+
+    /** 检查所有书籍，自动静默补齐缺失的封面（例如存量书籍或此前未抽到封面的书） */
+    fun repairMissingCovers() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val allBooks = repository.getAllBooksOnce()
+                var repairedCount = 0
+                for (book in allBooks) {
+                    val coverExists = !book.coverPath.isNullOrBlank() && File(book.coverPath).exists()
+                    if (!coverExists) {
+                        val newCover = repository.extractCover(book.id)
+                        if (newCover != null) {
+                            repository.updateBookCover(book.id, newCover)
+                            repairedCount++
+                            android.util.Log.d("CoverRepair", "Auto-repaired cover for: ${book.title}")
+                        }
+                    }
+                }
+                if (repairedCount > 0) {
+                    android.util.Log.i("CoverRepair", "Successfully repaired $repairedCount book covers")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CoverRepair", "Failed to repair missing covers", e)
+            }
+        }
+    }
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
 
