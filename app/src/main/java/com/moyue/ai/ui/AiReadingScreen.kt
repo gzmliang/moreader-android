@@ -65,7 +65,7 @@ fun AiReadingScreen(
         repository.setLanguageDisplayMode(mode)
     }
 
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Summary, 1: Plot, 2: Quiz, 3: Reports
+    var selectedTab by remember { mutableIntStateOf(repository.getLastAiTab().coerceIn(0, 3)) } // 0: Summary, 1: Plot, 2: Quiz, 3: Reports
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(!aiConfig.isConfigured) }
 
@@ -290,7 +290,10 @@ fun AiReadingScreen(
                             tabs.forEachIndexed { index, title ->
                                 Tab(
                                     selected = (selectedTab == index),
-                                    onClick = { selectedTab = index },
+                                    onClick = {
+                                        selectedTab = index
+                                        repository.setLastAiTab(index)
+                                    },
                                     modifier = Modifier.height(44.dp)
                                 ) {
                                     Row(

@@ -63,9 +63,9 @@ fun QuizTabContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var selectedScope by remember { mutableStateOf("chapter") } // "chapter" or "book"
-    var questionCount by remember { mutableIntStateOf(5) }
-    var difficulty by remember { mutableStateOf("Intermediate") } // "Basic", "Intermediate", "Advanced"
+    var selectedScope by remember { mutableStateOf(repository.getLastQuizScope(bookId)) } // "chapter" or "book"
+    var questionCount by remember { mutableIntStateOf(repository.getLastQuizCount(bookId)) }
+    var difficulty by remember { mutableStateOf(repository.getLastQuizDifficulty(bookId)) } // "Basic", "Intermediate", "Advanced"
     var feedbackMode by remember { mutableStateOf(QuizRules.normalizeMode(repository.getQuizFeedbackMode())) } // "submit"(默认) or "instant"
 
     var quizResult by remember {
@@ -75,7 +75,11 @@ fun QuizTabContent(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     // User answers: questionId -> selectedOption ("A", "B", etc.)
-    val userAnswers = remember { mutableStateMapOf<Int, String>() }
+    val userAnswers = remember {
+        mutableStateMapOf<Int, String>().apply {
+            putAll(repository.getQuizDraft(bookId, chapterIndex, selectedScope, questionCount, difficulty))
+        }
+    }
     var isSubmitted by remember { mutableStateOf(false) }
 
     // ── 题目朗读（独立播放器：不占用、不修改阅读器正在用的音色）──
@@ -112,6 +116,10 @@ fun QuizTabContent(
     LaunchedEffect(bookId, chapterIndex, selectedScope, questionCount, difficulty) {
         quizResult = repository.getQuiz(bookId, chapterIndex, selectedScope, questionCount, difficulty)
         userAnswers.clear()
+        val draft = repository.getQuizDraft(bookId, chapterIndex, selectedScope, questionCount, difficulty)
+        if (draft.isNotEmpty()) {
+            userAnswers.putAll(draft)
+        }
         isSubmitted = false
         stopSpeaking()
     }
@@ -131,6 +139,7 @@ fun QuizTabContent(
 
         stopSpeaking()
         isSubmitted = true
+        repository.clearQuizDraft(bookId, chapterIndex, selectedScope, questionCount, difficulty)
 
         // Save report to history
         val report = QuizReportRecord(
@@ -151,6 +160,9 @@ fun QuizTabContent(
     fun startGenerateQuiz() {
         isLoading = true
         errorMessage = null
+        userAnswers.clear()
+        isSubmitted = false
+        repository.clearQuizDraft(bookId, chapterIndex, selectedScope, questionCount, difficulty)
         scope.launch {
             val textToAnalyze = if (selectedScope == "book") {
                 BookTextExtractor.extractBookOverview(bookRepository, bookId, bookTitle, chapterText)
@@ -249,6 +261,7 @@ fun QuizTabContent(
                             text = { Text(stringResource(R.string.ai_scope_chapter), fontSize = 13.sp) },
                             onClick = {
                                 selectedScope = "chapter"
+                                repository.setLastQuizScope(bookId, "chapter")
                                 scopeMenuExpanded = false
                             }
                         )
@@ -256,6 +269,7 @@ fun QuizTabContent(
                             text = { Text(stringResource(R.string.ai_scope_book), fontSize = 13.sp) },
                             onClick = {
                                 selectedScope = "book"
+                                repository.setLastQuizScope(bookId, "book")
                                 scopeMenuExpanded = false
                             }
                         )
@@ -310,6 +324,7 @@ fun QuizTabContent(
                                 },
                                 onClick = {
                                     questionCount = cnt
+                                    repository.setLastQuizCount(bookId, cnt)
                                     countMenuExpanded = false
                                 }
                             )
@@ -369,6 +384,7 @@ fun QuizTabContent(
                                 },
                                 onClick = {
                                     difficulty = dKey
+                                    repository.setLastQuizDifficulty(bookId, dKey)
                                     diffMenuExpanded = false
                                 }
                             )
@@ -510,7 +526,7 @@ fun QuizTabContent(
                     val result = quizResult!!
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(vertical = 10.dp)
+                        contentPadding = PaddingValues(top = 10.dp, bottom = 48.dp)
                     ) {
                         items(result.questions) { question ->
                             QuizQuestionItem(
@@ -530,7 +546,10 @@ fun QuizTabContent(
                                     when {
                                         !QuizRules.canSelectOption(feedbackMode, isSubmitted, alreadyAnswered) ->
                                             if (!isSubmitted) Toast.makeText(context, lockedHint, Toast.LENGTH_SHORT).show()
-                                        else -> userAnswers[question.id] = opt
+                                        else -> {
+                                            userAnswers[question.id] = opt
+                                            repository.saveQuizDraft(bookId, chapterIndex, selectedScope, questionCount, difficulty, userAnswers.toMap())
+                                        }
                                     }
                                 }
                             )
@@ -541,16 +560,23 @@ fun QuizTabContent(
                         // 即时反馈模式做完最后一题才出现（答完再整体提交、记一次成绩）。
                         if (QuizRules.shouldShowSubmitButton(feedbackMode, isSubmitted, userAnswers.size, result.questions.size)) {
                             item {
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
                                 Button(
                                     onClick = { submitAll() },
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(50.dp),
+                                    shape = RoundedCornerShape(12.dp),
                                     colors = if (isEink) ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
                                     else ButtonDefaults.buttonColors()
                                 ) {
-                                    Text(stringResource(R.string.ai_quiz_submit_btn))
+                                    Text(
+                                        text = stringResource(R.string.ai_quiz_submit_btn),
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(36.dp))
                             }
                         }
 
@@ -585,14 +611,18 @@ fun QuizTabContent(
                                         stopSpeaking()
                                         userAnswers.clear()
                                         isSubmitted = false
+                                        repository.clearQuizDraft(bookId, chapterIndex, selectedScope, questionCount, difficulty)
                                     },
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(12.dp),
                                     colors = if (isEink) ButtonDefaults.outlinedButtonColors(contentColor = Color.Black)
                                     else ButtonDefaults.outlinedButtonColors()
                                 ) {
                                     Text(stringResource(R.string.ai_quiz_redo_btn))
                                 }
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(36.dp))
                             }
                         }
                     }

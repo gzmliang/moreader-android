@@ -286,6 +286,62 @@ class AiCacheRepository(private val context: Context) {
         prefs.edit().putString(key, gson.toJson(quiz)).apply()
     }
 
+    // Last Active AI Tab (0: Summary, 1: Plot, 2: Quiz, 3: Reports)
+    fun getLastAiTab(): Int = prefs.getInt("last_ai_tab", 0)
+    fun setLastAiTab(tab: Int) = prefs.edit().putInt("last_ai_tab", tab).apply()
+
+    // Last Quiz Filter State (scope, count, difficulty)
+    fun getLastQuizScope(bookId: String): String = prefs.getString("last_quiz_scope_$bookId", "chapter") ?: "chapter"
+    fun setLastQuizScope(bookId: String, scope: String) = prefs.edit().putString("last_quiz_scope_$bookId", scope).apply()
+
+    fun getLastQuizCount(bookId: String): Int = prefs.getInt("last_quiz_count_$bookId", 5)
+    fun setLastQuizCount(bookId: String, count: Int) = prefs.edit().putInt("last_quiz_count_$bookId", count).apply()
+
+    fun getLastQuizDifficulty(bookId: String): String = prefs.getString("last_quiz_diff_$bookId", "Intermediate") ?: "Intermediate"
+    fun setLastQuizDifficulty(bookId: String, difficulty: String) = prefs.edit().putString("last_quiz_diff_$bookId", difficulty).apply()
+
+    // Quiz Draft (questionId -> selectedOption)
+    fun getQuizDraft(bookId: String, chapterIndex: Int, scope: String, count: Int, difficulty: String): Map<Int, String> {
+        val key = if (scope == "book") {
+            "quiz_draft_${bookId}_book_${count}_${difficulty}"
+        } else {
+            "quiz_draft_${bookId}_ch_${chapterIndex}_${count}_${difficulty}"
+        }
+        val json = prefs.getString(key, null) ?: return emptyMap()
+        return try {
+            val type = object : TypeToken<Map<String, String>>() {}.type
+            val raw: Map<String, String> = gson.fromJson(json, type) ?: emptyMap()
+            raw.mapNotNull { (k, v) ->
+                k.toIntOrNull()?.let { it to v }
+            }.toMap()
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun saveQuizDraft(bookId: String, chapterIndex: Int, scope: String, count: Int, difficulty: String, answers: Map<Int, String>) {
+        val key = if (scope == "book") {
+            "quiz_draft_${bookId}_book_${count}_${difficulty}"
+        } else {
+            "quiz_draft_${bookId}_ch_${chapterIndex}_${count}_${difficulty}"
+        }
+        if (answers.isEmpty()) {
+            prefs.edit().remove(key).apply()
+        } else {
+            val stringMap = answers.mapKeys { it.key.toString() }
+            prefs.edit().putString(key, gson.toJson(stringMap)).apply()
+        }
+    }
+
+    fun clearQuizDraft(bookId: String, chapterIndex: Int, scope: String, count: Int, difficulty: String) {
+        val key = if (scope == "book") {
+            "quiz_draft_${bookId}_book_${count}_${difficulty}"
+        } else {
+            "quiz_draft_${bookId}_ch_${chapterIndex}_${count}_${difficulty}"
+        }
+        prefs.edit().remove(key).apply()
+    }
+
     // Quiz Reports History (per bookId, max 50 items)
     fun getQuizReports(bookId: String): List<QuizReportRecord> {
         val key = "reports_$bookId"
