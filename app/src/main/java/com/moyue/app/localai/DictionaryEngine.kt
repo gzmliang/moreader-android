@@ -359,23 +359,22 @@ object DictionaryEngine {
                 append("（释义待补充）")
             }
             
-            // 组词
+            // 组词 (方案A：只展示组词词语本身，去除低质机翻释义)
             if (!wordGroupsJson.isNullOrBlank()) {
                 try {
                     val groups = org.json.JSONArray(wordGroupsJson)
-                    if (groups.length() > 0) {
+                    val words = mutableListOf<String>()
+                    for (i in 0 until groups.length()) {
+                        val pair = groups.getJSONArray(i)
+                        val word = pair.getString(0).trim()
+                        if (word.isNotEmpty() && !words.contains(word)) {
+                            words.add(word)
+                        }
+                    }
+                    if (words.isNotEmpty()) {
                         append("\n\n📝 组词：\n")
-                        for (i in 0 until groups.length()) {
-                            val pair = groups.getJSONArray(i)
-                            val word = pair.getString(0)
-                            var def = if (pair.length() > 1) pair.getString(1) else ""
-                            // Convert pinyin numbers in word group definitions too
-                            def = convertPinyinNumbers(def).trim()
-                            if (def.isNotEmpty()) {
-                                append("  • $word  $def\n")
-                            } else {
-                                append("  • $word\n")
-                            }
+                        for (w in words) {
+                            append("  • $w\n")
                         }
                     }
                 } catch (e: Exception) {
