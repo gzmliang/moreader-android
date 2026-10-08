@@ -1,5 +1,7 @@
 package com.moyue.app.tts
 
+import android.os.Handler
+import android.os.Looper
 import com.moyue.tts.LanguageVoiceDetector
 
 /**
@@ -16,6 +18,7 @@ class SegmentTtsPlayer(
     private val baseVoice: String = "zh-CN-XiaoxiaoNeural",
     private val rate: Float = 1.0f,
 ) {
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val providers = HashMap<String, EdgeTTSProvider>()
     private var seq = 0
     private var speaking = false
@@ -46,14 +49,19 @@ class SegmentTtsPlayer(
             if (mySeq != seq) return
             if (index >= list.size) {
                 speaking = false
-                onDone()
+                mainHandler.post {
+                    if (mySeq == seq) onDone()
+                }
                 return
             }
             val text = list[index]
             val provider = providerFor(LanguageVoiceDetector.detectLanguage(text))
             provider.speak(text, rate, object : TTSListener {
                 override fun onStart() {
-                    if (mySeq == seq) onStart()
+                    if (mySeq != seq) return
+                    mainHandler.post {
+                        if (mySeq == seq) onStart()
+                    }
                 }
 
                 override fun onDone() {
@@ -63,7 +71,9 @@ class SegmentTtsPlayer(
                 override fun onError(message: String) {
                     if (mySeq != seq) return
                     speaking = false
-                    onError(message)
+                    mainHandler.post {
+                        if (mySeq == seq) onError(message)
+                    }
                 }
             })
         }
