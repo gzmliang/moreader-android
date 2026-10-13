@@ -25,6 +25,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,10 +66,32 @@ fun QuizTabContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var selectedScope by remember { mutableStateOf(repository.getLastQuizScope(bookId)) } // "chapter" or "book"
+    var selectedScope by remember { mutableStateOf(repository.getLastQuizScope(bookId)) } // "chapter", "book", or "range:start:end"
     var questionCount by remember { mutableIntStateOf(repository.getLastQuizCount(bookId)) }
     var difficulty by remember { mutableStateOf(repository.getLastQuizDifficulty(bookId)) } // "Basic", "Intermediate", "Advanced"
     var feedbackMode by remember { mutableStateOf(QuizRules.normalizeMode(repository.getQuizFeedbackMode())) } // "submit"(默认) or "instant"
+
+    // 章节目录（用于自定义章节下拉选择真实章节名）
+    var tocEntries by remember { mutableStateOf<List<com.moyue.app.data.models.TocEntry>>(emptyList()) }
+    LaunchedEffect(bookId) {
+        if (bookRepository != null) {
+            val list = bookRepository.parseToc(bookId)
+            if (list.isNotEmpty()) {
+                tocEntries = list
+            } else {
+                val spine = bookRepository.parseSpine(bookId)
+                tocEntries = spine.map { com.moyue.app.data.models.TocEntry("Chapter ${it.index + 1}", it.href, 0) }
+            }
+        }
+    }
+
+    // 自定义章节范围与自定义题数弹窗状态
+    var showRangeDialog by remember { mutableStateOf(false) }
+    var showCountDialog by remember { mutableStateOf(false) }
+    var selectedStartIndex by remember { mutableIntStateOf(0) } // 0-based
+    var selectedEndIndex by remember { mutableIntStateOf(0) }   // 0-based
+    var customCountText by remember { mutableStateOf("") }
+    val invalidRangeMsg = stringResource(R.string.ai_quiz_range_invalid)
 
     var quizResult by remember {
         mutableStateOf(repository.getQuiz(bookId, chapterIndex, selectedScope, questionCount, difficulty))
@@ -142,10 +167,20 @@ fun QuizTabContent(
         repository.clearQuizDraft(bookId, chapterIndex, selectedScope, questionCount, difficulty)
 
         // Save report to history
+        val reportChapterTitle = when {
+            selectedScope == "book" -> "Entire Book"
+            selectedScope.startsWith("range:") -> {
+                val parts = selectedScope.split(":")
+                val s = parts.getOrNull(1)?.toIntOrNull() ?: 1
+                val e = parts.getOrNull(2)?.toIntOrNull() ?: s
+                "Chapter $s - $e"
+            }
+            else -> chapterTitle
+        }
         val report = QuizReportRecord(
             bookId = bookId,
             bookTitle = bookTitle,
-            chapterTitle = if (selectedScope == "book") "Entire Book" else chapterTitle,
+            chapterTitle = reportChapterTitle,
             scope = selectedScope,
             difficulty = difficulty,
             score = correctCount,
@@ -164,12 +199,37 @@ fun QuizTabContent(
         isSubmitted = false
         repository.clearQuizDraft(bookId, chapterIndex, selectedScope, questionCount, difficulty)
         scope.launch {
-            val textToAnalyze = if (selectedScope == "book") {
-                BookTextExtractor.extractBookOverview(bookRepository, bookId, bookTitle, chapterText)
-            } else {
-                chapterText
+            val textToAnalyze = when {
+                selectedScope == "book" -> {
+                    BookTextExtractor.extractBookOverview(bookRepository, bookId, bookTitle, chapterText)
+                }
+                selectedScope.startsWith("range:") -> {
+                    val parts = selectedScope.split(":")
+                    val s = parts.getOrNull(1)?.toIntOrNull() ?: 1
+                    val e = parts.getOrNull(2)?.toIntOrNull() ?: s
+                    BookTextExtractor.extractChapterRangeContent(
+                        bookRepository,
+                        bookId,
+                        bookTitle,
+                        s,
+                        e,
+                        chapterText
+                    )
+                }
+                else -> {
+                    chapterText
+                }
             }
-            val promptTitle = if (selectedScope == "book") bookTitle else "$bookTitle - $chapterTitle"
+            val promptTitle = when {
+                selectedScope == "book" -> bookTitle
+                selectedScope.startsWith("range:") -> {
+                    val parts = selectedScope.split(":")
+                    val s = parts.getOrNull(1) ?: "1"
+                    val e = parts.getOrNull(2) ?: s
+                    "$bookTitle (Ch. $s - $e)"
+                }
+                else -> "$bookTitle - $chapterTitle"
+            }
             val (sys, usr) = AiPromptBuilder.buildQuizPrompt(
                 config = config,
                 title = promptTitle,
@@ -194,6 +254,22 @@ fun QuizTabContent(
     }
 
     // Label helpers
+    val scopeLabel = when {
+        selectedScope == "book" -> stringResource(R.string.ai_scope_book_short)
+        selectedScope.startsWith("range:") -> {
+            val parts = selectedScope.split(":")
+            val s = parts.getOrNull(1)?.toIntOrNull() ?: 1
+            val e = parts.getOrNull(2)?.toIntOrNull() ?: s
+            val sTitle = tocEntries.getOrNull(s - 1)?.label?.trim()
+            val eTitle = tocEntries.getOrNull(e - 1)?.label?.trim()
+            if (sTitle != null && eTitle != null) {
+                if (s == e) sTitle.take(8) else "${sTitle.take(5)}~${eTitle.take(5)}"
+            } else {
+                stringResource(R.string.ai_scope_custom_format, s, e)
+            }
+        }
+        else -> stringResource(R.string.ai_scope_chapter_short)
+    }
     val diffShortLabel = when (difficulty) {
         "Basic" -> stringResource(R.string.ai_quiz_diff_basic_short)
         "Advanced" -> stringResource(R.string.ai_quiz_diff_advanced_short)
@@ -237,7 +313,7 @@ fun QuizTabContent(
                             modifier = Modifier.padding(horizontal = 10.dp)
                         ) {
                             Text(
-                                text = if (selectedScope == "book") stringResource(R.string.ai_scope_book_short) else stringResource(R.string.ai_scope_chapter_short),
+                                text = scopeLabel,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
@@ -271,6 +347,25 @@ fun QuizTabContent(
                                 selectedScope = "book"
                                 repository.setLastQuizScope(bookId, "book")
                                 scopeMenuExpanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.ai_scope_custom), fontSize = 13.sp) },
+                            onClick = {
+                                scopeMenuExpanded = false
+                                val total = tocEntries.size.coerceAtLeast(1)
+                                if (selectedScope.startsWith("range:")) {
+                                    val parts = selectedScope.split(":")
+                                    val s = (parts.getOrNull(1)?.toIntOrNull() ?: 1).coerceIn(1, total)
+                                    val e = (parts.getOrNull(2)?.toIntOrNull() ?: s).coerceIn(s, total)
+                                    selectedStartIndex = s - 1
+                                    selectedEndIndex = e - 1
+                                } else {
+                                    val cur = chapterIndex.coerceIn(0, total - 1)
+                                    selectedStartIndex = cur
+                                    selectedEndIndex = (cur + 4).coerceAtMost(total - 1)
+                                }
+                                showRangeDialog = true
                             }
                         )
                     }
@@ -312,7 +407,7 @@ fun QuizTabContent(
                         expanded = countMenuExpanded,
                         onDismissRequest = { countMenuExpanded = false }
                     ) {
-                        listOf(3, 5, 10).forEach { cnt ->
+                        listOf(3, 5, 10, 20, 30).forEach { cnt ->
                             DropdownMenuItem(
                                 text = {
                                     Text(
@@ -329,6 +424,20 @@ fun QuizTabContent(
                                 }
                             )
                         }
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = stringResource(R.string.ai_quiz_count_custom),
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            },
+                            onClick = {
+                                countMenuExpanded = false
+                                customCountText = questionCount.toString()
+                                showCountDialog = true
+                            }
+                        )
                     }
                 }
 
@@ -695,7 +804,7 @@ fun QuizTabContent(
                                 Spacer(modifier = Modifier.height(20.dp))
 
                                 // Configuration summary badges (2x2 layout to prevent horizontal compression)
-                                val scopeText = if (selectedScope == "book") stringResource(R.string.ai_scope_book_short) else stringResource(R.string.ai_scope_chapter_short)
+                                val scopeText = scopeLabel
                                 val countText = stringResource(R.string.ai_quiz_count_format, questionCount)
                                 val row1 = listOf(scopeText, countText)
                                 val row2 = listOf(diffShortLabel, modeShortLabel)
@@ -757,6 +866,281 @@ fun QuizTabContent(
                 }
             }
         }
+    }
+
+    // 自定义章节范围弹窗（方案 A：真实章节目录下拉选择器）
+    if (showRangeDialog) {
+        val total = tocEntries.size.coerceAtLeast(1)
+        var startMenuOpen by remember { mutableStateOf(false) }
+        var endMenuOpen by remember { mutableStateOf(false) }
+
+        val startChapterTitle = tocEntries.getOrNull(selectedStartIndex)?.label?.trim()
+            ?: "Chapter ${selectedStartIndex + 1}"
+        val endChapterTitle = tocEntries.getOrNull(selectedEndIndex)?.label?.trim()
+            ?: "Chapter ${selectedEndIndex + 1}"
+        val selectedCount = (selectedEndIndex - selectedStartIndex + 1).coerceAtLeast(1)
+
+        AlertDialog(
+            onDismissRequest = { showRangeDialog = false },
+            title = {
+                Text(
+                    text = stringResource(R.string.ai_quiz_range_dialog_title),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.ai_quiz_range_select_hint),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // 起始章节选择
+                    Column {
+                        Text(
+                            text = stringResource(R.string.ai_quiz_range_start_label),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .clickable { startMenuOpen = true }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "${selectedStartIndex + 1}. $startChapterTitle",
+                                        fontSize = 13.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = startMenuOpen,
+                                onDismissRequest = { startMenuOpen = false },
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .heightIn(max = 280.dp)
+                            ) {
+                                tocEntries.forEachIndexed { idx, entry ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = "${idx + 1}. ${entry.label.trim()}",
+                                                fontSize = 13.sp,
+                                                fontWeight = if (idx == selectedStartIndex) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (idx == selectedStartIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        },
+                                        onClick = {
+                                            selectedStartIndex = idx
+                                            if (selectedEndIndex < idx) {
+                                                selectedEndIndex = idx
+                                            }
+                                            startMenuOpen = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 结束章节选择
+                    Column {
+                        Text(
+                            text = stringResource(R.string.ai_quiz_range_end_label),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .clickable { endMenuOpen = true }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "${selectedEndIndex + 1}. $endChapterTitle",
+                                        fontSize = 13.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = endMenuOpen,
+                                onDismissRequest = { endMenuOpen = false },
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .heightIn(max = 280.dp)
+                            ) {
+                                tocEntries.forEachIndexed { idx, entry ->
+                                    val isAvailable = idx >= selectedStartIndex
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = "${idx + 1}. ${entry.label.trim()}",
+                                                fontSize = 13.sp,
+                                                fontWeight = if (idx == selectedEndIndex) FontWeight.Bold else FontWeight.Normal,
+                                                color = when {
+                                                    idx == selectedEndIndex -> MaterialTheme.colorScheme.primary
+                                                    !isAvailable -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                    else -> MaterialTheme.colorScheme.onSurface
+                                                }
+                                            )
+                                        },
+                                        onClick = {
+                                            selectedEndIndex = idx
+                                            if (selectedStartIndex > idx) {
+                                                selectedStartIndex = idx
+                                            }
+                                            endMenuOpen = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 范围概要指示
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = stringResource(
+                                R.string.ai_quiz_range_scope_summary,
+                                selectedCount,
+                                startChapterTitle.take(10),
+                                endChapterTitle.take(10)
+                            ),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (selectedStartIndex <= selectedEndIndex) {
+                            val s = selectedStartIndex + 1
+                            val e = selectedEndIndex + 1
+                            val newScope = "range:$s:$e"
+                            selectedScope = newScope
+                            repository.setLastQuizScope(bookId, newScope)
+                            showRangeDialog = false
+                        } else {
+                            Toast.makeText(context, invalidRangeMsg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRangeDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    // 自定义出题数量弹窗
+    if (showCountDialog) {
+        AlertDialog(
+            onDismissRequest = { showCountDialog = false },
+            title = {
+                Text(
+                    text = stringResource(R.string.ai_quiz_count_dialog_title),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    OutlinedTextField(
+                        value = customCountText,
+                        onValueChange = { customCountText = it.filter { ch -> ch.isDigit() } },
+                        label = { Text(stringResource(R.string.ai_quiz_count_dialog_hint)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cnt = customCountText.toIntOrNull()
+                        if (cnt != null && cnt in 1..50) {
+                            questionCount = cnt
+                            repository.setLastQuizCount(bookId, cnt)
+                            showCountDialog = false
+                        } else {
+                            Toast.makeText(context, context.getString(R.string.ai_quiz_count_dialog_hint), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCountDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
     }
 }
 

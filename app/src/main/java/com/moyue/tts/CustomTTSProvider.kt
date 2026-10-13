@@ -145,6 +145,30 @@ class CustomTTSProvider(
         }
     }
 
+    override fun pause(): Boolean {
+        val player = audioPlayer ?: return false
+        return try {
+            if (player.isPlaying) {
+                player.pause()
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    override fun resume(): Boolean {
+        val player = audioPlayer ?: return false
+        return try {
+            player.start()
+            player.isPlaying
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     /** 只停播放器 + 清临时文件（不动令牌，供 playRaw 复用） */
     private fun stopPlaybackOnly() {
         audioPlayer?.apply {

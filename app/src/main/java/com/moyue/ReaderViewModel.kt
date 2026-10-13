@@ -239,6 +239,7 @@ class ReaderViewModel(
     private var pendingBoundaries: List<com.moyue.app.tts.WordBoundary>? = null  // onWordBoundaries 在 onStart 之前
     private val boundariesCache = mutableMapOf<Int, List<com.moyue.app.tts.WordBoundary>>()  // 预加载词边界
     private var estJob: kotlinx.coroutines.Job? = null  // 句子跟踪协程
+    private var currentWordBoundaries: List<com.moyue.app.tts.WordBoundary>? = null // 当前段落的活跃词边界
     private val SENTENCE_REGEX = Regex("(?<=[.!?。！？；;])\\s*['\"\\u00BB\\u00AB\\u201C\\u201D\\u2018\\u2019\\u300C\\u300D\\u300E\\u300F]*")
 
     // ======== 长段落子段拆分 ========
@@ -1248,6 +1249,7 @@ class ReaderViewModel(
                 }
                 // 3. 词边界驱动 (Edge TTS — 最精确)
                 val wb = pendingBoundaries
+                currentWordBoundaries = wb
                 if (wb != null && wb.isNotEmpty() && sentenceEnds.size > 1) {
                     log("[SENT] word-boundary tracking → ${wb.size} words")
                     startWordBoundaryTracking(wb, text, idx)
@@ -1408,6 +1410,7 @@ class ReaderViewModel(
                 if (wb != null && wb.isNotEmpty() && sentenceEnds.size > 1) {
                     // 子段词边界 -> 映射到原文位置
                     val mappedWb = wb.map { com.moyue.app.tts.WordBoundary(it.offsetMs, it.text, it.charStart + charOffset, it.charEnd + charOffset) }
+                    currentWordBoundaries = mappedWb
                     // 立即设高亮到当前子段的起始句子（不等 delay，消除切换间隙断档）
                     var firstSentIdx = 0
                     while (firstSentIdx < sentenceEnds.size - 1 && sentenceEnds[firstSentIdx] <= charOffset) {
@@ -1935,7 +1938,24 @@ class ReaderViewModel(
         }
     }
 
-    fun ttsPause() { log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_pause, _uiState.value.ttsPlayIdx)); playChainActive = false; currentTTSProvider?.stop(); _uiState.update { it.copy(isTtsPaused = true, isTtsPlaying = false, isTtsGenerating = false) } }
+    fun ttsPause() {
+        val s = _uiState.value
+        val playIdx = s.ttsPlayIdx
+        log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_pause, playIdx))
+        
+        playChainActive = false
+        estJob?.cancel()
+        
+        // 优先尝试底层音频原位暂停（保留播放器内部进度，不销毁 MediaPlayer）
+        val providerPaused = currentTTSProvider?.pause() ?: false
+        if (!providerPaused) {
+            currentTTSProvider?.stop()
+        }
+        
+        // 保持当前段落与句子高亮状态不变，只把播放状态标记为暂停
+        _uiState.update { it.copy(isTtsPaused = true, isTtsPlaying = false, isTtsGenerating = false) }
+    }
+
     fun ttsResume() {
         log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_resume))
         val s = _uiState.value
@@ -1944,12 +1964,30 @@ class ReaderViewModel(
             log(getApplication<android.app.Application>().getString(com.moyue.app.R.string.tts_log_invalid_restore, playIdx))
             return
         }
-        // Lightweight reset: just stop current speech, don't shutdown the engine.
-        // fullDestroy() + re-init causes Google TTS to accept speak() but never
-        // fire onStart on ColorOS, breaking the chain.
-        currentTTSProvider?.stop()
+
         playChainActive = true
         _uiState.update { it.copy(isTtsPaused = false, isTtsPlaying = true, ttsCurrentIdx = playIdx) }
+
+        // 1. 优先从底层 MediaPlayer 原位断点直接继续播放
+        val providerResumed = currentTTSProvider?.resume() ?: false
+        if (providerResumed) {
+            log("[TTS] ▶️ 底层音频原位续播成功 (P${playIdx + 1})")
+            val rawFullText = s.ttsParagraphs.getOrNull(playIdx) ?: ""
+            if (rawFullText.isNotBlank()) {
+                val currentSent = _uiState.value.ttsSentenceIdx.coerceAtLeast(0)
+                val wb = currentWordBoundaries
+                if (wb != null && wb.isNotEmpty() && sentenceEnds.size > 1) {
+                    resumeWordBoundaryTracking(wb, rawFullText, playIdx, currentSent)
+                } else if (sentenceEnds.size > 1) {
+                    resumeEstimation(rawFullText, playIdx, currentSent)
+                }
+            }
+            return
+        }
+
+        // 2. 兜底回退：如果底层播放器已被释放，执行轻量重置播放当前段
+        log("[TTS] 🔄 底层播放器未就绪，重放当前段 (P${playIdx + 1})")
+        currentTTSProvider?.stop()
         playOne(playIdx)
     }
     fun toggleTtsLock() {
@@ -1964,6 +2002,7 @@ class ReaderViewModel(
         audioCache.clear()
         boundariesCache.clear()
         subSegCache.clear()
+        currentWordBoundaries = null
         currentSubSegParaIdx = -1
         currentSubSegs = emptyList()
         currentSubSegOffsets = emptyList()
@@ -1971,6 +2010,43 @@ class ReaderViewModel(
     }
 
     // ======== 句子追踪 ========
+    private fun resumeWordBoundaryTracking(boundaries: List<com.moyue.app.tts.WordBoundary>, text: String, paraIdx: Int, currentSent: Int) {
+        val currentMs = currentTTSProvider?.currentPositionMs ?: 0L
+        estJob?.cancel()
+        estJob = viewModelScope.launch {
+            var prevMs = currentMs
+            val nextSent = maxOf(1, currentSent + 1)
+            for (sentIdx in nextSent until sentenceEnds.size) {
+                val sentStart = sentenceEnds[sentIdx - 1]
+                val firstWord = boundaries.find { it.charStart >= sentStart } ?: continue
+                val targetMs = firstWord.offsetMs.toLong()
+                if (targetMs <= prevMs) continue
+                val waitMs = (targetMs - prevMs).coerceAtLeast(50)
+                delay(waitMs)
+                if (!playChainActive) break
+                _uiState.update { it.copy(ttsSentenceIdx = sentIdx) }
+                prevMs = targetMs
+            }
+        }
+    }
+
+    private fun resumeEstimation(text: String, paraIdx: Int, currentSent: Int) {
+        val spd = _uiState.value.ttsSpeed
+        val hasChinese = text.any { it in '\u4e00'..'\u9fff' }
+        val charsPerSec = if (hasChinese) (6f * spd).coerceAtLeast(4f) else (15f * spd).coerceAtLeast(8f)
+        estJob?.cancel()
+        estJob = viewModelScope.launch {
+            val nextSent = maxOf(1, currentSent + 1)
+            for (sentIdx in nextSent until sentenceEnds.size) {
+                val sentChars = sentenceEnds[sentIdx] - sentenceEnds[sentIdx - 1]
+                val waitMs = (sentChars.toFloat() / charsPerSec * 1000f).toLong().coerceAtLeast(80L)
+                delay(waitMs)
+                if (!playChainActive) break
+                _uiState.update { it.copy(ttsSentenceIdx = sentIdx) }
+            }
+        }
+    }
+
     /** Edge TTS 词边界驱动 — 每个句子定位第一个词的时间偏移精确调度 */
     private fun startWordBoundaryTracking(boundaries: List<com.moyue.app.tts.WordBoundary>, text: String, paraIdx: Int) {
         estJob?.cancel()

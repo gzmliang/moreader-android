@@ -29,6 +29,8 @@ interface TTSListener {
 interface TTSProvider {
     fun speak(text: String, rate: Float, listener: TTSListener)
     fun playRaw(audioData: ByteArray, listener: TTSListener) {}  // 播放预加载缓存
+    fun pause(): Boolean = false                                 // 原位暂停播放器（保留音频断点）
+    fun resume(): Boolean = false                                // 从原位断点继续播放
     fun stop()
     fun destroy()
     val isSpeaking: Boolean

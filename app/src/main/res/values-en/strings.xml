@@ -532,8 +532,10 @@ Just change the Base URL and API Key</string>
     <!-- AI Common & Status -->
     <string name="ai_scope_chapter">Current Chapter</string>
     <string name="ai_scope_book">Entire Book</string>
+    <string name="ai_scope_custom">Custom Chapters…</string>
     <string name="ai_scope_chapter_short">Chapter</string>
     <string name="ai_scope_book_short">Book</string>
+    <string name="ai_scope_custom_format">Ch. %1$d-%2$d</string>
     <string name="ai_generate_btn">✨ Generate Summary</string>
     <string name="ai_regenerate_btn">🔄 Regenerate</string>
     <string name="ai_generating">AI is analyzing and condensing…</string>
@@ -597,6 +599,15 @@ Just change the Base URL and API Key</string>
     <!-- Quiz Tab -->
     <string name="ai_quiz_count_label">Questions</string>
     <string name="ai_quiz_count_format">%1$d Questions</string>
+    <string name="ai_quiz_count_custom">Custom…</string>
+    <string name="ai_quiz_count_dialog_title">Custom Question Count</string>
+    <string name="ai_quiz_count_dialog_hint">Enter question count (1 - 50)</string>
+    <string name="ai_quiz_range_dialog_title">Custom Chapter Range</string>
+    <string name="ai_quiz_range_start_label">Start Chapter</string>
+    <string name="ai_quiz_range_end_label">End Chapter</string>
+    <string name="ai_quiz_range_invalid">Start chapter must be before or equal to end chapter</string>
+    <string name="ai_quiz_range_select_hint">Select chapters from the table of contents</string>
+    <string name="ai_quiz_range_scope_summary">%1$d chapters selected (%2$s ~ %3$s)</string>
     <string name="ai_quiz_difficulty_label">Difficulty</string>
     <string name="ai_quiz_diff_basic">Basic</string>
     <string name="ai_quiz_diff_intermediate">Intermediate</string>

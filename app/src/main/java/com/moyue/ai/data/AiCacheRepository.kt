@@ -246,14 +246,18 @@ class AiCacheRepository(private val context: Context) {
     }
 
     // Quiz Cache
-    fun getQuiz(bookId: String, chapterIndex: Int, scope: String, count: Int, difficulty: String): AiQuizResult? {
-        val primaryKey = if (scope == "book") {
-            "quiz_${bookId}_book_${count}_${difficulty}"
-        } else {
-            "quiz_${bookId}_ch_${chapterIndex}_${count}_${difficulty}"
+    private fun quizCacheKey(prefix: String, bookId: String, chapterIndex: Int, scope: String, count: Int, difficulty: String): String {
+        return when {
+            scope == "book" -> "${prefix}_${bookId}_book_${count}_${difficulty}"
+            scope.startsWith("range:") -> "${prefix}_${bookId}_${scope.replace(':', '_')}_${count}_${difficulty}"
+            else -> "${prefix}_${bookId}_ch_${chapterIndex}_${count}_${difficulty}"
         }
+    }
+
+    fun getQuiz(bookId: String, chapterIndex: Int, scope: String, count: Int, difficulty: String): AiQuizResult? {
+        val primaryKey = quizCacheKey("quiz", bookId, chapterIndex, scope, count, difficulty)
         var json = prefs.getString(primaryKey, null)
-        if (json == null && scope != "book") {
+        if (json == null && scope != "book" && !scope.startsWith("range:")) {
             val legacyKey = "quiz_${bookId}_${chapterIndex}_${scope}_${count}_${difficulty}"
             json = prefs.getString(legacyKey, null)
         }
@@ -278,11 +282,7 @@ class AiCacheRepository(private val context: Context) {
     }
 
     fun saveQuiz(quiz: AiQuizResult) {
-        val key = if (quiz.scope == "book") {
-            "quiz_${quiz.bookId}_book_${quiz.count}_${quiz.difficulty}"
-        } else {
-            "quiz_${quiz.bookId}_ch_${quiz.chapterIndex}_${quiz.count}_${quiz.difficulty}"
-        }
+        val key = quizCacheKey("quiz", quiz.bookId, quiz.chapterIndex, quiz.scope, quiz.count, quiz.difficulty)
         prefs.edit().putString(key, gson.toJson(quiz)).apply()
     }
 
@@ -302,11 +302,7 @@ class AiCacheRepository(private val context: Context) {
 
     // Quiz Draft (questionId -> selectedOption)
     fun getQuizDraft(bookId: String, chapterIndex: Int, scope: String, count: Int, difficulty: String): Map<Int, String> {
-        val key = if (scope == "book") {
-            "quiz_draft_${bookId}_book_${count}_${difficulty}"
-        } else {
-            "quiz_draft_${bookId}_ch_${chapterIndex}_${count}_${difficulty}"
-        }
+        val key = quizCacheKey("quiz_draft", bookId, chapterIndex, scope, count, difficulty)
         val json = prefs.getString(key, null) ?: return emptyMap()
         return try {
             val type = object : TypeToken<Map<String, String>>() {}.type
@@ -320,11 +316,7 @@ class AiCacheRepository(private val context: Context) {
     }
 
     fun saveQuizDraft(bookId: String, chapterIndex: Int, scope: String, count: Int, difficulty: String, answers: Map<Int, String>) {
-        val key = if (scope == "book") {
-            "quiz_draft_${bookId}_book_${count}_${difficulty}"
-        } else {
-            "quiz_draft_${bookId}_ch_${chapterIndex}_${count}_${difficulty}"
-        }
+        val key = quizCacheKey("quiz_draft", bookId, chapterIndex, scope, count, difficulty)
         if (answers.isEmpty()) {
             prefs.edit().remove(key).apply()
         } else {
@@ -334,11 +326,7 @@ class AiCacheRepository(private val context: Context) {
     }
 
     fun clearQuizDraft(bookId: String, chapterIndex: Int, scope: String, count: Int, difficulty: String) {
-        val key = if (scope == "book") {
-            "quiz_draft_${bookId}_book_${count}_${difficulty}"
-        } else {
-            "quiz_draft_${bookId}_ch_${chapterIndex}_${count}_${difficulty}"
-        }
+        val key = quizCacheKey("quiz_draft", bookId, chapterIndex, scope, count, difficulty)
         prefs.edit().remove(key).apply()
     }
 

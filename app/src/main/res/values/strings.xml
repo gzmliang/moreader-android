@@ -655,8 +655,10 @@ AI Voice（云端 TTS）：
     <!-- AI Common & Status -->
     <string name="ai_scope_chapter">当前章节</string>
     <string name="ai_scope_book">全书宏观</string>
+    <string name="ai_scope_custom">自定义章节…</string>
     <string name="ai_scope_chapter_short">当前章</string>
     <string name="ai_scope_book_short">全书</string>
+    <string name="ai_scope_custom_format">第%1$d-%2$d章</string>
     <string name="ai_generate_btn">✨ 开始提炼</string>
     <string name="ai_regenerate_btn">🔄 重新生成</string>
     <string name="ai_generating">AI 正在深度思考与提炼中…</string>
@@ -720,6 +722,15 @@ AI Voice（云端 TTS）：
     <!-- Quiz Tab -->
     <string name="ai_quiz_count_label">题数</string>
     <string name="ai_quiz_count_format">%1$d 题</string>
+    <string name="ai_quiz_count_custom">自定义…</string>
+    <string name="ai_quiz_count_dialog_title">自定义题目数量</string>
+    <string name="ai_quiz_count_dialog_hint">请输入出题数量 (1 - 50)</string>
+    <string name="ai_quiz_range_dialog_title">自定义章节范围</string>
+    <string name="ai_quiz_range_start_label">起始章节</string>
+    <string name="ai_quiz_range_end_label">结束章节</string>
+    <string name="ai_quiz_range_invalid">起始章节必须小于或等于结束章节</string>
+    <string name="ai_quiz_range_select_hint">请从书本目录中选择起止章节</string>
+    <string name="ai_quiz_range_scope_summary">已选 %1$d 章 (%2$s ~ %3$s)</string>
     <string name="ai_quiz_difficulty_label">难度</string>
     <string name="ai_quiz_diff_basic">基础理解</string>
     <string name="ai_quiz_diff_intermediate">深度情节</string>

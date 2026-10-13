@@ -237,7 +237,9 @@ fun EpubWebView(
                     img{max-width:100%!important;height:auto!important}
                     a{color:#06C!important}
                     .tts-hl{background-color:rgba(59,130,246,0.2)!important;border-left:3px solid #3b82f6!important}
-                    .tts-sentence-hl{background-color:rgba(34,197,94,0.25)!important}
+                    .tts-hl ruby, .tts-hl rt, .tts-hl rb, .tts-hl rp{background-color:transparent!important}
+                    .tts-sentence-hl{background-color:rgba(34,197,94,0.30)!important;border-radius:2px!important;padding:1px 2px!important;-webkit-box-decoration-break:clone!important;box-decoration-break:clone!important}
+                    .tts-sentence-hl ruby, .tts-sentence-hl rt, .tts-sentence-hl rb, .tts-sentence-hl rp{background-color:transparent!important}
                     .user-highlight{background-color:rgba(255,255,0,0.35)!important;border-radius:2px!important}
                     ::-webkit-scrollbar{width:0!important;height:0!important}
                     </style>"""
@@ -279,7 +281,9 @@ fun EpubWebView(
                 'img{max-width:100%!important;height:auto!important}'+
                 'a{color:#06C!important}'+
                 '.tts-hl{background-color:rgba(59,130,246,0.2)!important;border-left:3px solid #3b82f6!important}'+
-                '.tts-sentence-hl{background-color:rgba(34,197,94,0.25)!important}'+
+                '.tts-hl ruby, .tts-hl rt, .tts-hl rb, .tts-hl rp{background-color:transparent!important}'+
+                '.tts-sentence-hl{background-color:rgba(34,197,94,0.30)!important;border-radius:2px!important;padding:1px 2px!important;-webkit-box-decoration-break:clone!important;box-decoration-break:clone!important}'+
+                '.tts-sentence-hl ruby, .tts-sentence-hl rt, .tts-sentence-hl rb, .tts-sentence-hl rp{background-color:transparent!important}'+
                 '.user-highlight{background-color:rgba(255,255,0,0.35)!important;border-radius:2px!important}'+
                 '::-webkit-scrollbar{width:0!important;height:0!important}';
             })()"""
@@ -508,8 +512,18 @@ fun EpubWebView(
                                         var mnStart=useMap?useMap[sent.start]:null,mnEnd=useMap?useMap[sent.end-1]:null;
                                         if(mnStart&&mnEnd){
                                             try{
-                                                range.setStart(mnStart.node,mnStart.off);
-                                                range.setEnd(mnEnd.node,mnEnd.off+1);
+                                                var sRuby=mnStart.node.parentElement&&mnStart.node.parentElement.closest?mnStart.node.parentElement.closest('ruby'):null;
+                                                var eRuby=mnEnd.node.parentElement&&mnEnd.node.parentElement.closest?mnEnd.node.parentElement.closest('ruby'):null;
+                                                if(sRuby&&hl.contains(sRuby)&&mnStart.off===0){
+                                                    range.setStartBefore(sRuby);
+                                                }else{
+                                                    range.setStart(mnStart.node,mnStart.off);
+                                                }
+                                                if(eRuby&&hl.contains(eRuby)){
+                                                    range.setEndAfter(eRuby);
+                                                }else{
+                                                    range.setEnd(mnEnd.node,mnEnd.off+1);
+                                                }
                                                 // 说明：清洗只删除字符（装饰符/脚注/拼音/多余空白），不改变字符顺序，
                                                 // 因此地图换算出的范围天然正确；中间夹带的已删除字符（如 • 或脚注 *）
                                                 // 属于正常现象，不应据此回退。
