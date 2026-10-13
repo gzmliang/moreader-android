@@ -7,22 +7,16 @@
     <group
         android:translateX="22"
         android:translateY="22">
-        <!-- Moon (crescent) - 月牙形状 -->
+        <!-- Book - 打开的书本 (白色) -->
         <path
-            android:fillColor="#FFF8DC"
-            android:pathData="M32,8
-                A24,24 0 1,1 32,56
-                A20,20 0 1,0 32,8Z" />
-        <!-- Book - 打开的书本 -->
-        <path
-            android:fillColor="#FFF8DC"
+            android:fillColor="#FFFFFF"
             android:pathData="M8,62
                 L8,46
                 L30,40
                 L30,56
                 L8,62Z" />
         <path
-            android:fillColor="#FFF8DC"
+            android:fillColor="#FFFFFF"
             android:pathData="M56,62
                 L56,46
                 L34,40
@@ -30,7 +24,7 @@
                 L56,62Z" />
         <!-- Book spine -->
         <path
-            android:fillColor="#F5F5DC"
+            android:fillColor="#E0E0E0"
             android:pathData="M32,40
                 L32,56
                 L34,56

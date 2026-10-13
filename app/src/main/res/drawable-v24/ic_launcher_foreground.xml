@@ -4,12 +4,30 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Moon Body -->
-    <path
-        android:fillColor="#FFD700"
-        android:pathData="M54 14 A40 40 0 1 1 14 54 A40 40 0 1 1 54 14 Z" />
-    <!-- Crescent cutout (matches background) -->
-    <path
-        android:fillColor="#0B0C10"
-        android:pathData="M68 22 A30 30 0 1 1 38 52 A30 30 0 1 1 68 22 Z" />
+    <group
+        android:translateX="22"
+        android:translateY="22">
+        <!-- Book - 打开的书本 (白色) -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M8,62
+                L8,46
+                L30,40
+                L30,56
+                L8,62Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M56,62
+                L56,46
+                L34,40
+                L34,56
+                L56,62Z" />
+        <!-- Book spine -->
+        <path
+            android:fillColor="#E0E0E0"
+            android:pathData="M32,40
+                L32,56
+                L34,56
+                L34,40Z" />
+    </group>
 </vector>
