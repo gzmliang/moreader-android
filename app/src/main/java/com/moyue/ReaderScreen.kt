@@ -494,6 +494,7 @@ fun ReaderScreen(
                     onPrevChapter = { viewModel.prevChapter() },
                     onNextChapter = { viewModel.nextChapter() },
                     isEinkMode = state.isEinkMode,
+                    pageAnimationMode = state.pageAnimationMode,
                     clearSelectionTrigger = state.clearSelectionTrigger,
                     pageScrollTrigger = state.pageScrollTrigger,
                     onWebViewCreated = { webViewInstance = it },
@@ -950,12 +951,14 @@ fun ReaderScreen(
                     fontFamily = state.fontFamily,
                     fontWeight = state.fontWeight,
                     layoutSpreadMode = state.layoutSpreadMode,
+                    pageAnimationMode = state.pageAnimationMode,
                     isLargeScreen = isLargeScreen,
                     isEinkMode = state.isEinkMode,
                     onFontSizeChange = { viewModel.setFontSize(it) },
                     onFontFamilyChange = { viewModel.setFontFamily(it) },
                     onFontWeightChange = { viewModel.setFontWeight(it) },
                     onLayoutSpreadModeChange = { viewModel.setLayoutSpreadMode(it) },
+                    onPageAnimationModeChange = { viewModel.setPageAnimationMode(it) },
                     onClose = { viewModel.toggleTypographyPanel() }
                 )
             }

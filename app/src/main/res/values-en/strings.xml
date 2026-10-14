@@ -662,6 +662,9 @@ Just change the Base URL and API Key</string>
     <string name="reader_next_page">Next Page</string>
     <string name="reader_prev_chapter">Previous Chapter</string>
     <string name="reader_next_chapter">Next Chapter</string>
+    <string name="reader_page_anim_title">Page Animation</string>
+    <string name="reader_page_anim_smooth">Smooth</string>
+    <string name="reader_page_anim_instant">Instant</string>
 
     <!-- Reports Tab -->
     <string name="ai_reports_title">History and Reports</string>

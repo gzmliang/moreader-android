@@ -111,6 +111,7 @@ data class ReaderUiState(
     val showTtsSettingsPanel: Boolean = false,
     val showTypographyPanel: Boolean = false,
     val layoutSpreadMode: String = "auto", // "auto", "single", "dual"
+    val pageAnimationMode: String = "smooth", // "smooth", "instant"
     val showTranslationPanel: Boolean = false,
     val showSelectionMenu: Boolean = false,
     // Bookmark
@@ -223,6 +224,7 @@ class ReaderViewModel(
             fontFamily = prefs.getString("reader_font_family", "sans-serif") ?: "sans-serif",
             fontWeight = prefs.getString("reader_font_weight", "400") ?: "400",
             layoutSpreadMode = prefs.getString("reader_layout_spread", "auto") ?: "auto",
+            pageAnimationMode = prefs.getString("reader_page_anim", "smooth") ?: "smooth",
             isEinkMode = prefs.getBoolean("eink_mode", false) ||
                 application.getSharedPreferences("moreader_ai_prefs", Context.MODE_PRIVATE).getBoolean("ai_eink_mode", false),
         )
@@ -591,6 +593,10 @@ class ReaderViewModel(
     fun setLayoutSpreadMode(mode: String) {
         prefs.edit().putString("reader_layout_spread", mode).apply()
         _uiState.update { it.copy(layoutSpreadMode = mode) }
+    }
+    fun setPageAnimationMode(mode: String) {
+        prefs.edit().putString("reader_page_anim", mode).apply()
+        _uiState.update { it.copy(pageAnimationMode = mode) }
     }
     fun toggleTypographyPanel() {
         _uiState.update { it.copy(showTypographyPanel = !it.showTypographyPanel) }

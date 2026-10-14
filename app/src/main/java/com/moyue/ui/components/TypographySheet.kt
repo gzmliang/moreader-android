@@ -32,12 +32,14 @@ fun TypographySheet(
     fontFamily: String,
     fontWeight: String,
     layoutSpreadMode: String,
+    pageAnimationMode: String,
     isLargeScreen: Boolean,
     isEinkMode: Boolean,
     onFontSizeChange: (Int) -> Unit,
     onFontFamilyChange: (String) -> Unit,
     onFontWeightChange: (String) -> Unit,
     onLayoutSpreadModeChange: (String) -> Unit,
+    onPageAnimationModeChange: (String) -> Unit,
     onClose: () -> Unit
 ) {
     ModalBottomSheet(
@@ -280,6 +282,41 @@ fun TypographySheet(
                         label = {
                             Text(
                                 stringResource(mLabelId),
+                                fontSize = 12.sp,
+                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // ── 5. Page Animation Mode (Smooth vs Instant) ──
+            Text(
+                text = stringResource(R.string.reader_page_anim_title),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val animModes = listOf(
+                    "smooth" to R.string.reader_page_anim_smooth,
+                    "instant" to R.string.reader_page_anim_instant
+                )
+                animModes.forEach { (aKey, aLabelId) ->
+                    val isSel = (pageAnimationMode == aKey)
+                    FilterChip(
+                        selected = isSel,
+                        onClick = { onPageAnimationModeChange(aKey) },
+                        label = {
+                            Text(
+                                stringResource(aLabelId),
                                 fontSize = 12.sp,
                                 fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
                             )

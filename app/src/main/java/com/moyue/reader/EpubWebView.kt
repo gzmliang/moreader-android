@@ -69,6 +69,7 @@ fun EpubWebView(
     onPrevChapter: (() -> Unit)? = null,
     onNextChapter: (() -> Unit)? = null,
     isEinkMode: Boolean = false,
+    pageAnimationMode: String = "smooth", // "smooth" or "instant"
     clearSelectionTrigger: Long = 0L,
     pageScrollTrigger: Long = 0L, // Positive: pageDown, Negative: pageUp
     modifier: Modifier = Modifier,
@@ -97,6 +98,10 @@ fun EpubWebView(
 
     LaunchedEffect(isDualPage) {
         webView?.evaluateJavascript("window.isDualPage = $isDualPage;", null)
+    }
+
+    LaunchedEffect(pageAnimationMode) {
+        webView?.evaluateJavascript("window.pageAnimationMode = '$pageAnimationMode';", null)
     }
 
     LaunchedEffect(clearSelectionTrigger) {
@@ -844,14 +849,18 @@ fun EpubWebView(
                                     }
                                 });
                                 
-                                // For instant page-tap scrolling (step retains ~1 line for smooth reading anchor)
+                                // For page scrolling with configurable animation (Smooth vs Instant)
+                                window.getPageScrollBehavior=function(){
+                                    if(window.isEink || window.pageAnimationMode==='instant') return 'instant';
+                                    return 'smooth';
+                                };
                                 window.pageUp=function(){
                                     if(window.scrollY<=2){
                                         MoreaderBridge.onPrevChapter();
                                         return;
                                     }
                                     var step=window.isDualPage ? Math.max(300, window.innerHeight * 0.9) : Math.max(200,window.innerHeight-40);
-                                    window.scrollBy({top:-step,left:0,behavior:'instant'});
+                                    window.scrollBy({top:-step,left:0,behavior:window.getPageScrollBehavior()});
                                 };
                                 window.pageDown=function(){
                                     var maxScroll=Math.max(0,document.body.scrollHeight-window.innerHeight);
@@ -860,7 +869,7 @@ fun EpubWebView(
                                         return;
                                     }
                                     var step=window.isDualPage ? Math.max(300, window.innerHeight * 0.9) : Math.max(200,window.innerHeight-40);
-                                    window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:'instant'});
+                                    window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:window.getPageScrollBehavior()});
                                 };
 
                                 // E-Ink edge-tap paging: left 25% for page-up, right 25% for page-down, middle 50% for menu/paragraph
