@@ -148,57 +148,64 @@ fun TypographySheet(
             Spacer(Modifier.height(8.dp))
 
             val fontList = listOf(
-                Triple("sans-serif", R.string.font_name_sans, "黑体无衬线 Modern Clean"),
-                Triple("serif", R.string.font_name_serif, "优雅宋体 Classic Literary"),
-                Triple("cursive", R.string.font_name_kaiti, "温润楷体 Gentle Script"),
-                Triple("monospace", R.string.font_name_mono, "现代等宽 Coding & Prose")
+                Triple("serif", R.string.font_name_serif, "优雅宋体 Classic Literary (精读推荐)"),
+                Triple("sans-serif", R.string.font_name_sans, "清晰黑体 Modern Clean (现代干练)"),
+                Triple("cursive", R.string.font_name_kaiti, "温润楷体 Gentle Script (诗意柔美)"),
+                Triple("monospace", R.string.font_name_mono, "现代等宽 Monospace (严谨工整)")
             )
 
+            // Render 2x2 Grid of Font Cards
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                fontList.forEach { (valKey, nameResId, sampleText) ->
-                    val isSelected = (fontFamily == valKey)
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (isSelected) {
-                            if (isEinkMode) Color.White else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                        } else {
-                            if (isEinkMode) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                        },
-                        border = if (isSelected) {
-                            BorderStroke(1.5.dp, if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary)
-                        } else {
-                            BorderStroke(0.8.dp, if (isEinkMode) Color.LightGray else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onFontFamilyChange(valKey) }
+                for (i in 0 until fontList.size step 2) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = stringResource(nameResId),
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isEinkMode) Color.Black else if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = sampleText,
-                                    fontSize = 11.sp,
-                                    color = if (isEinkMode) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                                )
+                        for (j in i until minOf(i + 2, fontList.size)) {
+                            val (valKey, nameResId, sampleText) = fontList[j]
+                            val isSelected = (fontFamily == valKey)
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) {
+                                    if (isEinkMode) Color.White else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                                } else {
+                                    if (isEinkMode) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                },
+                                border = if (isSelected) {
+                                    BorderStroke(1.5.dp, if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary)
+                                } else {
+                                    BorderStroke(0.8.dp, if (isEinkMode) Color.LightGray else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { onFontFamilyChange(valKey) }
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = stringResource(nameResId),
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isEinkMode) Color.Black else if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (isSelected) {
+                                            Text("✓", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = sampleText,
+                                        fontSize = 10.5.sp,
+                                        maxLines = 1,
+                                        color = if (isEinkMode) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                    )
+                                }
                             }
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = { onFontFamilyChange(valKey) },
-                                colors = RadioButtonDefaults.colors(
-                                    selectedColor = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary
-                                )
-                            )
                         }
                     }
                 }

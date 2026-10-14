@@ -323,27 +323,6 @@ fun ReaderScreen(
                                 )
                             }
                         }
-                        IconButton(onClick = { viewModel.toggleTypographyPanel() }) {
-                            val textColor = Color(android.graphics.Color.parseColor(state.theme.textColor))
-                            Surface(
-                                shape = RoundedCornerShape(5.dp),
-                                color = if (state.isEinkMode) Color.Transparent else textColor.copy(alpha = 0.08f),
-                                border = BorderStroke(
-                                    width = 1.2.dp,
-                                    color = if (state.isEinkMode) Color.Black else textColor.copy(alpha = 0.65f)
-                                ),
-                                modifier = Modifier.padding(horizontal = 2.dp)
-                            ) {
-                                Text(
-                                    text = "Aa",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
-                                    color = if (state.isEinkMode) Color.Black else textColor,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
                         IconButton(onClick = { viewModel.toggleFullscreen() }) { Icon(Icons.Default.Fullscreen, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_fullscreen)) }
                         IconButton(onClick = { viewModel.toggleBookmarkPanel() }) { Icon(Icons.Outlined.BookmarkBorder, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title)) }
                         IconButton(onClick = { viewModel.toggleHighlightPanel() }) { Icon(Icons.Default.Star, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_list_title)) }
@@ -402,18 +381,15 @@ fun ReaderScreen(
                 AnimatedVisibility(visible = !state.isFullscreen) {
                     ReaderBottomBar(
                         currentIndex = state.currentChapterIndex, totalChapters = state.chapters.size,
-                        fontSize = state.fontSize, fontFamily = state.fontFamily, fontWeight = state.fontWeight,
+                        fontSize = state.fontSize,
                         isTtsPlaying = state.isTtsPlaying, isTtsPaused = state.isTtsPaused,
                         isTtsGenerating = state.isTtsGenerating,
                         isTtsLocked = state.ttsLocked,
                         onPrev = { viewModel.prevChapter() }, onNext = { viewModel.nextChapter() },
-                        onFontSizeChange = { viewModel.setFontSize(it) },
-                        onFontFamilyChange = { viewModel.setFontFamily(it) },
-                        onFontWeightChange = { viewModel.setFontWeight(it) },
+                        onOpenTypography = { viewModel.toggleTypographyPanel() },
                         onPlayPause = { viewModel.togglePlayPause() },
                         onStop = { viewModel.ttsStop() },
                         onToggleLock = { viewModel.toggleTtsLock() },
-                        onToggleDebug = { viewModel.toggleTtsDebugLog() },
                         onNavigateToChapter = { idx ->
                             val ch = state.chapters.getOrNull(idx)
                             if (ch != null) viewModel.navigateToChapter(ch.href)
@@ -1251,16 +1227,13 @@ fun ReaderScreen(
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun ReaderBottomBar(
-    currentIndex: Int, totalChapters: Int, fontSize: Int, fontFamily: String, fontWeight: String,
+    currentIndex: Int, totalChapters: Int, fontSize: Int,
     isTtsPlaying: Boolean, isTtsPaused: Boolean, isTtsGenerating: Boolean = false,
     isTtsLocked: Boolean,
     onPrev: () -> Unit, onNext: () -> Unit,
-    onFontSizeChange: (Int) -> Unit,
-    onFontFamilyChange: (String) -> Unit,
-    onFontWeightChange: (String) -> Unit,
+    onOpenTypography: () -> Unit,
     onPlayPause: () -> Unit, onStop: () -> Unit,
     onToggleLock: () -> Unit,
-    onToggleDebug: () -> Unit,
     onNavigateToChapter: (Int) -> Unit,
     bookProgress: Float,
     bgColor: String,
@@ -1358,7 +1331,7 @@ private fun ReaderBottomBar(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 2.dp, vertical = 4.dp),
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
@@ -1367,133 +1340,55 @@ private fun ReaderBottomBar(
                     fun EqualButton(onClick: () -> Unit, enabled: Boolean = true, content: @androidx.compose.runtime.Composable () -> Unit) {
                         androidx.compose.material3.IconButton(
                             onClick = onClick,
-                            modifier = Modifier.weight(1f).size(32.dp),
+                            modifier = Modifier.weight(1f).size(36.dp),
                             enabled = enabled,
                         ) { content() }
                     }
 
-                    // Prev chapter
+                    // 1. Prev chapter
                     EqualButton(onPrev, enabled = currentIndex > 0) {
-                        Icon(Icons.Default.ChevronLeft, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.previous_chapter), tint = barTextColor, modifier = Modifier.size(18.dp))
-                    }
-
-                    // Font Family Dropdown
-                    var expandedFont by remember { mutableStateOf(false) }
-                    val fontFamilyResIds = listOf(
-                        com.moyue.app.R.string.font_label_sans_serif,
-                        com.moyue.app.R.string.font_label_serif,
-                        com.moyue.app.R.string.font_label_mono,
-                        com.moyue.app.R.string.font_label_casual,
-                        com.moyue.app.R.string.font_label_cursive
-                    )
-                    val fontFamilyValues = listOf(
-                        "sans-serif", "serif", "monospace", "casual", "cursive"
-                    )
-
-                    androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
-                        androidx.compose.material3.IconButton(onClick = { expandedFont = true }, modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(32.dp)) {
-                            androidx.compose.material3.Text(
-                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_font_family_label),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = barTextColor,
-                            )
-                        }
-                        androidx.compose.material3.DropdownMenu(expanded = expandedFont, onDismissRequest = { expandedFont = false }) {
-                            fontFamilyValues.forEachIndexed { idx, f ->
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(androidx.compose.ui.res.stringResource(fontFamilyResIds[idx]), fontSize = 13.sp) },
-                                    onClick = { onFontFamilyChange(f); expandedFont = false },
-                                    leadingIcon = if (f == fontFamily) { @androidx.compose.runtime.Composable { Icon(Icons.Default.Check, null) } } else null
-                                )
-                            }
-                        }
-                    }
-
-                    // Font Weight Dropdown
-                    val fontWeights = listOf("400", "600", "700")
-                    val weightLabelResIds = listOf(
-                        com.moyue.app.R.string.font_weight_normal,
-                        com.moyue.app.R.string.font_weight_semibold,
-                        com.moyue.app.R.string.font_weight_bold
-                    )
-                    var expandedWeight by remember { mutableStateOf(false) }
-
-                    androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
-                        androidx.compose.material3.IconButton(onClick = { expandedWeight = true }, modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(32.dp)) {
-                            androidx.compose.material3.Text(
-                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_font_weight_label),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = barTextColor,
-                            )
-                        }
-                        androidx.compose.material3.DropdownMenu(expanded = expandedWeight, onDismissRequest = { expandedWeight = false }) {
-                            fontWeights.forEachIndexed { idx, w ->
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(androidx.compose.ui.res.stringResource(weightLabelResIds[idx]), fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight(fontWeights[idx].toInt())) },
-                                    onClick = { onFontWeightChange(w); expandedWeight = false },
-                                    leadingIcon = if (w == fontWeight) { @androidx.compose.runtime.Composable { Icon(Icons.Default.Check, null) } } else null
-                                )
-                            }
-                        }
-                    }
-
-                    // Font Size: single button → slider popup
-                    var showFontSizeSlider by remember { mutableStateOf(false) }
-                    androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
-                        androidx.compose.material3.IconButton(
-                            onClick = { showFontSizeSlider = true },
-                            modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(32.dp)
-                        ) {
-                            androidx.compose.material3.Text(
-                                "${fontSize}",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = barTextColor,
-                            )
-                        }
-                    }
-
-                    // Font Size Slider Dialog
-                    if (showFontSizeSlider) {
-                        AlertDialog(
-                            onDismissRequest = { showFontSizeSlider = false },
-                            title = { Text("字号") },
-                            text = {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("$fontSize", fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                                    Spacer(Modifier.height(12.dp))
-                                    Slider(
-                                        value = fontSize.toFloat(),
-                                        onValueChange = { onFontSizeChange(it.toInt()) },
-                                        valueRange = 14f..32f,
-                                        steps = 8,  // 9 discrete values: 14,16,18,20,22,24,26,28,30,32
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("14", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text("32", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                            },
-                            confirmButton = {
-                                TextButton(onClick = { showFontSizeSlider = false }) {
-                                    Text(androidx.compose.ui.res.stringResource(android.R.string.ok))
-                                }
-                            }
+                        Icon(
+                            Icons.Default.ChevronLeft,
+                            contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.previous_chapter),
+                            tint = barTextColor,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
-                    // Next chapter
-                    EqualButton(onNext, enabled = currentIndex < totalChapters - 1) {
-                        Icon(Icons.Default.ChevronRight, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.next_chapter), tint = barTextColor, modifier = Modifier.size(18.dp))
+                    // 2. Aa Typography & Layout Center Pill Button
+                    Box(modifier = Modifier.weight(1.3f), contentAlignment = Alignment.Center) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = barTextColor.copy(alpha = 0.09f),
+                            border = BorderStroke(1.dp, barTextColor.copy(alpha = 0.25f)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable(onClick = onOpenTypography)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = "Aa",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                    color = barTextColor
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "$fontSize",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = barTextColor.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
                     }
 
-                    // TTS: Play/Pause（★ 生成中显示转圈，点击会被闸门拦住，不会产生第二份声音）
+                    // 3. TTS: Play/Pause
                     if (isTtsPlaying || isTtsPaused || isTtsGenerating) {
                         EqualButton(onClick = { if (!isTtsLocked) onPlayPause() }) {
                             if (isTtsGenerating) {
@@ -1503,37 +1398,57 @@ private fun ReaderBottomBar(
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                             } else {
-                                Icon(if (isTtsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                Icon(
+                                    if (isTtsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = if (isTtsPlaying) androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pause) else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.resume),
-                                    tint = if (isTtsLocked) barTextColor.copy(alpha = 0.3f) else MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                    tint = if (isTtsLocked) barTextColor.copy(alpha = 0.3f) else MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
                     } else {
                         EqualButton(onPlayPause) {
-                            Icon(Icons.Default.VolumeUp, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.play_chapter), tint = barTextColor, modifier = Modifier.size(18.dp))
+                            Icon(
+                                Icons.Default.VolumeUp,
+                                contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.play_chapter),
+                                tint = barTextColor,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
 
-                    // TTS: Stop (conditional，生成中也可用 = 取消生成)
+                    // 4. TTS: Stop (conditional)
                     if (isTtsPlaying || isTtsPaused || isTtsGenerating) {
                         EqualButton(onClick = { if (!isTtsLocked) onStop() }) {
-                            Icon(Icons.Default.Stop, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.stop), tint = if (isTtsLocked) MaterialTheme.colorScheme.error.copy(alpha = 0.3f) else MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                            Icon(
+                                Icons.Default.Stop,
+                                contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.stop),
+                                tint = if (isTtsLocked) MaterialTheme.colorScheme.error.copy(alpha = 0.3f) else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
 
-                    // TTS: Lock (防误触)
+                    // 5. TTS: Lock (防误触)
                     if (isTtsPlaying || isTtsPaused || isTtsGenerating) {
                         EqualButton(onToggleLock) {
-                            Icon(if (isTtsLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                            Icon(
+                                if (isTtsLocked) Icons.Default.Lock else Icons.Default.LockOpen,
                                 contentDescription = "锁定",
                                 tint = if (isTtsLocked) MaterialTheme.colorScheme.primary else barTextColor,
-                                modifier = Modifier.size(18.dp))
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
 
-                    // Debug
-                    EqualButton(onToggleDebug) {
-                        Icon(Icons.Default.BugReport, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.debug_log), modifier = Modifier.size(18.dp), tint = barTextColor)
+                    // 6. Next chapter
+                    EqualButton(onNext, enabled = currentIndex < totalChapters - 1) {
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.next_chapter),
+                            tint = barTextColor,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
