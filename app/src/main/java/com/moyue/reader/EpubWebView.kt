@@ -70,6 +70,7 @@ fun EpubWebView(
     onNextChapter: (() -> Unit)? = null,
     isEinkMode: Boolean = false,
     clearSelectionTrigger: Long = 0L,
+    pageScrollTrigger: Long = 0L, // Positive: pageDown, Negative: pageUp
     modifier: Modifier = Modifier,
     onWebViewCreated: ((WebView) -> Unit)? = null,
 ) {
@@ -101,6 +102,14 @@ fun EpubWebView(
     LaunchedEffect(clearSelectionTrigger) {
         if (clearSelectionTrigger > 0L) {
             webView?.evaluateJavascript("(function(){ var s = window.getSelection(); if (s) s.removeAllRanges(); })()", null)
+        }
+    }
+
+    LaunchedEffect(pageScrollTrigger) {
+        if (pageScrollTrigger > 0L) {
+            webView?.evaluateJavascript("window.pageDown();", null)
+        } else if (pageScrollTrigger < 0L) {
+            webView?.evaluateJavascript("window.pageUp();", null)
         }
     }
 

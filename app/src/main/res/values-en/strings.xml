@@ -658,6 +658,10 @@ Just change the Base URL and API Key</string>
     <string name="font_name_sans">Modern Sans-Serif</string>
     <string name="font_name_kaiti">Gentle Cursive / KaiTi</string>
     <string name="font_name_mono">Monospace</string>
+    <string name="reader_prev_page">Previous Page</string>
+    <string name="reader_next_page">Next Page</string>
+    <string name="reader_prev_chapter">Previous Chapter</string>
+    <string name="reader_next_chapter">Next Chapter</string>
 
     <!-- Reports Tab -->
     <string name="ai_reports_title">History and Reports</string>

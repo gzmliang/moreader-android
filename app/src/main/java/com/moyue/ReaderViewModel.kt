@@ -92,6 +92,7 @@ data class ReaderUiState(
     // Selection toolbar position & clear trigger
     val selectionMenuYRatio: Float = 0.80f,
     val clearSelectionTrigger: Long = 0L,
+    val pageScrollTrigger: Long = 0L,
     // Fullscreen mode
     val isFullscreen: Boolean = false,
     val llmConfig: LLMConfig = LLMConfig(),
@@ -593,6 +594,12 @@ class ReaderViewModel(
     }
     fun toggleTypographyPanel() {
         _uiState.update { it.copy(showTypographyPanel = !it.showTypographyPanel) }
+    }
+    fun pageUp() {
+        _uiState.update { it.copy(pageScrollTrigger = -System.currentTimeMillis()) }
+    }
+    fun pageDown() {
+        _uiState.update { it.copy(pageScrollTrigger = System.currentTimeMillis()) }
     }
     fun setTextBrightness(v: Int) {
         val adj = v.coerceIn(0, 100)

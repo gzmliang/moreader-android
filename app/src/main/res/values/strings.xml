@@ -781,6 +781,10 @@ AI Voice（云端 TTS）：
     <string name="font_name_sans">清晰黑体 / 无衬线</string>
     <string name="font_name_kaiti">圆润楷体 / 手写风</string>
     <string name="font_name_mono">现代等宽</string>
+    <string name="reader_prev_page">上一页</string>
+    <string name="reader_next_page">下一页</string>
+    <string name="reader_prev_chapter">上一章</string>
+    <string name="reader_next_chapter">下一章</string>
 
     <!-- Reports Tab -->
     <string name="ai_reports_title">答题成绩单</string>

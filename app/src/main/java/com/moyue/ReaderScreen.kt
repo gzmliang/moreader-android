@@ -293,11 +293,13 @@ fun ReaderScreen(
             AnimatedVisibility(visible = !state.isFullscreen) {
                 TopAppBar(
                     title = {
-                        Column {
-                            Text(state.book?.title ?: androidx.compose.ui.res.stringResource(com.moyue.app.R.string.loading), fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (state.currentChapterIndex < state.chapters.size)
-                                Text("${state.currentChapterIndex + 1}/${state.chapters.size}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                        }
+                        Text(
+                            text = state.book?.title ?: androidx.compose.ui.res.stringResource(com.moyue.app.R.string.loading),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     },
                     navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.back)) } },
                     actions = {
@@ -385,7 +387,10 @@ fun ReaderScreen(
                         isTtsPlaying = state.isTtsPlaying, isTtsPaused = state.isTtsPaused,
                         isTtsGenerating = state.isTtsGenerating,
                         isTtsLocked = state.ttsLocked,
-                        onPrev = { viewModel.prevChapter() }, onNext = { viewModel.nextChapter() },
+                        onPrevPage = { viewModel.pageUp() },
+                        onNextPage = { viewModel.pageDown() },
+                        onPrevChapter = { viewModel.prevChapter() },
+                        onNextChapter = { viewModel.nextChapter() },
                         onOpenTypography = { viewModel.toggleTypographyPanel() },
                         onPlayPause = { viewModel.togglePlayPause() },
                         onStop = { viewModel.ttsStop() },
@@ -490,6 +495,7 @@ fun ReaderScreen(
                     onNextChapter = { viewModel.nextChapter() },
                     isEinkMode = state.isEinkMode,
                     clearSelectionTrigger = state.clearSelectionTrigger,
+                    pageScrollTrigger = state.pageScrollTrigger,
                     onWebViewCreated = { webViewInstance = it },
                     modifier = Modifier.fillMaxSize().background(Color(android.graphics.Color.parseColor(state.theme.bgColor))),
                 )
@@ -1230,7 +1236,8 @@ private fun ReaderBottomBar(
     currentIndex: Int, totalChapters: Int, fontSize: Int,
     isTtsPlaying: Boolean, isTtsPaused: Boolean, isTtsGenerating: Boolean = false,
     isTtsLocked: Boolean,
-    onPrev: () -> Unit, onNext: () -> Unit,
+    onPrevPage: () -> Unit, onNextPage: () -> Unit,
+    onPrevChapter: () -> Unit, onNextChapter: () -> Unit,
     onOpenTypography: () -> Unit,
     onPlayPause: () -> Unit, onStop: () -> Unit,
     onToggleLock: () -> Unit,
@@ -1324,14 +1331,14 @@ private fun ReaderBottomBar(
                 Text("${currentIndex + 1}/$totalChapters", fontSize = 9.sp, color = barTextColor, modifier = Modifier.width(36.dp), textAlign = TextAlign.End)
             }
 
-            // Control buttons — adaptive layout: each button gets equal share of screen width
+            // Control buttons — adaptive layout with Page & Chapter hierarchy
             CompositionLocalProvider(
                 androidx.compose.material3.LocalMinimumInteractiveComponentEnforcement provides false
             ) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                        .padding(horizontal = 2.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
@@ -1345,17 +1352,27 @@ private fun ReaderBottomBar(
                         ) { content() }
                     }
 
-                    // 1. Prev chapter
-                    EqualButton(onPrev, enabled = currentIndex > 0) {
+                    // 1. 最外侧左边：上一页 (‹ / ChevronLeft)
+                    EqualButton(onPrevPage) {
                         Icon(
                             Icons.Default.ChevronLeft,
-                            contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.previous_chapter),
+                            contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_prev_page),
                             tint = barTextColor,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    // 2. 次外侧左边：上一章 (« / FirstPage)
+                    EqualButton(onPrevChapter, enabled = currentIndex > 0) {
+                        Icon(
+                            Icons.Default.FirstPage,
+                            contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_prev_chapter),
+                            tint = if (currentIndex > 0) barTextColor.copy(alpha = 0.85f) else barTextColor.copy(alpha = 0.25f),
                             modifier = Modifier.size(20.dp)
                         )
                     }
 
-                    // 2. Aa Typography & Layout Center Pill Button
+                    // 3. Aa 排版与字体中心胶囊按钮
                     Box(modifier = Modifier.weight(1.3f), contentAlignment = Alignment.Center) {
                         Surface(
                             shape = RoundedCornerShape(14.dp),
@@ -1388,7 +1405,7 @@ private fun ReaderBottomBar(
                         }
                     }
 
-                    // 3. TTS: Play/Pause
+                    // 4. TTS: 播放 / 暂停
                     if (isTtsPlaying || isTtsPaused || isTtsGenerating) {
                         EqualButton(onClick = { if (!isTtsLocked) onPlayPause() }) {
                             if (isTtsGenerating) {
@@ -1417,7 +1434,7 @@ private fun ReaderBottomBar(
                         }
                     }
 
-                    // 4. TTS: Stop (conditional)
+                    // 5. TTS: 停止 (仅播放或生成中出现)
                     if (isTtsPlaying || isTtsPaused || isTtsGenerating) {
                         EqualButton(onClick = { if (!isTtsLocked) onStop() }) {
                             Icon(
@@ -1429,7 +1446,7 @@ private fun ReaderBottomBar(
                         }
                     }
 
-                    // 5. TTS: Lock (防误触)
+                    // 6. TTS: 锁定 (防误触，仅播放或生成中出现)
                     if (isTtsPlaying || isTtsPaused || isTtsGenerating) {
                         EqualButton(onToggleLock) {
                             Icon(
@@ -1441,13 +1458,23 @@ private fun ReaderBottomBar(
                         }
                     }
 
-                    // 6. Next chapter
-                    EqualButton(onNext, enabled = currentIndex < totalChapters - 1) {
+                    // 7. 次外侧右边：下一章 (» / LastPage)
+                    EqualButton(onNextChapter, enabled = currentIndex < totalChapters - 1) {
+                        Icon(
+                            Icons.Default.LastPage,
+                            contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_next_chapter),
+                            tint = if (currentIndex < totalChapters - 1) barTextColor.copy(alpha = 0.85f) else barTextColor.copy(alpha = 0.25f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // 8. 最外侧右边：下一页 (› / ChevronRight)
+                    EqualButton(onNextPage) {
                         Icon(
                             Icons.Default.ChevronRight,
-                            contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.next_chapter),
+                            contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_next_page),
                             tint = barTextColor,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
