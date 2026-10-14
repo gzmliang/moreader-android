@@ -635,6 +635,13 @@ Just change the Base URL and API Key</string>
     <string name="ai_tts_read_option">Read this option aloud</string>
     <string name="ai_tts_read_analysis">Read the explanation aloud</string>
     <string name="ai_tts_unavailable">Read-aloud service is unavailable right now. Please try again later.</string>
+    <string name="ai_quiz_export_title">Export Quiz</string>
+    <string name="ai_quiz_export_blank_epub">📄 Export Blank Practice Sheet (EPUB)</string>
+    <string name="ai_quiz_export_solutions_epub">📑 Export Full Solutions &amp; Explanations (EPUB)</string>
+    <string name="ai_quiz_export_blank_pdf">📄 Export Blank Practice Sheet (PDF)</string>
+    <string name="ai_quiz_export_solutions_pdf">📑 Export Full Solutions &amp; Explanations (PDF)</string>
+    <string name="ai_quiz_export_success">Successfully exported to: %1$s</string>
+    <string name="ai_quiz_export_failed">Export failed: %1$s</string>
 
     <!-- Reports Tab -->
     <string name="ai_reports_title">History and Reports</string>

@@ -758,6 +758,13 @@ AI Voice（云端 TTS）：
     <string name="ai_tts_read_option">朗读该选项</string>
     <string name="ai_tts_read_analysis">朗读解析</string>
     <string name="ai_tts_unavailable">朗读服务暂时不可用，请稍后再试。</string>
+    <string name="ai_quiz_export_title">导出测验卷</string>
+    <string name="ai_quiz_export_blank_epub">📄 导出空白练习卷 (EPUB)</string>
+    <string name="ai_quiz_export_solutions_epub">📑 导出完整答案解析卷 (EPUB)</string>
+    <string name="ai_quiz_export_blank_pdf">📄 导出空白练习卷 (PDF)</string>
+    <string name="ai_quiz_export_solutions_pdf">📑 导出完整答案解析卷 (PDF)</string>
+    <string name="ai_quiz_export_success">已成功导出至: %1$s</string>
+    <string name="ai_quiz_export_failed">导出失败: %1$s</string>
 
     <!-- Reports Tab -->
     <string name="ai_reports_title">答题成绩单</string>

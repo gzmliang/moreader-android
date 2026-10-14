@@ -191,27 +191,44 @@ object AiPromptBuilder {
         val effectiveSourceLang = resolveSourceLanguage(config, text, title)
         val targetLang = config.targetLang.ifBlank { "Chinese" }
         val isNativeChinese = effectiveSourceLang.equals("Chinese", ignoreCase = true)
+        val isNativeEnglish = effectiveSourceLang.equals("English", ignoreCase = true)
 
-        val languageMandate = if (isNativeChinese) {
-            """
-            LANGUAGE DIRECTIVE (CRITICAL - 纯正中文原著最高铁律 - 绝严禁任何英文或拼音):
-            - The original book text is authentic CHINESE ($effectiveSourceLang).
-            - The target explanation language is also CHINESE ($targetLang).
-            - MANDATORY RULE: ALL character names (nameOriginal & nameTranslation), factions, roles, bios (bioOriginal & bioTranslation), structured relationship labels (label & labelTranslation), core narrative dynamics, and timeline events MUST be written 100% in authentic, idiomatic CHINESE!
-            - STRICT PROHIBITION: NEVER translate any Chinese character name, sect/faction, martial art, or term into English or Pinyin!
-              * Example: Use "令狐冲" for BOTH "nameOriginal" and "nameTranslation" (ABSOLUTELY NEVER "Linghu Chong").
-              * Example: Use "任盈盈" for BOTH "nameOriginal" and "nameTranslation" (ABSOLUTELY NEVER "Ren Yingying").
-              * Example: Use "岳不群" for BOTH "nameOriginal" and "nameTranslation" (ABSOLUTELY NEVER "Yue Buqun").
-              * Example: Use "华山派" (NEVER "Huashan Sect"), "日月神教" (NEVER "Sun Moon Holy Cult"), "辟邪剑法" (NEVER "Bixie Swordplay").
-              * Example: Use "恩师 / 掌门" (NEVER "Master / Leader"), "大师兄 / 掌门大弟子" (NEVER "Senior Disciple").
-            - For all "Original" and "Translation" paired fields (nameOriginal & nameTranslation, bioOriginal & bioTranslation, coreDynamicsOriginal & coreDynamicsTranslation, eventOriginal & eventTranslation), directly fill BOTH fields with authentic, natural Chinese.
-            """.trimIndent()
-        } else {
-            """
-            LANGUAGE DIRECTIVE:
-            - The source language is $effectiveSourceLang and the target explanation language is $targetLang.
-            - For foreign works (e.g. English, Japanese), keep original names/terms in "Original" fields and provide accurate $targetLang translations in "Translation" fields.
-            """.trimIndent()
+        val languageMandate = when {
+            isNativeChinese -> {
+                """
+                LANGUAGE DIRECTIVE (CRITICAL - 纯正中文原著最高铁律 - 绝严禁任何英文或拼音):
+                - The original book text is authentic CHINESE ($effectiveSourceLang).
+                - The target explanation language is also CHINESE ($targetLang).
+                - MANDATORY RULE: ALL character names (nameOriginal & nameTranslation), factions, roles, bios (bioOriginal & bioTranslation), structured relationship labels (label & labelTranslation), core narrative dynamics, and timeline events MUST be written 100% in authentic, idiomatic CHINESE!
+                - STRICT PROHIBITION: NEVER translate any Chinese character name, sect/faction, martial art, or term into English or Pinyin!
+                  * Example: Use "令狐冲" for BOTH "nameOriginal" and "nameTranslation" (ABSOLUTELY NEVER "Linghu Chong").
+                  * Example: Use "任盈盈" for BOTH "nameOriginal" and "nameTranslation" (ABSOLUTELY NEVER "Ren Yingying").
+                  * Example: Use "岳不群" for BOTH "nameOriginal" and "nameTranslation" (ABSOLUTELY NEVER "Yue Buqun").
+                  * Example: Use "华山派" (NEVER "Huashan Sect"), "日月神教" (NEVER "Sun Moon Holy Cult"), "辟邪剑法" (NEVER "Bixie Swordplay").
+                  * Example: Use "恩师 / 掌门" (NEVER "Master / Leader"), "大师兄 / 掌门大弟子" (NEVER "Senior Disciple").
+                - For all "Original" and "Translation" paired fields (nameOriginal & nameTranslation, bioOriginal & bioTranslation, coreDynamicsOriginal & coreDynamicsTranslation, eventOriginal & eventTranslation), directly fill BOTH fields with authentic, natural Chinese.
+                """.trimIndent()
+            }
+            isNativeEnglish -> {
+                """
+                LANGUAGE DIRECTIVE (CRITICAL - PURE ENGLISH STRICT MANDATE):
+                - The original book text is in ENGLISH ($effectiveSourceLang).
+                - MANDATORY RULE: ALL character names (nameOriginal & nameTranslation), factions, roles, bios (bioOriginal & bioTranslation), structured relationship labels (label & labelTranslation), core narrative dynamics, and timeline events MUST be written 100% in authentic, natural ENGLISH!
+                - STRICT PROHIBITION: DO NOT use Chinese, Pinyin, or any non-English language anywhere!
+                  * Example: Use "Annie" for BOTH "nameOriginal" and "nameTranslation".
+                  * Example: Use "Sister & Adventurer" for BOTH "label" and "labelTranslation" (ABSOLUTELY NO Chinese like "妹妹兼冒险伙伴").
+                  * Example: Use "Frog Creek / Camelot Travelers" for "faction" (ABSOLUTELY NO Chinese like "蛙溪镇").
+                  * Example: Use "Protagonist" or "Adventurer" for "role" (ABSOLUTELY NO Chinese like "主角").
+                - For all "Original" and "Translation" paired fields, fill BOTH fields directly in pure, natural English!
+                """.trimIndent()
+            }
+            else -> {
+                """
+                LANGUAGE DIRECTIVE:
+                - The source language is $effectiveSourceLang and the target explanation language is $targetLang.
+                - For foreign works (e.g. Japanese, French), keep original names/terms in "Original" fields and provide accurate $targetLang translations in "Translation" fields.
+                """.trimIndent()
+            }
         }
 
         val jsonFormatExample = if (isNativeChinese) {
@@ -263,6 +280,55 @@ object AiPromptBuilder {
               ]
             }
             """.trimIndent()
+        } else if (isNativeEnglish) {
+            """
+            {
+              "coreDynamicsOriginal": "One concise paragraph explaining narrative stakes & tension in English...",
+              "coreDynamicsTranslation": "One concise paragraph explaining narrative stakes & tension in English...",
+              "characters": [
+                {
+                  "nameOriginal": "Jon Snow",
+                  "nameTranslation": "Jon Snow",
+                  "faction": "Night's Watch",
+                  "role": "Protagonist / Lord Commander",
+                  "bioOriginal": "Raised at Winterfell, Jon joins the Night's Watch to defend the realm, navigating loyalty and honor.",
+                  "bioTranslation": "Raised at Winterfell, Jon joins the Night's Watch to defend the realm, navigating loyalty and honor.",
+                  "structuredRelations": [
+                    {
+                      "category": "parent",
+                      "label": "Father / Guardian",
+                      "labelTranslation": "Father / Guardian",
+                      "target": "Ned Stark"
+                    },
+                    {
+                      "category": "ally",
+                      "label": "Direwolf Companion",
+                      "labelTranslation": "Direwolf Companion",
+                      "target": "Ghost"
+                    }
+                  ],
+                  "relationships": ["Father / Guardian: Ned Stark", "Direwolf Companion: Ghost"]
+                }
+              ],
+              "timeline": [
+                {
+                  "stage": "Opening & Inciting Incident",
+                  "eventOriginal": "Jon departs Winterfell and arrives at the Wall...",
+                  "eventTranslation": "Jon departs Winterfell and arrives at the Wall..."
+                },
+                {
+                  "stage": "Conflict & Rising Stakes",
+                  "eventOriginal": "Beyond the Wall, Jon faces the harsh realities of the wildlings...",
+                  "eventTranslation": "Beyond the Wall, Jon faces the harsh realities of the wildlings..."
+                },
+                {
+                  "stage": "Climax & Resolution",
+                  "eventOriginal": "The battle for Castle Black proves Jon's leadership...",
+                  "eventTranslation": "The battle for Castle Black proves Jon's leadership..."
+                }
+              ]
+            }
+            """.trimIndent()
         } else {
             """
             {
@@ -280,7 +346,7 @@ object AiPromptBuilder {
                     {
                       "category": "parent / spouse / child / sibling / ally / rival / other",
                       "label": "Target's role in $effectiveSourceLang (e.g. Father, Husband, Lord Commander)",
-                      "labelTranslation": "Target's role in $targetLang (e.g. 父亲, 丈夫, 守夜人总司令)",
+                      "labelTranslation": "Target's role in $targetLang",
                       "target": "Target Character Name"
                     }
                   ],
@@ -439,19 +505,33 @@ object AiPromptBuilder {
         val effectiveSourceLang = resolveSourceLanguage(config, text, title)
         val targetLang = config.targetLang.ifBlank { "Chinese" }
         val isNativeChinese = effectiveSourceLang.equals("Chinese", ignoreCase = true)
+        val isNativeEnglish = effectiveSourceLang.equals("English", ignoreCase = true)
 
-        val languageDirective = if (isNativeChinese) {
-            """
-            LANGUAGE DIRECTIVE (CRITICAL - 纯正中文原著模式):
-            - The text is written in authentic Chinese.
-            - All questions, options, and explanations MUST be generated purely and naturally in CHINESE.
-            - NEVER translate questions, character names, or options into English or Pinyin.
-            """.trimIndent()
-        } else {
-            """
-            LANGUAGE DIRECTIVE:
-            - Source language is $effectiveSourceLang, explanation language is $targetLang.
-            """.trimIndent()
+        val languageDirective = when {
+            isNativeChinese -> {
+                """
+                LANGUAGE DIRECTIVE (CRITICAL - 纯正中文原著模式):
+                - The text is written in authentic Chinese.
+                - All questions, options, and explanations MUST be generated purely and naturally in CHINESE.
+                - NEVER translate questions, character names, or options into English or Pinyin.
+                """.trimIndent()
+            }
+            isNativeEnglish -> {
+                """
+                LANGUAGE DIRECTIVE (CRITICAL - PURE ENGLISH STRICT MANDATE):
+                - The text is written in authentic English.
+                - All questions, options, and explanations MUST be generated 100% in authentic, natural ENGLISH.
+                - Both "questionOriginal" and "questionTranslation" MUST be written in English.
+                - Both "analysisOriginal" and "analysisTranslation" MUST be written in English.
+                - ABSOLUTELY NO Chinese, Pinyin, or other languages anywhere in the output!
+                """.trimIndent()
+            }
+            else -> {
+                """
+                LANGUAGE DIRECTIVE:
+                - Source language is $effectiveSourceLang, explanation language is $targetLang.
+                """.trimIndent()
+            }
         }
 
         val systemPrompt = """

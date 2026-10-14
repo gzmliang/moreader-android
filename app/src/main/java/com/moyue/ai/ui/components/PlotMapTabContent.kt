@@ -66,23 +66,36 @@ fun PlotMapTabContent(
     }
 
     fun isStalePlotResult(result: AiPlotResult?, isChinese: Boolean): Boolean {
-        if (result == null || !isChinese) return false
+        if (result == null) return false
         val chars = result.characters
-        if (chars.isNotEmpty()) {
-            val englishOrigCount = chars.count { card ->
-                card.nameOriginal.isNotBlank() &&
-                card.nameOriginal.all { it.code < 128 } &&
-                card.nameOriginal.any { it.isLetter() }
+        if (isChinese) {
+            if (chars.isNotEmpty()) {
+                val englishOrigCount = chars.count { card ->
+                    card.nameOriginal.isNotBlank() &&
+                    card.nameOriginal.all { it.code < 128 } &&
+                    card.nameOriginal.any { it.isLetter() }
+                }
+                if (englishOrigCount.toDouble() / chars.size > 0.3) {
+                    return true
+                }
             }
-            if (englishOrigCount.toDouble() / chars.size > 0.3) {
+            if (result.coreDynamicsOriginal.isNotBlank() &&
+                !result.coreDynamicsOriginal.any { it in '\u4e00'..'\u9fff' }
+            ) {
                 return true
             }
-        }
-        if (result.coreDynamicsOriginal.isNotBlank() &&
-            !result.coreDynamicsOriginal.any { it in '\u4e00'..'\u9fff' } &&
-            (result.coreDynamicsTranslation.any { it in '\u4e00'..'\u9fff' } || isChinese)
-        ) {
-            return true
+        } else {
+            // For English book: if previous result had Chinese characters in names or faction, it's stale!
+            if (chars.isNotEmpty()) {
+                val chineseCount = chars.count { card ->
+                    card.nameOriginal.any { it in '\u4e00'..'\u9fff' } ||
+                    card.faction.any { it in '\u4e00'..'\u9fff' } ||
+                    card.role.any { it in '\u4e00'..'\u9fff' }
+                }
+                if (chineseCount > 0) {
+                    return true
+                }
+            }
         }
         return false
     }
@@ -511,6 +524,12 @@ private fun CharacterCardItem(
     isChineseBook: Boolean = false,
     onClick: () -> Unit
 ) {
+    val isChinese = isChineseBook || when {
+        card.nameOriginal.isNotBlank() -> card.nameOriginal.any { it in '\u4e00'..'\u9fff' }
+        card.nameTranslation.isNotBlank() -> card.nameTranslation.any { it in '\u4e00'..'\u9fff' }
+        else -> false
+    }
+
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = if (isEink) Color.White else MaterialTheme.colorScheme.surface,
@@ -528,11 +547,6 @@ private fun CharacterCardItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val isChinese = isChineseBook || when {
-                    card.nameOriginal.isNotBlank() -> card.nameOriginal.any { it in '\u4e00'..'\u9fff' }
-                    card.nameTranslation.isNotBlank() -> card.nameTranslation.any { it in '\u4e00'..'\u9fff' }
-                    else -> false
-                }
                 val isSame = card.nameOriginal.trim().equals(card.nameTranslation.trim(), ignoreCase = true)
 
                 val primaryName = when (displayMode) {
@@ -617,7 +631,7 @@ private fun CharacterCardItem(
                             "rival" -> "⚔️"
                             else -> "🔗"
                         }
-                        val activeLabel = rel.getDisplayLabel(displayMode)
+                        val activeLabel = rel.getDisplayLabel(displayMode, isEnglishBook = !isChinese)
                         val displayText = if (activeLabel.isNotBlank()) "$icon $activeLabel: ${rel.target}" else "$icon ${rel.target}"
                         Text(
                             text = displayText,
@@ -881,7 +895,7 @@ private fun CharacterProfileSheetContent(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 list.forEach { rel ->
-                                    val activeLabel = rel.getDisplayLabel(displayMode)
+                                    val activeLabel = rel.getDisplayLabel(displayMode, isEnglishBook = !isChinese)
                                     val chipText = if (activeLabel.isNotBlank()) "$activeLabel: ${rel.target}" else rel.target
 
                                     Surface(

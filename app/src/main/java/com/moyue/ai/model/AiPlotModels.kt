@@ -9,9 +9,20 @@ data class StructuredRelation(
     /**
      * Resolves the presentation label based on the current language display mode.
      */
-    fun getDisplayLabel(displayMode: String = "bilingual"): String {
-        val safeLabel = label ?: ""
-        val safeTrans = labelTranslation ?: ""
+    fun getDisplayLabel(displayMode: String = "bilingual", isEnglishBook: Boolean = false): String {
+        val safeLabel = (label ?: "").trim()
+        val safeTrans = (labelTranslation ?: "").trim()
+        if (isEnglishBook) {
+            // For English books, strictly return pure English label, never show Chinese
+            if (safeLabel.isNotBlank() && !safeLabel.any { it in '\u4e00'..'\u9fff' }) {
+                return safeLabel
+            }
+            if (safeTrans.isNotBlank() && !safeTrans.any { it in '\u4e00'..'\u9fff' }) {
+                return safeTrans
+            }
+            // If it was legacy corrupted Chinese, return safeLabel
+            return safeLabel.ifBlank { safeTrans }
+        }
         return when (displayMode) {
             "orig" -> {
                 if (!safeLabel.any { it in '\u4e00'..'\u9fff' } && safeTrans.any { it in '\u4e00'..'\u9fff' }) {

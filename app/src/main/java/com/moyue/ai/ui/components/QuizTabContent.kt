@@ -12,8 +12,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
@@ -40,6 +42,7 @@ import com.moyue.ai.model.QuizRules
 import com.moyue.ai.service.AiPromptBuilder
 import com.moyue.ai.service.BookTextExtractor
 import com.moyue.ai.service.LlmClient
+import com.moyue.ai.util.QuizExporter
 import com.moyue.app.R
 import com.moyue.app.data.BookRepository
 import com.moyue.app.tts.SegmentTtsPlayer
@@ -561,11 +564,13 @@ fun QuizTabContent(
                 }
             }
 
-            // Right side: ⚡已缓存 & 🔄重新生成
+            // Right side: ⚡已缓存 & 📤导出 & 🔄重新生成
             if (quizResult != null) {
+                var exportMenuExpanded by remember { mutableStateOf(false) }
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
                         text = "⚡" + stringResource(R.string.ai_cached_short),
@@ -573,6 +578,90 @@ fun QuizTabContent(
                         color = if (isEink) Color.Black else Color(0xFF10B981),
                         fontWeight = FontWeight.SemiBold
                     )
+
+                    // Export Menu Dropdown
+                    Box {
+                        IconButton(
+                            onClick = { exportMenuExpanded = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FileDownload,
+                                contentDescription = stringResource(R.string.ai_quiz_export_title),
+                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = exportMenuExpanded,
+                            onDismissRequest = { exportMenuExpanded = false }
+                        ) {
+                            val questions = quizResult?.questions ?: emptyList()
+                            
+                            // 1. Export Blank Practice EPUB
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.ai_quiz_export_blank_epub), fontSize = 13.sp) },
+                                onClick = {
+                                    exportMenuExpanded = false
+                                    try {
+                                        val file = QuizExporter.exportToEpub(context, bookTitle, chapterTitle, questions, withAnswers = false)
+                                        Toast.makeText(context, context.getString(R.string.ai_quiz_export_success, file.name), Toast.LENGTH_SHORT).show()
+                                        QuizExporter.shareFile(context, file, "application/epub+zip", file.name)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, context.getString(R.string.ai_quiz_export_failed, e.localizedMessage ?: ""), Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            )
+
+                            // 2. Export Full Solutions EPUB
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.ai_quiz_export_solutions_epub), fontSize = 13.sp) },
+                                onClick = {
+                                    exportMenuExpanded = false
+                                    try {
+                                        val file = QuizExporter.exportToEpub(context, bookTitle, chapterTitle, questions, withAnswers = true)
+                                        Toast.makeText(context, context.getString(R.string.ai_quiz_export_success, file.name), Toast.LENGTH_SHORT).show()
+                                        QuizExporter.shareFile(context, file, "application/epub+zip", file.name)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, context.getString(R.string.ai_quiz_export_failed, e.localizedMessage ?: ""), Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            )
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                            // 3. Export Blank Practice PDF
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.ai_quiz_export_blank_pdf), fontSize = 13.sp) },
+                                onClick = {
+                                    exportMenuExpanded = false
+                                    try {
+                                        val file = QuizExporter.exportToPdf(context, bookTitle, chapterTitle, questions, withAnswers = false)
+                                        Toast.makeText(context, context.getString(R.string.ai_quiz_export_success, file.name), Toast.LENGTH_SHORT).show()
+                                        QuizExporter.shareFile(context, file, "application/pdf", file.name)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, context.getString(R.string.ai_quiz_export_failed, e.localizedMessage ?: ""), Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            )
+
+                            // 4. Export Full Solutions PDF
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.ai_quiz_export_solutions_pdf), fontSize = 13.sp) },
+                                onClick = {
+                                    exportMenuExpanded = false
+                                    try {
+                                        val file = QuizExporter.exportToPdf(context, bookTitle, chapterTitle, questions, withAnswers = true)
+                                        Toast.makeText(context, context.getString(R.string.ai_quiz_export_success, file.name), Toast.LENGTH_SHORT).show()
+                                        QuizExporter.shareFile(context, file, "application/pdf", file.name)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, context.getString(R.string.ai_quiz_export_failed, e.localizedMessage ?: ""), Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            )
+                        }
+                    }
 
                     IconButton(
                         onClick = { startGenerateQuiz() },

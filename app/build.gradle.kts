@@ -13,8 +13,8 @@ android {
         applicationId = "com.moyue.app.tingshu"
         minSdk = 26
         targetSdk = 36
-        versionCode = 20164
-        versionName = "1.1.21"
+        versionCode = 20165
+        versionName = "1.1.22"
 
         // Local AI NDK config (disabled — no NDK in test env)
         /*externalNativeBuild {
