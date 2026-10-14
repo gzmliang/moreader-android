@@ -323,6 +323,27 @@ fun ReaderScreen(
                                 )
                             }
                         }
+                        IconButton(onClick = { viewModel.toggleTypographyPanel() }) {
+                            val textColor = Color(android.graphics.Color.parseColor(state.theme.textColor))
+                            Surface(
+                                shape = RoundedCornerShape(5.dp),
+                                color = if (state.isEinkMode) Color.Transparent else textColor.copy(alpha = 0.08f),
+                                border = BorderStroke(
+                                    width = 1.2.dp,
+                                    color = if (state.isEinkMode) Color.Black else textColor.copy(alpha = 0.65f)
+                                ),
+                                modifier = Modifier.padding(horizontal = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Aa",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                    color = if (state.isEinkMode) Color.Black else textColor,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                         IconButton(onClick = { viewModel.toggleFullscreen() }) { Icon(Icons.Default.Fullscreen, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_fullscreen)) }
                         IconButton(onClick = { viewModel.toggleBookmarkPanel() }) { Icon(Icons.Outlined.BookmarkBorder, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title)) }
                         IconButton(onClick = { viewModel.toggleHighlightPanel() }) { Icon(Icons.Default.Star, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_list_title)) }
@@ -417,6 +438,14 @@ fun ReaderScreen(
             padding
         }
         BoxWithConstraints(Modifier.fillMaxSize().padding(effectivePadding)) {
+            val screenWidthDp = maxWidth.value
+            val isLargeScreen = screenWidthDp >= 600f
+            val isDualPageSpread = when (state.layoutSpreadMode) {
+                "dual" -> true
+                "single" -> false
+                else -> isLargeScreen
+            }
+
             if (state.isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -449,6 +478,7 @@ fun ReaderScreen(
                     fontScale = state.fontSize / 18f,
                     fontFamily = state.fontFamily,
                     fontWeight = state.fontWeight,
+                    isDualPage = isDualPageSpread,
                     onTextSelected = { viewModel.onTextSelected(it) },
                     onLinkClicked = { 
                         val parts = it.split('|')
@@ -928,6 +958,23 @@ fun ReaderScreen(
                     onRecordingClick = { viewModel.showRecordingDialog() },
                     onBrowseRecordingsClick = { viewModel.showRecordingManager() },
                     onClose = { viewModel.toggleTtsSettingsPanel() },
+                )
+            }
+
+            // Typography & Spread Layout BottomSheet (Aa)
+            if (state.showTypographyPanel) {
+                com.moyue.ui.components.TypographySheet(
+                    fontSize = state.fontSize,
+                    fontFamily = state.fontFamily,
+                    fontWeight = state.fontWeight,
+                    layoutSpreadMode = state.layoutSpreadMode,
+                    isLargeScreen = isLargeScreen,
+                    isEinkMode = state.isEinkMode,
+                    onFontSizeChange = { viewModel.setFontSize(it) },
+                    onFontFamilyChange = { viewModel.setFontFamily(it) },
+                    onFontWeightChange = { viewModel.setFontWeight(it) },
+                    onLayoutSpreadModeChange = { viewModel.setLayoutSpreadMode(it) },
+                    onClose = { viewModel.toggleTypographyPanel() }
                 )
             }
 

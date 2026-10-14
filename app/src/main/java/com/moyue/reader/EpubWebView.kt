@@ -43,6 +43,7 @@ fun EpubWebView(
     fontScale: Float,
     fontFamily: String = "sans-serif",
     fontWeight: String = "normal",
+    isDualPage: Boolean = false,
     onTextSelected: (String) -> Unit,
     onLinkClicked: (String) -> Unit = {},
     onParagraphClicked: ((Int) -> Unit)? = null,
@@ -91,6 +92,10 @@ fun EpubWebView(
 
     LaunchedEffect(isEinkMode) {
         webView?.evaluateJavascript("window.isEink = $isEinkMode;", null)
+    }
+
+    LaunchedEffect(isDualPage) {
+        webView?.evaluateJavascript("window.isDualPage = $isDualPage;", null)
     }
 
     LaunchedEffect(clearSelectionTrigger) {
@@ -228,14 +233,20 @@ fun EpubWebView(
             webView?.let { wv ->
                 // Construct HTML with initial CSS. 
                 // Note: This uses the *current* values of initCss variables at the moment of loading.
+                val dualCss = if (isDualPage) {
+                    "body{column-count:2!important;column-gap:44px!important;column-rule:1px solid rgba(128,128,128,0.18)!important;padding:20px 32px!important;max-width:100%!important;box-sizing:border-box!important}"
+                } else {
+                    "body{margin:16px!important}"
+                }
                 val currentInitCss = """<style id="mt">
                     *{background-color:${bgColor}!important;color:${textColor}!important}
-                    body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:1.8!important;margin:16px!important;font-size:${(fontScale*100).toInt()}%!important;font-weight:${fontWeight}!important}
+                    body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:1.8!important;font-size:${(fontScale*100).toInt()}%!important;font-weight:${fontWeight}!important}
                     p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${(fontScale*100).toInt()}%!important;line-height:1.8!important;font-family:${fontFamily}!important;font-weight:${fontWeight}!important}
                     p{margin-bottom:0.8em!important}
                     h1,h2,h3,h4{font-weight:bold!important}
                     img{max-width:100%!important;height:auto!important}
                     a{color:#06C!important}
+                    $dualCss
                     .tts-hl{background-color:rgba(59,130,246,0.2)!important;border-left:3px solid #3b82f6!important}
                     .tts-hl ruby, .tts-hl rt, .tts-hl rb, .tts-hl rp{background-color:transparent!important}
                     .tts-sentence-hl{background-color:rgba(34,197,94,0.30)!important;border-radius:2px!important;padding:1px 2px!important;-webkit-box-decoration-break:clone!important;box-decoration-break:clone!important}
@@ -260,26 +271,35 @@ fun EpubWebView(
     // Dynamic theme/font update via JS (does not reload page, preserves scroll)
     // For font size changes: save scroll ratio before, restore after to keep visual position
     var lastFontScale by remember { mutableStateOf(fontScale) }
-    LaunchedEffect(fontScale, bgColor, textColor, fontFamily, fontWeight) {
+    var lastDualPage by remember { mutableStateOf(isDualPage) }
+    LaunchedEffect(fontScale, bgColor, textColor, fontFamily, fontWeight, isDualPage) {
         webView?.let { wv ->
             if (lastLoadedContent == null) return@let // Not loaded yet
             
             val sz = (fontScale * 100).toInt()
             
-            // If font size changed, save scroll ratio before applying new size
-            val fontChanged = lastFontScale != fontScale
+            // If font size or dual page layout changed, save scroll ratio before applying new size
+            val layoutChanged = (lastFontScale != fontScale) || (lastDualPage != isDualPage)
             lastFontScale = fontScale
+            lastDualPage = isDualPage
+
+            val dualJs = if (isDualPage) {
+                "'body{column-count:2!important;column-gap:44px!important;column-rule:1px solid rgba(128,128,128,0.18)!important;padding:20px 32px!important;max-width:100%!important;box-sizing:border-box!important}'+ "
+            } else {
+                "'body{column-count:auto!important;column-gap:normal!important;column-rule:none!important;margin:16px!important;padding:0!important}'+ "
+            }
             
             val js = """(function(){
                 var e=document.getElementById('mt');
                 if(!e)return;
                 e.textContent='*{background-color:${bgColor}!important;color:${textColor}!important}'+
-                'body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:1.8!important;margin:16px!important;font-size:${sz}%!important;font-weight:${fontWeight}!important}'+
+                'body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:1.8!important;font-size:${sz}%!important;font-weight:${fontWeight}!important}'+
                 'p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${sz}%!important;line-height:1.8!important;font-family:${fontFamily}!important;font-weight:${fontWeight}!important}'+
                 'p{margin-bottom:0.8em!important}'+
                 'h1,h2,h3,h4{font-weight:bold!important}'+
                 'img{max-width:100%!important;height:auto!important}'+
                 'a{color:#06C!important}'+
+                $dualJs
                 '.tts-hl{background-color:rgba(59,130,246,0.2)!important;border-left:3px solid #3b82f6!important}'+
                 '.tts-hl ruby, .tts-hl rt, .tts-hl rb, .tts-hl rp{background-color:transparent!important}'+
                 '.tts-sentence-hl{background-color:rgba(34,197,94,0.30)!important;border-radius:2px!important;padding:1px 2px!important;-webkit-box-decoration-break:clone!important;box-decoration-break:clone!important}'+
@@ -288,7 +308,7 @@ fun EpubWebView(
                 '::-webkit-scrollbar{width:0!important;height:0!important}';
             })()"""
             
-            if (fontChanged) {
+            if (layoutChanged) {
                 // Step 1: Save scroll ratio
                 wv.evaluateJavascript(
                     "(function(){var sy=window.scrollY;var sh=document.body.scrollHeight;var vh=window.innerHeight;window._savedScrollRatio=sy/Math.max(1,sh-vh);})()"
@@ -821,7 +841,7 @@ fun EpubWebView(
                                         MoreaderBridge.onPrevChapter();
                                         return;
                                     }
-                                    var step=Math.max(200,window.innerHeight-40);
+                                    var step=window.isDualPage ? Math.max(300, window.innerHeight * 0.9) : Math.max(200,window.innerHeight-40);
                                     window.scrollBy({top:-step,left:0,behavior:'instant'});
                                 };
                                 window.pageDown=function(){
@@ -830,7 +850,7 @@ fun EpubWebView(
                                         MoreaderBridge.onNextChapter();
                                         return;
                                     }
-                                    var step=Math.max(200,window.innerHeight-40);
+                                    var step=window.isDualPage ? Math.max(300, window.innerHeight * 0.9) : Math.max(200,window.innerHeight-40);
                                     window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:'instant'});
                                 };
 

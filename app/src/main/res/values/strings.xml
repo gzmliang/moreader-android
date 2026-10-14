@@ -766,6 +766,22 @@ AI Voice（云端 TTS）：
     <string name="ai_quiz_export_success">已成功导出至: %1$s</string>
     <string name="ai_quiz_export_failed">导出失败: %1$s</string>
 
+    <!-- Reader Typography & Spread Layout (Aa) -->
+    <string name="reader_typography_title">排版与字体设置</string>
+    <string name="reader_font_family_title">字体选择</string>
+    <string name="reader_font_size_title">字号大小</string>
+    <string name="reader_font_weight_title">字重粗细</string>
+    <string name="reader_layout_mode_title">页面布局 (大屏/平板)</string>
+    <string name="reader_layout_auto">自动适应</string>
+    <string name="reader_layout_single">强制单页</string>
+    <string name="reader_layout_dual">双页书本</string>
+    <string name="reader_layout_auto_desc">大屏设备 (>=600dp) 自动双页，手机单页</string>
+    <string name="font_name_system">系统默认</string>
+    <string name="font_name_serif">经典宋体 / 衬线体</string>
+    <string name="font_name_sans">清晰黑体 / 无衬线</string>
+    <string name="font_name_kaiti">圆润楷体 / 手写风</string>
+    <string name="font_name_mono">现代等宽</string>
+
     <!-- Reports Tab -->
     <string name="ai_reports_title">答题成绩单</string>
     <string name="ai_reports_empty">暂无答题记录，快去完成一次自测吧！</string>

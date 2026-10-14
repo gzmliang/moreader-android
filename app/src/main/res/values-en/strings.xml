@@ -643,6 +643,22 @@ Just change the Base URL and API Key</string>
     <string name="ai_quiz_export_success">Successfully exported to: %1$s</string>
     <string name="ai_quiz_export_failed">Export failed: %1$s</string>
 
+    <!-- Reader Typography & Spread Layout (Aa) -->
+    <string name="reader_typography_title">Typography &amp; Layout</string>
+    <string name="reader_font_family_title">Font Family</string>
+    <string name="reader_font_size_title">Font Size</string>
+    <string name="reader_font_weight_title">Font Weight</string>
+    <string name="reader_layout_mode_title">Page Layout (Tablet / Foldable)</string>
+    <string name="reader_layout_auto">Auto Detect</string>
+    <string name="reader_layout_single">Single Page</string>
+    <string name="reader_layout_dual">Two-Page Spread</string>
+    <string name="reader_layout_auto_desc">Auto dual-page spread on large screens (&gt;= 600dp)</string>
+    <string name="font_name_system">System Default</string>
+    <string name="font_name_serif">Elegant Serif / SongTi</string>
+    <string name="font_name_sans">Modern Sans-Serif</string>
+    <string name="font_name_kaiti">Gentle Cursive / KaiTi</string>
+    <string name="font_name_mono">Monospace</string>
+
     <!-- Reports Tab -->
     <string name="ai_reports_title">History and Reports</string>
     <string name="ai_reports_empty">No quiz records yet. Take a quiz now!</string>

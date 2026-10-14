@@ -108,6 +108,8 @@ data class ReaderUiState(
     val customTtsVoice: String = "",
     val showTocPanel: Boolean = false,
     val showTtsSettingsPanel: Boolean = false,
+    val showTypographyPanel: Boolean = false,
+    val layoutSpreadMode: String = "auto", // "auto", "single", "dual"
     val showTranslationPanel: Boolean = false,
     val showSelectionMenu: Boolean = false,
     // Bookmark
@@ -217,6 +219,9 @@ class ReaderViewModel(
             translateEngine = TranslateEngine.valueOf(prefs.getString("translate_engine", "CLOUD") ?: "CLOUD"),
             localAiModelName = localAiEngine.getModelName(application),
             localAiGpuLayers = localAiEngine.getGpuLayers(application),
+            fontFamily = prefs.getString("reader_font_family", "sans-serif") ?: "sans-serif",
+            fontWeight = prefs.getString("reader_font_weight", "400") ?: "400",
+            layoutSpreadMode = prefs.getString("reader_layout_spread", "auto") ?: "auto",
             isEinkMode = prefs.getBoolean("eink_mode", false) ||
                 application.getSharedPreferences("moreader_ai_prefs", Context.MODE_PRIVATE).getBoolean("ai_eink_mode", false),
         )
@@ -574,8 +579,21 @@ class ReaderViewModel(
             repository.updateBookFontSize(book.id, size)
         }
     }
-    fun setFontFamily(f: String) { _uiState.update { it.copy(fontFamily = f) } }
-    fun setFontWeight(w: String) { _uiState.update { it.copy(fontWeight = w) } }
+    fun setFontFamily(f: String) { 
+        prefs.edit().putString("reader_font_family", f).apply()
+        _uiState.update { it.copy(fontFamily = f) } 
+    }
+    fun setFontWeight(w: String) { 
+        prefs.edit().putString("reader_font_weight", w).apply()
+        _uiState.update { it.copy(fontWeight = w) } 
+    }
+    fun setLayoutSpreadMode(mode: String) {
+        prefs.edit().putString("reader_layout_spread", mode).apply()
+        _uiState.update { it.copy(layoutSpreadMode = mode) }
+    }
+    fun toggleTypographyPanel() {
+        _uiState.update { it.copy(showTypographyPanel = !it.showTypographyPanel) }
+    }
     fun setTextBrightness(v: Int) {
         val adj = v.coerceIn(0, 100)
         _uiState.update { it.copy(textBrightness = adj) }
