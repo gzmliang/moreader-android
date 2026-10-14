@@ -32,12 +32,14 @@ fun TypographySheet(
     fontFamily: String,
     fontWeight: String,
     layoutSpreadMode: String,
+    lineHeightMode: String = "standard", // "compact", "standard", "relaxed"
     pageAnimationMode: String,
     isLargeScreen: Boolean,
     isEinkMode: Boolean,
     onFontSizeChange: (Int) -> Unit,
     onFontFamilyChange: (String) -> Unit,
     onFontWeightChange: (String) -> Unit,
+    onLineHeightChange: (String) -> Unit,
     onLayoutSpreadModeChange: (String) -> Unit,
     onPageAnimationModeChange: (String) -> Unit,
     onClose: () -> Unit
@@ -150,10 +152,10 @@ fun TypographySheet(
             Spacer(Modifier.height(8.dp))
 
             val fontList = listOf(
-                Triple("serif", R.string.font_name_serif, "优雅宋体 Classic Literary (精读推荐)"),
-                Triple("sans-serif", R.string.font_name_sans, "清晰黑体 Modern Clean (现代干练)"),
-                Triple("cursive", R.string.font_name_kaiti, "温润楷体 Gentle Script (诗意柔美)"),
-                Triple("monospace", R.string.font_name_mono, "现代等宽 Monospace (严谨工整)")
+                Triple("serif", R.string.font_name_serif, R.string.font_desc_serif),
+                Triple("sans-serif", R.string.font_name_sans, R.string.font_desc_sans),
+                Triple("cursive", R.string.font_name_kaiti, R.string.font_desc_kaiti),
+                Triple("monospace", R.string.font_name_mono, R.string.font_desc_mono)
             )
 
             // Render 2x2 Grid of Font Cards
@@ -164,7 +166,7 @@ fun TypographySheet(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         for (j in i until minOf(i + 2, fontList.size)) {
-                            val (valKey, nameResId, sampleText) = fontList[j]
+                            val (valKey, nameResId, descResId) = fontList[j]
                             val isSelected = (fontFamily == valKey)
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
@@ -201,7 +203,7 @@ fun TypographySheet(
                                     }
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        text = sampleText,
+                                        text = stringResource(descResId),
                                         fontSize = 10.5.sp,
                                         maxLines = 1,
                                         color = if (isEinkMode) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
@@ -251,7 +253,43 @@ fun TypographySheet(
 
             Spacer(Modifier.height(18.dp))
 
-            // ── 4. Layout Mode (Tablet / Foldable Dual Spread) ──
+            // ── 4. Line Spacing (Compact / Normal / Relaxed) ──
+            Text(
+                text = stringResource(R.string.reader_line_height_title),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val lineModes = listOf(
+                    "compact" to R.string.reader_line_height_compact,
+                    "standard" to R.string.reader_line_height_standard,
+                    "relaxed" to R.string.reader_line_height_relaxed
+                )
+                lineModes.forEach { (lKey, lLabelId) ->
+                    val isSel = (lineHeightMode == lKey)
+                    FilterChip(
+                        selected = isSel,
+                        onClick = { onLineHeightChange(lKey) },
+                        label = {
+                            Text(
+                                stringResource(lLabelId),
+                                fontSize = 12.sp,
+                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            // ── 5. Layout Mode (Tablet / Foldable Dual Spread) ──
             Text(
                 text = stringResource(R.string.reader_layout_mode_title),
                 fontSize = 13.sp,
@@ -306,7 +344,7 @@ fun TypographySheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val animModes = listOf(
-                    "smooth" to R.string.reader_page_anim_smooth,
+                    "slide" to R.string.reader_page_anim_slide,
                     "instant" to R.string.reader_page_anim_instant
                 )
                 animModes.forEach { (aKey, aLabelId) ->

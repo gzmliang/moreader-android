@@ -777,16 +777,24 @@ AI Voice（云端 TTS）：
     <string name="reader_layout_dual">双页书本</string>
     <string name="reader_layout_auto_desc">大屏设备 (>=600dp) 自动双页，手机单页</string>
     <string name="font_name_system">系统默认</string>
-    <string name="font_name_serif">经典宋体 / 衬线体</string>
-    <string name="font_name_sans">清晰黑体 / 无衬线</string>
-    <string name="font_name_kaiti">圆润楷体 / 手写风</string>
+    <string name="font_name_serif">经典宋体</string>
+    <string name="font_name_sans">清晰黑体</string>
+    <string name="font_name_kaiti">温润楷体</string>
     <string name="font_name_mono">现代等宽</string>
+    <string name="font_desc_serif">文雅书卷 · 精读推荐</string>
+    <string name="font_desc_sans">现代干练 · 清晰护眼</string>
+    <string name="font_desc_kaiti">诗意柔美 · 书法韵味</string>
+    <string name="font_desc_mono">严谨工整 · 代码散文</string>
     <string name="reader_prev_page">上一页</string>
     <string name="reader_next_page">下一页</string>
     <string name="reader_prev_chapter">上一章</string>
     <string name="reader_next_chapter">下一章</string>
+    <string name="reader_line_height_title">行高间距</string>
+    <string name="reader_line_height_compact">紧凑</string>
+    <string name="reader_line_height_standard">适中</string>
+    <string name="reader_line_height_relaxed">宽松</string>
     <string name="reader_page_anim_title">翻页动效</string>
-    <string name="reader_page_anim_smooth">平滑过渡</string>
+    <string name="reader_page_anim_slide">仿真平移</string>
     <string name="reader_page_anim_instant">瞬时直切</string>
 
     <!-- Reports Tab -->

@@ -451,6 +451,12 @@ fun ReaderScreen(
                 var showParagraphMenu by remember { mutableStateOf(false) }
                 var clickedParagraphIndex by remember { mutableStateOf(-1) }
                 
+                val computedLineHeight = when (state.lineHeightMode) {
+                    "compact" -> 1.45f
+                    "relaxed" -> 2.05f
+                    else -> 1.72f
+                }
+
                 EpubWebView(
                     htmlContent = state.currentHtml,
                     baseUrl = baseUrl,
@@ -459,6 +465,7 @@ fun ReaderScreen(
                     fontScale = state.fontSize / 18f,
                     fontFamily = state.fontFamily,
                     fontWeight = state.fontWeight,
+                    lineHeightScale = computedLineHeight,
                     isDualPage = isDualPageSpread,
                     onTextSelected = { viewModel.onTextSelected(it) },
                     onLinkClicked = { 
@@ -951,12 +958,14 @@ fun ReaderScreen(
                     fontFamily = state.fontFamily,
                     fontWeight = state.fontWeight,
                     layoutSpreadMode = state.layoutSpreadMode,
+                    lineHeightMode = state.lineHeightMode,
                     pageAnimationMode = state.pageAnimationMode,
                     isLargeScreen = isLargeScreen,
                     isEinkMode = state.isEinkMode,
                     onFontSizeChange = { viewModel.setFontSize(it) },
                     onFontFamilyChange = { viewModel.setFontFamily(it) },
                     onFontWeightChange = { viewModel.setFontWeight(it) },
+                    onLineHeightChange = { viewModel.setLineHeightMode(it) },
                     onLayoutSpreadModeChange = { viewModel.setLayoutSpreadMode(it) },
                     onPageAnimationModeChange = { viewModel.setPageAnimationMode(it) },
                     onClose = { viewModel.toggleTypographyPanel() }

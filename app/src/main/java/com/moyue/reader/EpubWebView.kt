@@ -43,6 +43,7 @@ fun EpubWebView(
     fontScale: Float,
     fontFamily: String = "sans-serif",
     fontWeight: String = "normal",
+    lineHeightScale: Float = 1.7f,
     isDualPage: Boolean = false,
     onTextSelected: (String) -> Unit,
     onLinkClicked: (String) -> Unit = {},
@@ -254,8 +255,8 @@ fun EpubWebView(
                 }
                 val currentInitCss = """<style id="mt">
                     *{background-color:${bgColor}!important;color:${textColor}!important}
-                    body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:1.8!important;font-size:${(fontScale*100).toInt()}%!important;font-weight:${fontWeight}!important}
-                    p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${(fontScale*100).toInt()}%!important;line-height:1.8!important;font-family:${fontFamily}!important;font-weight:${fontWeight}!important}
+                    body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:${lineHeightScale}!important;font-size:${(fontScale*100).toInt()}%!important;font-weight:${fontWeight}!important}
+                    p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${(fontScale*100).toInt()}%!important;line-height:${lineHeightScale}!important;font-family:${fontFamily}!important;font-weight:${fontWeight}!important}
                     p{margin-bottom:0.8em!important}
                     h1,h2,h3,h4{font-weight:bold!important}
                     img{max-width:100%!important;height:auto!important}
@@ -285,16 +286,18 @@ fun EpubWebView(
     // Dynamic theme/font update via JS (does not reload page, preserves scroll)
     // For font size changes: save scroll ratio before, restore after to keep visual position
     var lastFontScale by remember { mutableStateOf(fontScale) }
+    var lastLineHeight by remember { mutableStateOf(lineHeightScale) }
     var lastDualPage by remember { mutableStateOf(isDualPage) }
-    LaunchedEffect(fontScale, bgColor, textColor, fontFamily, fontWeight, isDualPage) {
+    LaunchedEffect(fontScale, bgColor, textColor, fontFamily, fontWeight, lineHeightScale, isDualPage) {
         webView?.let { wv ->
             if (lastLoadedContent == null) return@let // Not loaded yet
             
             val sz = (fontScale * 100).toInt()
             
-            // If font size or dual page layout changed, save scroll ratio before applying new size
-            val layoutChanged = (lastFontScale != fontScale) || (lastDualPage != isDualPage)
+            // If font size, line height or dual page layout changed, save scroll ratio before applying new size
+            val layoutChanged = (lastFontScale != fontScale) || (lastLineHeight != lineHeightScale) || (lastDualPage != isDualPage)
             lastFontScale = fontScale
+            lastLineHeight = lineHeightScale
             lastDualPage = isDualPage
 
             val dualJs = if (isDualPage) {
@@ -307,8 +310,8 @@ fun EpubWebView(
                 var e=document.getElementById('mt');
                 if(!e)return;
                 e.textContent='*{background-color:${bgColor}!important;color:${textColor}!important}'+
-                'body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:1.8!important;font-size:${sz}%!important;font-weight:${fontWeight}!important}'+
-                'p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${sz}%!important;line-height:1.8!important;font-family:${fontFamily}!important;font-weight:${fontWeight}!important}'+
+                'body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:${lineHeightScale}!important;font-size:${sz}%!important;font-weight:${fontWeight}!important}'+
+                'p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${sz}%!important;line-height:${lineHeightScale}!important;font-family:${fontFamily}!important;font-weight:${fontWeight}!important}'+
                 'p{margin-bottom:0.8em!important}'+
                 'h1,h2,h3,h4{font-weight:bold!important}'+
                 'img{max-width:100%!important;height:auto!important}'+
@@ -849,27 +852,72 @@ fun EpubWebView(
                                     }
                                 });
                                 
-                                // For page scrolling with configurable animation (Smooth vs Instant)
-                                window.getPageScrollBehavior=function(){
-                                    if(window.isEink || window.pageAnimationMode==='instant') return 'instant';
-                                    return 'smooth';
-                                };
+                                // For human-like horizontal slide page animation (从右往左翻/从左往右翻)
+                                window._isPageAnimating=false;
                                 window.pageUp=function(){
+                                    if(window._isPageAnimating) return;
                                     if(window.scrollY<=2){
                                         MoreaderBridge.onPrevChapter();
                                         return;
                                     }
                                     var step=window.isDualPage ? Math.max(300, window.innerHeight * 0.9) : Math.max(200,window.innerHeight-40);
-                                    window.scrollBy({top:-step,left:0,behavior:window.getPageScrollBehavior()});
+                                    if(window.isEink || window.pageAnimationMode==='instant'){
+                                        window.scrollBy({top:-step,left:0,behavior:'instant'});
+                                        return;
+                                    }
+                                    // 模拟向右翻回上一页动画 (Slide Right)
+                                    window._isPageAnimating=true;
+                                    document.body.style.transition='transform 0.16s ease-out, opacity 0.16s ease-out';
+                                    document.body.style.transform='translateX(40px)';
+                                    document.body.style.opacity='0.65';
+                                    setTimeout(function(){
+                                        window.scrollBy({top:-step,left:0,behavior:'instant'});
+                                        document.body.style.transition='none';
+                                        document.body.style.transform='translateX(-40px)';
+                                        document.body.offsetHeight; // force reflow
+                                        document.body.style.transition='transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease-out';
+                                        document.body.style.transform='translateX(0)';
+                                        document.body.style.opacity='1';
+                                        setTimeout(function(){
+                                            document.body.style.transition='';
+                                            document.body.style.transform='';
+                                            document.body.style.opacity='';
+                                            window._isPageAnimating=false;
+                                        },200);
+                                    },160);
                                 };
                                 window.pageDown=function(){
+                                    if(window._isPageAnimating) return;
                                     var maxScroll=Math.max(0,document.body.scrollHeight-window.innerHeight);
                                     if(window.scrollY>=maxScroll-4){
                                         MoreaderBridge.onNextChapter();
                                         return;
                                     }
                                     var step=window.isDualPage ? Math.max(300, window.innerHeight * 0.9) : Math.max(200,window.innerHeight-40);
-                                    window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:window.getPageScrollBehavior()});
+                                    if(window.isEink || window.pageAnimationMode==='instant'){
+                                        window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:'instant'});
+                                        return;
+                                    }
+                                    // 模拟从右往左翻到下一页动画 (Slide Left)
+                                    window._isPageAnimating=true;
+                                    document.body.style.transition='transform 0.16s ease-out, opacity 0.16s ease-out';
+                                    document.body.style.transform='translateX(-40px)';
+                                    document.body.style.opacity='0.65';
+                                    setTimeout(function(){
+                                        window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:'instant'});
+                                        document.body.style.transition='none';
+                                        document.body.style.transform='translateX(40px)';
+                                        document.body.offsetHeight; // force reflow
+                                        document.body.style.transition='transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease-out';
+                                        document.body.style.transform='translateX(0)';
+                                        document.body.style.opacity='1';
+                                        setTimeout(function(){
+                                            document.body.style.transition='';
+                                            document.body.style.transform='';
+                                            document.body.style.opacity='';
+                                            window._isPageAnimating=false;
+                                        },200);
+                                    },160);
                                 };
 
                                 // E-Ink edge-tap paging: left 25% for page-up, right 25% for page-down, middle 50% for menu/paragraph

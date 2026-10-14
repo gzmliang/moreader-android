@@ -654,16 +654,24 @@ Just change the Base URL and API Key</string>
     <string name="reader_layout_dual">Two-Page Spread</string>
     <string name="reader_layout_auto_desc">Auto dual-page spread on large screens (&gt;= 600dp)</string>
     <string name="font_name_system">System Default</string>
-    <string name="font_name_serif">Elegant Serif / SongTi</string>
-    <string name="font_name_sans">Modern Sans-Serif</string>
-    <string name="font_name_kaiti">Gentle Cursive / KaiTi</string>
+    <string name="font_name_serif">Serif</string>
+    <string name="font_name_sans">Sans-Serif</string>
+    <string name="font_name_kaiti">Cursive</string>
     <string name="font_name_mono">Monospace</string>
+    <string name="font_desc_serif">Elegant Literary (Recommended)</string>
+    <string name="font_desc_sans">Modern Clean &amp; Eye-friendly</string>
+    <string name="font_desc_kaiti">Gentle Calligraphic Script</string>
+    <string name="font_desc_mono">Fixed Width &amp; Technical Prose</string>
     <string name="reader_prev_page">Previous Page</string>
     <string name="reader_next_page">Next Page</string>
     <string name="reader_prev_chapter">Previous Chapter</string>
     <string name="reader_next_chapter">Next Chapter</string>
+    <string name="reader_line_height_title">Line Spacing</string>
+    <string name="reader_line_height_compact">Compact</string>
+    <string name="reader_line_height_standard">Normal</string>
+    <string name="reader_line_height_relaxed">Relaxed</string>
     <string name="reader_page_anim_title">Page Animation</string>
-    <string name="reader_page_anim_smooth">Smooth</string>
+    <string name="reader_page_anim_slide">Slide Page</string>
     <string name="reader_page_anim_instant">Instant</string>
 
     <!-- Reports Tab -->
