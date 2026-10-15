@@ -254,8 +254,9 @@ fun EpubWebView(
                     "body{margin:16px!important}"
                 }
                 val currentInitCss = """<style id="mt">
+                    html{perspective:1600px!important;-webkit-perspective:1600px!important;overflow-x:hidden!important}
                     *{background-color:${bgColor}!important;color:${textColor}!important}
-                    body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:${lineHeightScale}!important;font-size:${(fontScale*100).toInt()}%!important;font-weight:${fontWeight}!important}
+                    body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:${lineHeightScale}!important;font-size:${(fontScale*100).toInt()}%!important;font-weight:${fontWeight}!important;transform-style:preserve-3d!important;-webkit-transform-style:preserve-3d!important;backface-visibility:hidden!important}
                     p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${(fontScale*100).toInt()}%!important;line-height:${lineHeightScale}!important;font-family:${fontFamily}!important;font-weight:${fontWeight}!important}
                     p{margin-bottom:0.8em!important}
                     h1,h2,h3,h4{font-weight:bold!important}
@@ -881,18 +882,18 @@ fun EpubWebView(
                                         return;
                                     }
                                     window._isPageAnimating=true;
-                                    var isCurl = (window.pageAnimationMode === 'curl');
+                                    var isCurl = (!window.pageAnimationMode || window.pageAnimationMode === 'curl');
                                     if(isCurl){
-                                        // 仿真书本卷角掀页效果 (Page Curl): 3D 透视向右掀开
+                                        // 仿真书本卷角掀页效果 (Page Curl): 3D 书脊翻折与纸张阴影
                                         document.body.style.transformOrigin = 'left center';
-                                        document.body.style.transition = 'transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease-out, filter 0.22s ease-out';
-                                        document.body.style.transform = 'perspective(1400px) rotateY(-18deg) scale(0.96)';
-                                        document.body.style.opacity = '0.55';
-                                        document.body.style.filter = 'brightness(0.9)';
+                                        document.body.style.transition = 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.26s ease-out, filter 0.26s ease-out';
+                                        document.body.style.transform = 'perspective(1600px) rotateY(-36deg) scale(0.92) translateZ(30px)';
+                                        document.body.style.opacity = '0.45';
+                                        document.body.style.filter = 'brightness(0.82)';
                                     }else{
                                         // 左右平移
-                                        document.body.style.transition='transform 0.16s ease-out, opacity 0.16s ease-out';
-                                        document.body.style.transform='translateX(40px)';
+                                        document.body.style.transition='transform 0.18s ease-out, opacity 0.18s ease-out';
+                                        document.body.style.transform='translateX(50px)';
                                         document.body.style.opacity='0.65';
                                     }
                                     setTimeout(function(){
@@ -900,12 +901,12 @@ fun EpubWebView(
                                         document.body.style.transition='none';
                                         if(isCurl){
                                             document.body.style.transformOrigin = 'right center';
-                                            document.body.style.transform = 'perspective(1400px) rotateY(18deg) scale(0.96)';
+                                            document.body.style.transform = 'perspective(1600px) rotateY(36deg) scale(0.92) translateZ(30px)';
                                         }else{
-                                            document.body.style.transform='translateX(-40px)';
+                                            document.body.style.transform='translateX(-50px)';
                                         }
                                         document.body.offsetHeight; // force reflow
-                                        document.body.style.transition='transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease-out, filter 0.22s ease-out';
+                                        document.body.style.transition='transform 0.30s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.26s ease-out, filter 0.26s ease-out';
                                         document.body.style.transform='none';
                                         document.body.style.opacity='1';
                                         document.body.style.filter='none';
@@ -916,8 +917,8 @@ fun EpubWebView(
                                             document.body.style.filter='';
                                             document.body.style.transformOrigin='';
                                             window._isPageAnimating=false;
-                                        },250);
-                                    }, isCurl ? 220 : 160);
+                                        },320);
+                                    }, isCurl ? 260 : 180);
                                 };
                                 window.pageDown=function(){
                                     if(window._isPageAnimating) return;
@@ -932,18 +933,18 @@ fun EpubWebView(
                                         return;
                                     }
                                     window._isPageAnimating=true;
-                                    var isCurl = (window.pageAnimationMode === 'curl');
+                                    var isCurl = (!window.pageAnimationMode || window.pageAnimationMode === 'curl');
                                     if(isCurl){
-                                        // 仿真书本向左翻起卷页效果 (Page Curl): 3D 透视卷起翻过
+                                        // 仿真书本向左翻起卷页效果 (Page Curl): 3D 书脊翻折与纸张阴影
                                         document.body.style.transformOrigin = 'right center';
-                                        document.body.style.transition = 'transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease-out, filter 0.22s ease-out';
-                                        document.body.style.transform = 'perspective(1400px) rotateY(18deg) scale(0.96)';
-                                        document.body.style.opacity = '0.55';
-                                        document.body.style.filter = 'brightness(0.9)';
+                                        document.body.style.transition = 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.26s ease-out, filter 0.26s ease-out';
+                                        document.body.style.transform = 'perspective(1600px) rotateY(36deg) scale(0.92) translateZ(30px)';
+                                        document.body.style.opacity = '0.45';
+                                        document.body.style.filter = 'brightness(0.82)';
                                     }else{
                                         // 左右平移
-                                        document.body.style.transition='transform 0.16s ease-out, opacity 0.16s ease-out';
-                                        document.body.style.transform='translateX(-40px)';
+                                        document.body.style.transition='transform 0.18s ease-out, opacity 0.18s ease-out';
+                                        document.body.style.transform='translateX(-50px)';
                                         document.body.style.opacity='0.65';
                                     }
                                     setTimeout(function(){
@@ -951,12 +952,12 @@ fun EpubWebView(
                                         document.body.style.transition='none';
                                         if(isCurl){
                                             document.body.style.transformOrigin = 'left center';
-                                            document.body.style.transform = 'perspective(1400px) rotateY(-18deg) scale(0.96)';
+                                            document.body.style.transform = 'perspective(1600px) rotateY(-36deg) scale(0.92) translateZ(30px)';
                                         }else{
-                                            document.body.style.transform='translateX(40px)';
+                                            document.body.style.transform='translateX(50px)';
                                         }
                                         document.body.offsetHeight; // force reflow
-                                        document.body.style.transition='transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease-out, filter 0.22s ease-out';
+                                        document.body.style.transition='transform 0.30s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.26s ease-out, filter 0.26s ease-out';
                                         document.body.style.transform='none';
                                         document.body.style.opacity='1';
                                         document.body.style.filter='none';
@@ -967,8 +968,8 @@ fun EpubWebView(
                                             document.body.style.filter='';
                                             document.body.style.transformOrigin='';
                                             window._isPageAnimating=false;
-                                        },250);
-                                    }, isCurl ? 220 : 160);
+                                        },320);
+                                    }, isCurl ? 260 : 180);
                                 };
 
                                 // E-Ink edge-tap paging: left 25% for page-up, right 25% for page-down, middle 50% for menu/paragraph
