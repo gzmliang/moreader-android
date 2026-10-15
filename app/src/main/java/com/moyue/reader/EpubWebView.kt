@@ -868,8 +868,153 @@ fun EpubWebView(
                                     }
                                 });
                                 
-                                // For realistic page curl & slide animations (仿真卷页 vs 左右平移 vs 瞬时直切)
-                                window._isPageAnimating=false;
+                                // Realistic Canvas-based Page Curl Overlay (真实人手掀角、卷曲与落影)
+                                window._isPageAnimating = false;
+                                window._ensureCurlCanvas = function() {
+                                    var c = document.getElementById('_curl_canvas');
+                                    if (!c) {
+                                        c = document.createElement('canvas');
+                                        c.id = '_curl_canvas';
+                                        c.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:999999;pointer-events:none;display:none;';
+                                        document.documentElement.appendChild(c);
+                                    }
+                                    c.width = window.innerWidth;
+                                    c.height = window.innerHeight;
+                                    return c;
+                                };
+
+                                window._animateCurl = function(direction, onComplete) {
+                                    var canvas = window._ensureCurlCanvas();
+                                    var ctx = canvas.getContext('2d');
+                                    var W = canvas.width;
+                                    var H = canvas.height;
+                                    canvas.style.display = 'block';
+
+                                    var duration = 360; // ms
+                                    var startTime = null;
+
+                                    // Pick paper colors matching theme
+                                    var isDark = (document.body.style.backgroundColor && document.body.style.backgroundColor.indexOf('26') >= 0);
+                                    var flapColor = isDark ? '#252B28' : '#EDE4CE';
+                                    var flapEdge = isDark ? '#3D4843' : '#DFCBB2';
+
+                                    function stepAnim(timestamp) {
+                                        if (!startTime) startTime = timestamp;
+                                        var elapsed = timestamp - startTime;
+                                        var progress = Math.min(1, elapsed / duration);
+                                        // Ease-out cubic
+                                        var ease = 1 - Math.pow(1 - progress, 3);
+
+                                        ctx.clearRect(0, 0, W, H);
+
+                                        // Curl coordinates: corner peels toward opposite side
+                                        var cornerProgress = ease * (W * 1.55);
+                                        
+                                        ctx.save();
+                                        if (direction === 'next') {
+                                            // Bottom-right corner curls up-left
+                                            var foldX = W - cornerProgress * 0.72;
+                                            var foldY = H - cornerProgress * 0.65;
+                                            var p1x = Math.max(0, W - cornerProgress * 0.85);
+                                            var p1y = H;
+                                            var p2x = W;
+                                            var p2y = Math.max(0, H - cornerProgress * 0.95);
+
+                                            // 1. Soft Drop Shadow on the revealed page
+                                            ctx.save();
+                                            ctx.beginPath();
+                                            ctx.moveTo(p1x, p1y);
+                                            ctx.quadraticCurveTo(foldX, foldY, p2x, p2y);
+                                            ctx.lineTo(W, H);
+                                            ctx.closePath();
+                                            ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+                                            ctx.shadowBlur = 24 * (1 - progress * 0.5);
+                                            ctx.shadowOffsetX = -12;
+                                            ctx.shadowOffsetY = -12;
+                                            ctx.fillStyle = 'rgba(0,0,0,0.08)';
+                                            ctx.fill();
+                                            ctx.restore();
+
+                                            // 2. Curled Paper Flap (the back of the turned page)
+                                            ctx.save();
+                                            ctx.beginPath();
+                                            ctx.moveTo(p1x, p1y);
+                                            ctx.quadraticCurveTo(foldX - 30, foldY - 30, foldX, foldY);
+                                            ctx.quadraticCurveTo(foldX + 25, foldY - 35, p2x, p2y);
+                                            ctx.closePath();
+
+                                            // Gradient on the cylinder flap (light highlight on the spine, shadow under curl)
+                                            var grad = ctx.createLinearGradient(foldX - 40, foldY - 40, foldX + 60, foldY + 60);
+                                            grad.addColorStop(0, flapEdge);
+                                            grad.addColorStop(0.35, '#FFFDF8');
+                                            grad.addColorStop(0.7, flapColor);
+                                            grad.addColorStop(1, 'rgba(0,0,0,0.22)');
+                                            ctx.fillStyle = grad;
+                                            ctx.fill();
+
+                                            // Flap stroke edge
+                                            ctx.strokeStyle = flapEdge;
+                                            ctx.lineWidth = 1.2;
+                                            ctx.stroke();
+                                            ctx.restore();
+
+                                        } else {
+                                            // Prev: Top-left/bottom-left curls right
+                                            var foldX = cornerProgress * 0.72;
+                                            var foldY = H - cornerProgress * 0.65;
+                                            var p1x = Math.min(W, cornerProgress * 0.85);
+                                            var p1y = H;
+                                            var p2x = 0;
+                                            var p2y = Math.max(0, H - cornerProgress * 0.95);
+
+                                            // Drop Shadow
+                                            ctx.save();
+                                            ctx.beginPath();
+                                            ctx.moveTo(p1x, p1y);
+                                            ctx.quadraticCurveTo(foldX, foldY, p2x, p2y);
+                                            ctx.lineTo(0, H);
+                                            ctx.closePath();
+                                            ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+                                            ctx.shadowBlur = 24 * (1 - progress * 0.5);
+                                            ctx.shadowOffsetX = 12;
+                                            ctx.shadowOffsetY = -12;
+                                            ctx.fillStyle = 'rgba(0,0,0,0.08)';
+                                            ctx.fill();
+                                            ctx.restore();
+
+                                            // Curled Paper Flap
+                                            ctx.save();
+                                            ctx.beginPath();
+                                            ctx.moveTo(p1x, p1y);
+                                            ctx.quadraticCurveTo(foldX + 30, foldY - 30, foldX, foldY);
+                                            ctx.quadraticCurveTo(foldX - 25, foldY - 35, p2x, p2y);
+                                            ctx.closePath();
+
+                                            var grad = ctx.createLinearGradient(foldX + 40, foldY - 40, foldX - 60, foldY + 60);
+                                            grad.addColorStop(0, flapEdge);
+                                            grad.addColorStop(0.35, '#FFFDF8');
+                                            grad.addColorStop(0.7, flapColor);
+                                            grad.addColorStop(1, 'rgba(0,0,0,0.22)');
+                                            ctx.fillStyle = grad;
+                                            ctx.fill();
+                                            ctx.strokeStyle = flapEdge;
+                                            ctx.lineWidth = 1.2;
+                                            ctx.stroke();
+                                            ctx.restore();
+                                        }
+                                        ctx.restore();
+
+                                        if (progress < 1) {
+                                            requestAnimationFrame(stepAnim);
+                                        } else {
+                                            canvas.style.display = 'none';
+                                            ctx.clearRect(0, 0, W, H);
+                                            if (onComplete) onComplete();
+                                        }
+                                    }
+                                    requestAnimationFrame(stepAnim);
+                                };
+
                                 window.pageUp=function(){
                                     if(window._isPageAnimating) return;
                                     if(window.scrollY<=2){
@@ -884,41 +1029,35 @@ fun EpubWebView(
                                     window._isPageAnimating=true;
                                     var isCurl = (!window.pageAnimationMode || window.pageAnimationMode === 'curl');
                                     if(isCurl){
-                                        // 仿真书本卷角掀页效果 (Page Curl): 3D 书脊翻折与纸张阴影
-                                        document.body.style.transformOrigin = 'left center';
-                                        document.body.style.transition = 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.26s ease-out, filter 0.26s ease-out';
-                                        document.body.style.transform = 'perspective(1600px) rotateY(-36deg) scale(0.92) translateZ(30px)';
-                                        document.body.style.opacity = '0.45';
-                                        document.body.style.filter = 'brightness(0.82)';
+                                        // 触发真实带折痕、纸瓣和阴影的物理仿真卷页动效
+                                        window._animateCurl('prev', function(){
+                                            window._isPageAnimating=false;
+                                        });
+                                        // 在掀起 120ms 后顺畅将底层文字就位
+                                        setTimeout(function(){
+                                            window.scrollBy({top:-step,left:0,behavior:'instant'});
+                                        }, 110);
                                     }else{
                                         // 左右平移
                                         document.body.style.transition='transform 0.18s ease-out, opacity 0.18s ease-out';
                                         document.body.style.transform='translateX(50px)';
                                         document.body.style.opacity='0.65';
-                                    }
-                                    setTimeout(function(){
-                                        window.scrollBy({top:-step,left:0,behavior:'instant'});
-                                        document.body.style.transition='none';
-                                        if(isCurl){
-                                            document.body.style.transformOrigin = 'right center';
-                                            document.body.style.transform = 'perspective(1600px) rotateY(36deg) scale(0.92) translateZ(30px)';
-                                        }else{
-                                            document.body.style.transform='translateX(-50px)';
-                                        }
-                                        document.body.offsetHeight; // force reflow
-                                        document.body.style.transition='transform 0.30s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.26s ease-out, filter 0.26s ease-out';
-                                        document.body.style.transform='none';
-                                        document.body.style.opacity='1';
-                                        document.body.style.filter='none';
                                         setTimeout(function(){
-                                            document.body.style.transition='';
-                                            document.body.style.transform='';
-                                            document.body.style.opacity='';
-                                            document.body.style.filter='';
-                                            document.body.style.transformOrigin='';
-                                            window._isPageAnimating=false;
-                                        },320);
-                                    }, isCurl ? 260 : 180);
+                                            window.scrollBy({top:-step,left:0,behavior:'instant'});
+                                            document.body.style.transition='none';
+                                            document.body.style.transform='translateX(-50px)';
+                                            document.body.offsetHeight;
+                                            document.body.style.transition='transform 0.30s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.26s ease-out';
+                                            document.body.style.transform='none';
+                                            document.body.style.opacity='1';
+                                            setTimeout(function(){
+                                                document.body.style.transition='';
+                                                document.body.style.transform='';
+                                                document.body.style.opacity='';
+                                                window._isPageAnimating=false;
+                                            },320);
+                                        }, 180);
+                                    }
                                 };
                                 window.pageDown=function(){
                                     if(window._isPageAnimating) return;
@@ -935,41 +1074,34 @@ fun EpubWebView(
                                     window._isPageAnimating=true;
                                     var isCurl = (!window.pageAnimationMode || window.pageAnimationMode === 'curl');
                                     if(isCurl){
-                                        // 仿真书本向左翻起卷页效果 (Page Curl): 3D 书脊翻折与纸张阴影
-                                        document.body.style.transformOrigin = 'right center';
-                                        document.body.style.transition = 'transform 0.28s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.26s ease-out, filter 0.26s ease-out';
-                                        document.body.style.transform = 'perspective(1600px) rotateY(36deg) scale(0.92) translateZ(30px)';
-                                        document.body.style.opacity = '0.45';
-                                        document.body.style.filter = 'brightness(0.82)';
+                                        // 触发真实带折痕、纸瓣和阴影的物理仿真卷页动效
+                                        window._animateCurl('next', function(){
+                                            window._isPageAnimating=false;
+                                        });
+                                        setTimeout(function(){
+                                            window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:'instant'});
+                                        }, 110);
                                     }else{
                                         // 左右平移
                                         document.body.style.transition='transform 0.18s ease-out, opacity 0.18s ease-out';
                                         document.body.style.transform='translateX(-50px)';
                                         document.body.style.opacity='0.65';
-                                    }
-                                    setTimeout(function(){
-                                        window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:'instant'});
-                                        document.body.style.transition='none';
-                                        if(isCurl){
-                                            document.body.style.transformOrigin = 'left center';
-                                            document.body.style.transform = 'perspective(1600px) rotateY(-36deg) scale(0.92) translateZ(30px)';
-                                        }else{
-                                            document.body.style.transform='translateX(50px)';
-                                        }
-                                        document.body.offsetHeight; // force reflow
-                                        document.body.style.transition='transform 0.30s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.26s ease-out, filter 0.26s ease-out';
-                                        document.body.style.transform='none';
-                                        document.body.style.opacity='1';
-                                        document.body.style.filter='none';
                                         setTimeout(function(){
-                                            document.body.style.transition='';
-                                            document.body.style.transform='';
-                                            document.body.style.opacity='';
-                                            document.body.style.filter='';
-                                            document.body.style.transformOrigin='';
-                                            window._isPageAnimating=false;
-                                        },320);
-                                    }, isCurl ? 260 : 180);
+                                            window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:'instant'});
+                                            document.body.style.transition='none';
+                                            document.body.style.transform='translateX(50px)';
+                                            document.body.offsetHeight;
+                                            document.body.style.transition='transform 0.30s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.26s ease-out';
+                                            document.body.style.transform='none';
+                                            document.body.style.opacity='1';
+                                            setTimeout(function(){
+                                                document.body.style.transition='';
+                                                document.body.style.transform='';
+                                                document.body.style.opacity='';
+                                                window._isPageAnimating=false;
+                                            },320);
+                                        }, 180);
+                                    }
                                 };
 
                                 // E-Ink edge-tap paging: left 25% for page-up, right 25% for page-down, middle 50% for menu/paragraph
