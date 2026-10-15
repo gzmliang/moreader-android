@@ -226,7 +226,7 @@ class ReaderViewModel(
             fontWeight = prefs.getString("reader_font_weight", "400") ?: "400",
             layoutSpreadMode = prefs.getString("reader_layout_spread", "auto") ?: "auto",
             lineHeightMode = prefs.getString("reader_line_height", "standard") ?: "standard",
-            pageAnimationMode = prefs.getString("reader_page_anim", "slide") ?: "slide",
+            pageAnimationMode = if ((prefs.getString("reader_page_anim", "slide") ?: "slide") == "instant") "instant" else "slide",
             isEinkMode = prefs.getBoolean("eink_mode", false) ||
                 application.getSharedPreferences("moreader_ai_prefs", Context.MODE_PRIVATE).getBoolean("ai_eink_mode", false),
         )

@@ -671,7 +671,7 @@ Just change the Base URL and API Key</string>
     <string name="reader_line_height_standard">Normal</string>
     <string name="reader_line_height_relaxed">Relaxed</string>
     <string name="reader_page_anim_title">Page Animation</string>
-    <string name="reader_page_anim_slide">Slide Page</string>
+    <string name="reader_page_anim_slide">Smooth Slide</string>
     <string name="reader_page_anim_instant">Instant</string>
 
     <!-- Reports Tab -->

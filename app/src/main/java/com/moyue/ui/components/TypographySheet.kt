@@ -344,7 +344,6 @@ fun TypographySheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val animModes = listOf(
-                    "curl" to R.string.reader_page_anim_curl,
                     "slide" to R.string.reader_page_anim_slide,
                     "instant" to R.string.reader_page_anim_instant
                 )

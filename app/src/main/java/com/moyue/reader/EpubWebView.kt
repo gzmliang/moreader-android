@@ -1,9 +1,15 @@
 package com.moyue.app.reader
 
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.view.MotionEvent
 import android.view.View
 import android.webkit.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -13,16 +19,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.moyue.app.data.BookRepository
 import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * WebView-based EPUB chapter renderer with page-tap support.
@@ -85,6 +96,88 @@ fun EpubWebView(
     val footnoteCallbackRef = remember { mutableStateOf<(String, String, Int, Int) -> Unit>({ _, _, _, _ -> }) }
     val prevChapterCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
     val nextChapterCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
+
+    var slideBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    val slideOffset = remember { Animatable(0f) }
+    var slideDirection by remember { mutableStateOf(1) } // 1: next, -1: prev
+    var isPageAnimating by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val pageSlideRef = remember { mutableStateOf<(Int, Int) -> Unit>({ _, _ -> }) }
+
+    fun performPageSlide(direction: Int, scrollYDelta: Int) {
+        val wv = webView ?: return
+        if (isPageAnimating) return
+        isPageAnimating = true
+
+        val w = wv.width
+        val h = wv.height
+        if (w <= 0 || h <= 0) {
+            val scrollAmount = if (direction > 0) scrollYDelta else -scrollYDelta
+            wv.evaluateJavascript(
+                "window.scrollBy({top: $scrollAmount, left: 0, behavior: 'instant'}); window._isPageAnimating=false;",
+                null
+            )
+            isPageAnimating = false
+            return
+        }
+
+        try {
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bmp)
+            wv.draw(canvas)
+            slideBitmap = bmp
+            slideDirection = direction
+
+            val scrollAmount = if (direction > 0) scrollYDelta else -scrollYDelta
+            wv.evaluateJavascript(
+                "window.scrollBy({top: $scrollAmount, left: 0, behavior: 'instant'});",
+                null
+            )
+
+            val triggerAnimation = {
+                coroutineScope.launch {
+                    slideOffset.snapTo(0f)
+                    val density = wv.resources.displayMetrics.density
+                    val shadowPx = 20f * density
+                    val targetX = if (direction > 0) -(w.toFloat() + shadowPx) else (w.toFloat() + shadowPx)
+                    slideOffset.animateTo(
+                        targetValue = targetX,
+                        animationSpec = tween(
+                            durationMillis = 240,
+                            easing = FastOutSlowInEasing
+                        )
+                    )
+                    slideBitmap?.recycle()
+                    slideBitmap = null
+                    isPageAnimating = false
+                    wv.evaluateJavascript("window._isPageAnimating=false;", null)
+                }
+            }
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                wv.postVisualStateCallback(1L, object : WebView.VisualStateCallback() {
+                    override fun onComplete(requestId: Long) {
+                        triggerAnimation()
+                    }
+                })
+            } else {
+                triggerAnimation()
+            }
+        } catch (e: Exception) {
+            val scrollAmount = if (direction > 0) scrollYDelta else -scrollYDelta
+            wv.evaluateJavascript(
+                "window.scrollBy({top: $scrollAmount, left: 0, behavior: 'instant'}); window._isPageAnimating=false;",
+                null
+            )
+            slideBitmap?.recycle()
+            slideBitmap = null
+            isPageAnimating = false
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        pageSlideRef.value = { dir, step -> performPageSlide(dir, step) }
+    }
     LaunchedEffect(onTextSelected) { callbackRef.value = onTextSelected }
     LaunchedEffect(onLinkClicked) { linkCallbackRef.value = onLinkClicked }
     LaunchedEffect(onParagraphClicked) { paragraphCallbackRef.value = { idx -> onParagraphClicked?.invoke(idx) ?: Unit } }
@@ -254,9 +347,9 @@ fun EpubWebView(
                     "body{margin:16px!important}"
                 }
                 val currentInitCss = """<style id="mt">
-                    html{perspective:1600px!important;-webkit-perspective:1600px!important;overflow-x:hidden!important}
+                    html{overflow-x:hidden!important}
                     *{background-color:${bgColor}!important;color:${textColor}!important}
-                    body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:${lineHeightScale}!important;font-size:${(fontScale*100).toInt()}%!important;font-weight:${fontWeight}!important;transform-style:preserve-3d!important;-webkit-transform-style:preserve-3d!important;backface-visibility:hidden!important}
+                    body{background-color:${bgColor}!important;color:${textColor}!important;font-family:${fontFamily}!important;line-height:${lineHeightScale}!important;font-size:${(fontScale*100).toInt()}%!important;font-weight:${fontWeight}!important}
                     p,div,span,li,a,h1,h2,h3,h4,h5,h6{font-size:${(fontScale*100).toInt()}%!important;line-height:${lineHeightScale}!important;font-family:${fontFamily}!important;font-weight:${fontWeight}!important}
                     p{margin-bottom:0.8em!important}
                     h1,h2,h3,h4{font-weight:bold!important}
@@ -868,262 +961,61 @@ fun EpubWebView(
                                     }
                                 });
                                 
-                                // Realistic Canvas-based Page Curl Overlay (真实人手掀角、卷曲与落影)
+                                // Native-assisted smooth slide or instant paging
                                 window._isPageAnimating = false;
-                                window._ensureCurlCanvas = function() {
-                                    var c = document.getElementById('_curl_canvas');
-                                    if (!c) {
-                                        c = document.createElement('canvas');
-                                        c.id = '_curl_canvas';
-                                        c.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:999999;pointer-events:none;display:none;';
-                                        document.documentElement.appendChild(c);
-                                    }
-                                    c.width = window.innerWidth;
-                                    c.height = window.innerHeight;
-                                    return c;
-                                };
 
-                                window._animateCurl = function(direction, onComplete) {
-                                    var canvas = window._ensureCurlCanvas();
-                                    var ctx = canvas.getContext('2d');
-                                    var W = canvas.width;
-                                    var H = canvas.height;
-                                    canvas.style.display = 'block';
-
-                                    var duration = 360; // ms
-                                    var startTime = null;
-
-                                    // Pick paper colors matching theme
-                                    var isDark = (document.body.style.backgroundColor && document.body.style.backgroundColor.indexOf('26') >= 0);
-                                    var flapColor = isDark ? '#252B28' : '#EDE4CE';
-                                    var flapEdge = isDark ? '#3D4843' : '#DFCBB2';
-
-                                    function stepAnim(timestamp) {
-                                        if (!startTime) startTime = timestamp;
-                                        var elapsed = timestamp - startTime;
-                                        var progress = Math.min(1, elapsed / duration);
-                                        // Ease-out cubic
-                                        var ease = 1 - Math.pow(1 - progress, 3);
-
-                                        ctx.clearRect(0, 0, W, H);
-
-                                        // Curl coordinates: corner peels toward opposite side
-                                        var cornerProgress = ease * (W * 1.55);
-                                        
-                                        ctx.save();
-                                        if (direction === 'next') {
-                                            // Bottom-right corner curls up-left
-                                            var foldX = W - cornerProgress * 0.72;
-                                            var foldY = H - cornerProgress * 0.65;
-                                            var p1x = Math.max(0, W - cornerProgress * 0.85);
-                                            var p1y = H;
-                                            var p2x = W;
-                                            var p2y = Math.max(0, H - cornerProgress * 0.95);
-
-                                            // 1. Soft Drop Shadow on the revealed page
-                                            ctx.save();
-                                            ctx.beginPath();
-                                            ctx.moveTo(p1x, p1y);
-                                            ctx.quadraticCurveTo(foldX, foldY, p2x, p2y);
-                                            ctx.lineTo(W, H);
-                                            ctx.closePath();
-                                            ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-                                            ctx.shadowBlur = 24 * (1 - progress * 0.5);
-                                            ctx.shadowOffsetX = -12;
-                                            ctx.shadowOffsetY = -12;
-                                            ctx.fillStyle = 'rgba(0,0,0,0.08)';
-                                            ctx.fill();
-                                            ctx.restore();
-
-                                            // 2. Curled Paper Flap (the back of the turned page)
-                                            ctx.save();
-                                            ctx.beginPath();
-                                            ctx.moveTo(p1x, p1y);
-                                            ctx.quadraticCurveTo(foldX - 30, foldY - 30, foldX, foldY);
-                                            ctx.quadraticCurveTo(foldX + 25, foldY - 35, p2x, p2y);
-                                            ctx.closePath();
-
-                                            // Gradient on the cylinder flap (light highlight on the spine, shadow under curl)
-                                            var grad = ctx.createLinearGradient(foldX - 40, foldY - 40, foldX + 60, foldY + 60);
-                                            grad.addColorStop(0, flapEdge);
-                                            grad.addColorStop(0.35, '#FFFDF8');
-                                            grad.addColorStop(0.7, flapColor);
-                                            grad.addColorStop(1, 'rgba(0,0,0,0.22)');
-                                            ctx.fillStyle = grad;
-                                            ctx.fill();
-
-                                            // Flap stroke edge
-                                            ctx.strokeStyle = flapEdge;
-                                            ctx.lineWidth = 1.2;
-                                            ctx.stroke();
-                                            ctx.restore();
-
-                                        } else {
-                                            // Prev: Top-left/bottom-left curls right
-                                            var foldX = cornerProgress * 0.72;
-                                            var foldY = H - cornerProgress * 0.65;
-                                            var p1x = Math.min(W, cornerProgress * 0.85);
-                                            var p1y = H;
-                                            var p2x = 0;
-                                            var p2y = Math.max(0, H - cornerProgress * 0.95);
-
-                                            // Drop Shadow
-                                            ctx.save();
-                                            ctx.beginPath();
-                                            ctx.moveTo(p1x, p1y);
-                                            ctx.quadraticCurveTo(foldX, foldY, p2x, p2y);
-                                            ctx.lineTo(0, H);
-                                            ctx.closePath();
-                                            ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-                                            ctx.shadowBlur = 24 * (1 - progress * 0.5);
-                                            ctx.shadowOffsetX = 12;
-                                            ctx.shadowOffsetY = -12;
-                                            ctx.fillStyle = 'rgba(0,0,0,0.08)';
-                                            ctx.fill();
-                                            ctx.restore();
-
-                                            // Curled Paper Flap
-                                            ctx.save();
-                                            ctx.beginPath();
-                                            ctx.moveTo(p1x, p1y);
-                                            ctx.quadraticCurveTo(foldX + 30, foldY - 30, foldX, foldY);
-                                            ctx.quadraticCurveTo(foldX - 25, foldY - 35, p2x, p2y);
-                                            ctx.closePath();
-
-                                            var grad = ctx.createLinearGradient(foldX + 40, foldY - 40, foldX - 60, foldY + 60);
-                                            grad.addColorStop(0, flapEdge);
-                                            grad.addColorStop(0.35, '#FFFDF8');
-                                            grad.addColorStop(0.7, flapColor);
-                                            grad.addColorStop(1, 'rgba(0,0,0,0.22)');
-                                            ctx.fillStyle = grad;
-                                            ctx.fill();
-                                            ctx.strokeStyle = flapEdge;
-                                            ctx.lineWidth = 1.2;
-                                            ctx.stroke();
-                                            ctx.restore();
-                                        }
-                                        ctx.restore();
-
-                                        if (progress < 1) {
-                                            requestAnimationFrame(stepAnim);
-                                        } else {
-                                            canvas.style.display = 'none';
-                                            ctx.clearRect(0, 0, W, H);
-                                            if (onComplete) onComplete();
-                                        }
-                                    }
-                                    requestAnimationFrame(stepAnim);
-                                };
-
-                                window.pageUp=function(){
-                                    if(window._isPageAnimating) return;
-                                    if(window.scrollY<=2){
+                                window.pageUp = function() {
+                                    if (window._isPageAnimating) return;
+                                    if (window.scrollY <= 2) {
                                         MoreaderBridge.onPrevChapter();
                                         return;
                                     }
-                                    var step=window.isDualPage ? Math.max(300, window.innerHeight * 0.9) : Math.max(200,window.innerHeight-40);
-                                    if(window.isEink || window.pageAnimationMode==='instant'){
-                                        window.scrollBy({top:-step,left:0,behavior:'instant'});
+                                    var step = window.isDualPage ? Math.max(300, window.innerHeight * 0.9) : Math.max(200, window.innerHeight - 40);
+                                    var actualScroll = Math.min(step, window.scrollY);
+                                    if (window.isEink || window.pageAnimationMode === 'instant') {
+                                        window.scrollBy({top: -actualScroll, left: 0, behavior: 'instant'});
                                         return;
                                     }
-                                    window._isPageAnimating=true;
-                                    var isCurl = (!window.pageAnimationMode || window.pageAnimationMode === 'curl');
-                                    if(isCurl){
-                                        // 触发真实带折痕、纸瓣和阴影的物理仿真卷页动效
-                                        window._animateCurl('prev', function(){
-                                            window._isPageAnimating=false;
-                                        });
-                                        // 在掀起 120ms 后顺畅将底层文字就位
-                                        setTimeout(function(){
-                                            window.scrollBy({top:-step,left:0,behavior:'instant'});
-                                        }, 110);
-                                    }else{
-                                        // 左右平移
-                                        document.body.style.transition='transform 0.18s ease-out, opacity 0.18s ease-out';
-                                        document.body.style.transform='translateX(50px)';
-                                        document.body.style.opacity='0.65';
-                                        setTimeout(function(){
-                                            window.scrollBy({top:-step,left:0,behavior:'instant'});
-                                            document.body.style.transition='none';
-                                            document.body.style.transform='translateX(-50px)';
-                                            document.body.offsetHeight;
-                                            document.body.style.transition='transform 0.30s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.26s ease-out';
-                                            document.body.style.transform='none';
-                                            document.body.style.opacity='1';
-                                            setTimeout(function(){
-                                                document.body.style.transition='';
-                                                document.body.style.transform='';
-                                                document.body.style.opacity='';
-                                                window._isPageAnimating=false;
-                                            },320);
-                                        }, 180);
-                                    }
+                                    window._isPageAnimating = true;
+                                    MoreaderBridge.requestPageSlide(-1, actualScroll);
                                 };
-                                window.pageDown=function(){
-                                    if(window._isPageAnimating) return;
-                                    var maxScroll=Math.max(0,document.body.scrollHeight-window.innerHeight);
-                                    if(window.scrollY>=maxScroll-4){
+
+                                window.pageDown = function() {
+                                    if (window._isPageAnimating) return;
+                                    var maxScroll = Math.max(0, document.body.scrollHeight - window.innerHeight);
+                                    if (window.scrollY >= maxScroll - 4) {
                                         MoreaderBridge.onNextChapter();
                                         return;
                                     }
-                                    var step=window.isDualPage ? Math.max(300, window.innerHeight * 0.9) : Math.max(200,window.innerHeight-40);
-                                    if(window.isEink || window.pageAnimationMode==='instant'){
-                                        window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:'instant'});
+                                    var step = window.isDualPage ? Math.max(300, window.innerHeight * 0.9) : Math.max(200, window.innerHeight - 40);
+                                    var actualScroll = Math.min(step, maxScroll - window.scrollY);
+                                    if (window.isEink || window.pageAnimationMode === 'instant') {
+                                        window.scrollBy({top: actualScroll, left: 0, behavior: 'instant'});
                                         return;
                                     }
-                                    window._isPageAnimating=true;
-                                    var isCurl = (!window.pageAnimationMode || window.pageAnimationMode === 'curl');
-                                    if(isCurl){
-                                        // 触发真实带折痕、纸瓣和阴影的物理仿真卷页动效
-                                        window._animateCurl('next', function(){
-                                            window._isPageAnimating=false;
-                                        });
-                                        setTimeout(function(){
-                                            window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:'instant'});
-                                        }, 110);
-                                    }else{
-                                        // 左右平移
-                                        document.body.style.transition='transform 0.18s ease-out, opacity 0.18s ease-out';
-                                        document.body.style.transform='translateX(-50px)';
-                                        document.body.style.opacity='0.65';
-                                        setTimeout(function(){
-                                            window.scrollBy({top:Math.min(step,maxScroll-window.scrollY),left:0,behavior:'instant'});
-                                            document.body.style.transition='none';
-                                            document.body.style.transform='translateX(50px)';
-                                            document.body.offsetHeight;
-                                            document.body.style.transition='transform 0.30s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.26s ease-out';
-                                            document.body.style.transform='none';
-                                            document.body.style.opacity='1';
-                                            setTimeout(function(){
-                                                document.body.style.transition='';
-                                                document.body.style.transform='';
-                                                document.body.style.opacity='';
-                                                window._isPageAnimating=false;
-                                            },320);
-                                        }, 180);
-                                    }
+                                    window._isPageAnimating = true;
+                                    MoreaderBridge.requestPageSlide(1, actualScroll);
                                 };
 
-                                // E-Ink edge-tap paging: left 25% for page-up, right 25% for page-down, middle 50% for menu/paragraph
-                                document.addEventListener('click',function(e){
-                                    if(!window.isEink)return;
-                                    var s=window.getSelection();
-                                    if(s&&!s.isCollapsed)return;
-                                    var t=e.target;
-                                    if(t&&(t.tagName==='A'||t.closest('a')))return;
+                                // Edge-tap paging: left 25% for page-up, right 25% for page-down, middle 50% for menu/paragraph
+                                document.addEventListener('click', function(e) {
+                                    var s = window.getSelection();
+                                    if (s && !s.isCollapsed) return;
+                                    var t = e.target;
+                                    if (t && (t.tagName === 'A' || t.closest('a'))) return;
 
-                                    var x=e.clientX;
-                                    var w=window.innerWidth;
-                                    if(x<w*0.25){
+                                    var x = e.clientX;
+                                    var w = window.innerWidth;
+                                    if (x < w * 0.25) {
                                         e.preventDefault();
                                         e.stopPropagation();
                                         window.pageUp();
-                                    }else if(x>w*0.75){
+                                    } else if (x > w * 0.75) {
                                         e.preventDefault();
                                         e.stopPropagation();
                                         window.pageDown();
                                     }
-                                },true);
+                                }, true);
                                 // Get current visible paragraph index
                                 window.getVisiblePara=function(){
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
@@ -1173,6 +1065,12 @@ fun EpubWebView(
                             android.os.Handler(android.os.Looper.getMainLooper()).post { nextChapterCallbackRef.value() }
                         }
                         @JavascriptInterface
+                        fun requestPageSlide(direction: Int, scrollYDelta: Float) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                pageSlideRef.value(direction, scrollYDelta.toInt())
+                            }
+                        }
+                        @JavascriptInterface
                         fun jsLog(msg: String) { android.util.Log.d("TTS-JS", msg) }
                     }, "MoreaderBridge")
                 }
@@ -1182,6 +1080,75 @@ fun EpubWebView(
             },
             modifier = Modifier.fillMaxSize(),
         )
+
+        // Native hardware-accelerated smooth slide overlay with edge drop shadow
+        slideBitmap?.let { bmp ->
+            val density = LocalDensity.current
+            val shadowWidthDp = 20.dp
+            val shadowWidthPx = with(density) { shadowWidthDp.toPx() }
+
+            if (slideDirection > 0) {
+                // Next page: old page slides out to the left with right-side drop shadow on revealed page
+                Row(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(with(density) { (bmp.width.toFloat() + shadowWidthPx).toDp() })
+                        .offset { IntOffset(slideOffset.value.roundToInt(), 0) }
+                ) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(with(density) { bmp.width.toDp() })
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(shadowWidthDp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color.Black.copy(alpha = 0.25f),
+                                        Color.Black.copy(alpha = 0.08f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
+                }
+            } else {
+                // Prev page: old page slides out to the right with left-side drop shadow on revealed page
+                Row(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(with(density) { (bmp.width.toFloat() + shadowWidthPx).toDp() })
+                        .offset { IntOffset((slideOffset.value - shadowWidthPx).roundToInt(), 0) }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(shadowWidthDp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.08f),
+                                        Color.Black.copy(alpha = 0.25f)
+                                    )
+                                )
+                            )
+                    )
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(with(density) { bmp.width.toDp() })
+                    )
+                }
+            }
+        }
     }
 }
 
