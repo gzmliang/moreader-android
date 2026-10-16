@@ -3,6 +3,7 @@ package com.moyue.app.reader
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.view.ActionMode
 import android.view.MotionEvent
 import android.view.View
 import android.webkit.*
@@ -474,7 +475,14 @@ fun EpubWebView(
     Box(modifier = modifier) {
         AndroidView(
             factory = { ctx ->
-                WebView(ctx).apply {
+                object : WebView(ctx) {
+                    override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? {
+                        return null
+                    }
+                    override fun startActionMode(callback: ActionMode.Callback?): ActionMode? {
+                        return null
+                    }
+                }.apply {
                     webView = this
                     onWebViewCreated?.invoke(this)
                     settings.apply {

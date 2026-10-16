@@ -832,6 +832,7 @@ AI Voice（云端 TTS）：
 
     <!-- Top Bar Actions -->
     <string name="action_more">更多功能</string>
+    <string name="action_copy">复制</string>
     <string name="theme_light_mode">浅色模式</string>
     <string name="theme_dark_mode">深色模式</string>
     <string name="retry">重试</string>

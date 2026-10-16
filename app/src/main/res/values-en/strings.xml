@@ -709,6 +709,7 @@ Just change the Base URL and API Key</string>
 
     <!-- Top Bar Actions -->
     <string name="action_more">More options</string>
+    <string name="action_copy">Copy</string>
     <string name="theme_light_mode">Light Mode</string>
     <string name="theme_dark_mode">Dark Mode</string>
     <string name="retry">Retry</string>

@@ -1164,76 +1164,149 @@ fun ReaderScreen(
                     (topSafePaddingPx + currentRatio * maxAvailableHeightPx).toDp()
                 }
 
-                Surface(
+                // 折叠/展开状态：默认收起（精简胶囊），点击展开后显示完整菜单
+                var isExpanded by remember { mutableStateOf(false) }
+
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp)
-                        .offset(y = currentOffsetY)
-                        .draggable(
-                            orientation = Orientation.Vertical,
-                            state = rememberDraggableState { delta ->
-                                if (maxAvailableHeightPx > 0f) {
-                                    val deltaRatio = delta / maxAvailableHeightPx
-                                    currentRatio = (currentRatio + deltaRatio).coerceIn(0f, 1f)
-                                }
-                            },
-                            onDragStopped = {
-                                viewModel.saveSelectionMenuYRatio(currentRatio)
-                            }
-                        ),
-                    shadowElevation = 8.dp,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                    ),
-                    color = Color(android.graphics.Color.parseColor(state.theme.bgColor)).copy(alpha = 0.98f),
+                        .offset(y = currentOffsetY),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Row(
+                    Surface(
                         modifier = Modifier
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(0.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .wrapContentWidth()
+                            .padding(horizontal = 12.dp)
+                            .draggable(
+                                orientation = Orientation.Vertical,
+                                state = rememberDraggableState { delta ->
+                                    if (maxAvailableHeightPx > 0f) {
+                                        val deltaRatio = delta / maxAvailableHeightPx
+                                        currentRatio = (currentRatio + deltaRatio).coerceIn(0f, 1f)
+                                    }
+                                },
+                                onDragStopped = {
+                                    viewModel.saveSelectionMenuYRatio(currentRatio)
+                                }
+                            ),
+                        shadowElevation = 8.dp,
+                        shape = RoundedCornerShape(24.dp),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                        ),
+                        color = Color(android.graphics.Color.parseColor(state.theme.bgColor)).copy(alpha = 0.98f),
                     ) {
-                        TextButton(
-                            onClick = { viewModel.showVocabPlanPicker() },
-                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF7C4DFF)),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        Row(
+                            modifier = Modifier
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 6.dp, vertical = 3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF7C4DFF))
-                            Spacer(Modifier.width(2.dp))
-                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_add), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                        }
-                        if (existingHighlight != null) {
-                            TextButton(
-                                onClick = { viewModel.dismissSelectionMenu(); viewModel.removeHighlight(existingHighlight) },
-                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                            ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_remove), fontSize = 11.sp, maxLines = 1) }
-                        } else {
-                            TextButton(
-                                onClick = { viewModel.dismissSelectionMenu(); viewModel.addHighlight() },
-                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFE6A800)),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                            ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_add), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
-                        }
-                        TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.readSelection(state.selectedText!!) }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF059669)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_aloud), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
-                        TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("translate") }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF3B82F6)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate), fontSize = 11.sp, maxLines = 1) }
-                        TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("dictionary") }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF8B5CF6)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.dictionary), fontSize = 11.sp, maxLines = 1) }
-                        TextButton(onClick = { viewModel.dismissSelectionMenu(); viewModel.transcribeSelection() }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF59E0B)), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.transcribe), fontSize = 11.sp, maxLines = 1) }
-
-                        // Close button (✕) — 一键关闭浮窗并取消划选高亮
-                        IconButton(
-                            onClick = { viewModel.dismissSelectionAndClear() },
-                            modifier = Modifier.size(32.dp),
-                        ) {
+                            // 拖动指示把手
                             Icon(
-                                Icons.Default.Close,
-                                contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.size(16.dp),
+                                Icons.Default.DragHandle,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .padding(start = 2.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                             )
+
+                            // 1. 词典 (Dictionary)
+                            TextButton(
+                                onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("dictionary") },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF8B5CF6)),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            ) {
+                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.dictionary), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            }
+
+                            // 2. 朗读 (Read aloud)
+                            TextButton(
+                                onClick = { viewModel.dismissSelectionMenu(); viewModel.readSelection(state.selectedText!!) },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF059669)),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            ) {
+                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.read_aloud), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            }
+
+                            // 3. 生词本 (Add to Vocabulary)
+                            TextButton(
+                                onClick = { viewModel.showVocabPlanPicker() },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF7C4DFF)),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            ) {
+                                Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(13.dp), tint = Color(0xFF7C4DFF))
+                                Spacer(Modifier.width(2.dp))
+                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_add), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                            }
+
+                            // 展开项：点击展开后展示高亮、翻译、转写、复制
+                            if (isExpanded) {
+                                if (existingHighlight != null) {
+                                    TextButton(
+                                        onClick = { viewModel.dismissSelectionMenu(); viewModel.removeHighlight(existingHighlight) },
+                                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                    ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_remove), fontSize = 11.sp, maxLines = 1) }
+                                } else {
+                                    TextButton(
+                                        onClick = { viewModel.dismissSelectionMenu(); viewModel.addHighlight() },
+                                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFE6A800)),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                    ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_add), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1) }
+                                }
+
+                                TextButton(
+                                    onClick = { viewModel.dismissSelectionMenu(); viewModel.translate("translate") },
+                                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF3B82F6)),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate), fontSize = 11.sp, maxLines = 1) }
+
+                                TextButton(
+                                    onClick = { viewModel.dismissSelectionMenu(); viewModel.transcribeSelection() },
+                                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF59E0B)),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                ) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.transcribe), fontSize = 11.sp, maxLines = 1) }
+
+                                TextButton(
+                                    onClick = { viewModel.copySelectedText() },
+                                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                ) {
+                                    Text("📋 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.action_copy), fontSize = 11.sp, maxLines = 1)
+                                }
+                            }
+
+                            // 展开 / 收起 切换按钮
+                            IconButton(
+                                onClick = { isExpanded = !isExpanded },
+                                modifier = Modifier.size(30.dp),
+                            ) {
+                                Icon(
+                                    imageVector = if (isExpanded) Icons.Default.ChevronLeft else Icons.Default.MoreHoriz,
+                                    contentDescription = androidx.compose.ui.res.stringResource(
+                                        if (isExpanded) com.moyue.app.R.string.ai_collapse else com.moyue.app.R.string.action_more
+                                    ),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+
+                            // Close button (✕) — 一键关闭浮窗并取消划选高亮
+                            IconButton(
+                                onClick = { viewModel.dismissSelectionAndClear() },
+                                modifier = Modifier.size(30.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
                         }
                     }
                 }

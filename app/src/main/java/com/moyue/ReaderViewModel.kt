@@ -787,6 +787,18 @@ class ReaderViewModel(
         }
     }
     fun toggleTtsDebugLog() { _uiState.update { it.copy(showTtsDebugLog = !it.showTtsDebugLog) } }
+    fun copySelectedText() {
+        val t = _uiState.value.selectedText ?: return
+        val clipboard = getApplication<android.app.Application>()
+            .getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Selected Text", t))
+        _uiState.update { it.copy(showBookmarkToast = true, bookmarkToastMsg = getApplication<android.app.Application>().getString(com.moyue.app.R.string.ai_copy_success)) }
+        viewModelScope.launch {
+            delay(1500)
+            _uiState.update { it.copy(showBookmarkToast = false) }
+        }
+        dismissSelectionMenu()
+    }
     fun copyTtsDebugLog() {
         val log = _uiState.value.ttsDebugLog
         val clipboard = getApplication<android.app.Application>()
