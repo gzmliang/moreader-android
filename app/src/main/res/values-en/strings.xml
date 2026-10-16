@@ -970,4 +970,15 @@ Drag the slider to adjust reading speed
     <string name="sync_selected_dir_fmt">Selected: %1$s</string>
     <string name="sync_please_configure_first">Please fill in server URL and username first</string>
     <string name="sync_no_subfolders">No subfolders in this directory</string>
+
+    <!-- Settings Sheet Tabs & Theme Capsule -->
+    <string name="reader_settings_title">Settings</string>
+    <string name="settings_tab_voice">Voice</string>
+    <string name="settings_tab_llm">AI Model</string>
+    <string name="settings_tab_display">Display</string>
+    <string name="ai_model_settings_title">AI Model Settings</string>
+    <string name="ai_model_role_desc">Powers word lookup, reading companion Q&amp;A, and analysis</string>
+    <string name="theme_capsule_expand">Change Theme</string>
+    <string name="theme_capsule_collapse">Collapse</string>
+    <string name="theme_current_label">Current Theme</string>
 </resources>

@@ -1026,4 +1026,15 @@ AI Voice（云端 TTS）：
     <string name="sync_selected_dir_fmt">已选择目录：%1$s</string>
     <string name="sync_please_configure_first">请先填写服务器地址和账号密码</string>
     <string name="sync_no_subfolders">当前目录下无子文件夹</string>
+
+    <!-- Settings Sheet Tabs & Theme Capsule -->
+    <string name="reader_settings_title">设置</string>
+    <string name="settings_tab_voice">语音</string>
+    <string name="settings_tab_llm">大模型</string>
+    <string name="settings_tab_display">显示与外观</string>
+    <string name="ai_model_settings_title">大模型配置</string>
+    <string name="ai_model_role_desc">统一驱动划词翻译、智能伴读问答与内容释义</string>
+    <string name="theme_capsule_expand">更换主题</string>
+    <string name="theme_capsule_collapse">收起</string>
+    <string name="theme_current_label">当前阅读主题</string>
 </resources>

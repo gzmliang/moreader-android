@@ -3,59 +3,56 @@ package com.moyue.app.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.background
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.moyue.app.R
 import com.moyue.app.data.models.LLMConfig
 import com.moyue.app.data.models.ReaderTheme
 import com.moyue.app.data.models.TTSProviderType
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import com.moyue.app.tts.TTSListener
-import com.moyue.app.tts.TTSProvider
-import com.moyue.app.tts.EdgeTTSProvider
-import com.moyue.app.tts.AIVoiceTTSProvider
-import com.moyue.app.tts.CustomTTSProvider
-import com.moyue.app.tts.SystemTTSProvider
+import com.moyue.app.tts.*
 
-// Common voice presets
-private val AI_VOICE_MODELS = listOf(
-    "fnlp/MOSS-TTSD-v0.5" to com.moyue.app.R.string.model_moss,
-    "FunAudioLLM/CosyVoice2-0.5B" to com.moyue.app.R.string.model_cosyvoice,
-    "tts-1" to com.moyue.app.R.string.model_tts1,
-    "tts-1-hd" to com.moyue.app.R.string.model_tts1_hd,
-)
-
-private fun aiVoicesForModel(model: String): List<Pair<String, String>> {
-    val names = listOf("anna", "alex", "bella", "benjamin", "charles", "claire", "david", "diana")
-    return names.map { name ->
-        val genderLabel = when (name) {
-            "anna", "bella", "claire", "diana" -> "♀"
-            else -> "♂"
-        }
-        "$model:$name" to "${name.replaceFirstChar { it.uppercase() }} $genderLabel"
+private fun themeNameRes(theme: ReaderTheme): Int {
+    return when (theme) {
+        ReaderTheme.LIGHT -> R.string.theme_name_light
+        ReaderTheme.PARCHMENT -> R.string.theme_name_parchment
+        ReaderTheme.GRAY -> R.string.theme_name_gray
+        ReaderTheme.DARK -> R.string.theme_name_dark
+        ReaderTheme.SLATE -> R.string.theme_name_slate
     }
 }
 
@@ -64,7 +61,7 @@ private fun previewTextForVoice(voiceId: String, isEdge: Boolean): String {
     if (isEdge) {
         return when {
             voiceId.startsWith("zh-") -> "你好，我是你的朗读伴侣。希望在接下来的阅读时光里，为你带来温暖与舒适的陪伴。"
-            voiceId.startsWith("ja-") -> "こんにちは。私の声はいかがでしょうか？素敵な読書の時間をお届けします。"
+            voiceId.startsWith("ja-") -> "こんにちは。私の声はいかがでしょうか？素敵な読书の時間をお届けします。"
             voiceId.startsWith("ko-") -> "안녕하세요. 오늘부터 당신의 독서 여정에 함께할 목소리입니다. 마음에 드셨으면 좋겠습니다。"
             else -> "Hello! It is a pleasure to read with you. I hope my voice brings your favorite books and stories to life."
         }
@@ -73,8 +70,7 @@ private fun previewTextForVoice(voiceId: String, isEdge: Boolean): String {
 }
 
 /**
- * 试听按钮：直接复用各引擎真实的 TTSProvider 实例（speak），
- * 与正式朗读走同一套代码与网络栈，保证预览行为与实际出声一致。
+ * 试听按钮：直接复用各引擎真实的 TTSProvider 实例（speak）
  */
 @Composable
 private fun PreviewButton(
@@ -105,39 +101,14 @@ private fun PreviewButton(
         if (isPreviewing.value) {
             Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
-            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.voice_picker_stop), fontSize = 12.sp)
+            Text(stringResource(R.string.voice_picker_stop), fontSize = 12.sp)
         } else {
-            Text("🔊 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.voice_picker_preview), fontSize = 12.sp)
+            Text("🔊 " + stringResource(R.string.voice_picker_preview), fontSize = 12.sp)
         }
     }
 }
 
-// -- Collapsible section header --
-@Composable
-private fun SectionHeader(title: String, expanded: Boolean, onToggle: () -> Unit, help: (@Composable () -> Unit)? = null) {
-    Surface(
-        onClick = onToggle,
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-    ) {
-        Row(
-            modifier = Modifier.padding(vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(title, fontWeight = FontWeight.Medium, fontSize = 13.sp, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
-            help?.invoke()
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TtsSettingsSheet(
     currentProvider: TTSProviderType,
@@ -156,7 +127,7 @@ fun TtsSettingsSheet(
     // System TTS
     systemTtsVoice: String = "",
     llmConfig: LLMConfig,
-    // Local AI
+    // Local AI (保留参数向后兼容，UI已移除做减法)
     translateEngine: com.moyue.app.data.models.TranslateEngine = com.moyue.app.data.models.TranslateEngine.CLOUD,
     localAiModelName: String = "",
     localAiGpuLayers: Int = 0,
@@ -183,9 +154,7 @@ fun TtsSettingsSheet(
     onBrowseRecordingsClick: () -> Unit = {},
     onClose: () -> Unit,
 ) {
-    // -- Collapsible state (AI Translate & Local AI only) --
-    var showLLMConfig by remember { mutableStateOf(false) }
-    var showLocalAiConfig by remember { mutableStateOf(false) }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
 
     Surface(
         modifier = Modifier.fillMaxWidth().heightIn(max = 580.dp),
@@ -193,865 +162,1030 @@ fun TtsSettingsSheet(
         shadowElevation = 8.dp,
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Box(Modifier.fillMaxWidth()) {
-            // ── Scrollable content (below the floating header) ──
-            Column(
+        Column(Modifier.fillMaxWidth()) {
+            // ── 顶部 Header ──
+            Row(
                 Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(start = 12.dp, end = 12.dp, top = 52.dp, bottom = 12.dp)
-            ) {
-
-            // === Engine + Speed (compact) ===
-            Row(
+                    .padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_engine),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.width(4.dp))
-                var showTtsHelp by remember { mutableStateOf(false) }
-                TextButton(
-                    onClick = { showTtsHelp = true },
-                    contentPadding = PaddingValues(4.dp),
-                ) {
-                    Text("?", fontSize = 12.sp, color = Color(0xFFE53935))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        stringResource(R.string.reader_settings_title),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
-                if (showTtsHelp) {
-                    HelpDialog(
-                        title = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_btn_tts),
-                        onDismiss = { showTtsHelp = false },
-                    ) {
-                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_intro))
-                        HelpSection(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_edge_title))
-                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_edge_bullet1))
-                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_edge_bullet2))
-                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_edge_bullet3))
-                        HelpSection(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_ai_title))
-                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_ai_bullet1))
-                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_ai_bullet2))
-                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_ai_bullet3))
-                        HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_ai_example))
-                        HelpSection(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_custom_title))
-                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_custom_bullet1))
-                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_custom_bullet2))
-                        HelpSection(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_speed_title))
-                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_speed_bullet1))
-                        HelpBullet(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_tts_speed_bullet2))
-                    }
-                }
-            }
-
-            // Engine chips — FlowRow for auto-wrap
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                TTSProviderType.entries.forEach { provider ->
-                    FilterChip(
-                        selected = currentProvider == provider,
-                        onClick = { onProviderChange(provider) },
-                        label = {
-                            Text(
-                                androidx.compose.ui.res.stringResource(
-                                    when (provider) {
-                                        TTSProviderType.EDGE_TTS -> com.moyue.app.R.string.tts_provider_edge
-                                        TTSProviderType.AI_VOICE -> com.moyue.app.R.string.tts_provider_ai
-                                        TTSProviderType.CUSTOM_TTS -> com.moyue.app.R.string.tts_provider_custom
-                                        TTSProviderType.SYSTEM -> com.moyue.app.R.string.tts_provider_system
-                                    }
-                                ),
-                                fontSize = 12.sp,
-                            )
-                        },
+                IconButton(onClick = onClose) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = stringResource(R.string.close),
                     )
                 }
             }
 
-            // Speed — compact inline row
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            // ── 三选项卡 TabRow (语音 / 大模型 / 显示) ──
+            TabRow(
+                selectedTabIndex = selectedTabIndex,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
             ) {
-                Text(
-                    androidx.compose.ui.res.stringResource(
-                        com.moyue.app.R.string.tts_speed,
-                        String.format("%.1f", ttsSpeed),
-                    ),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Slider(
-                    value = ttsSpeed,
-                    onValueChange = onSpeedChange,
-                    valueRange = 0.5f..2.0f,
-                    steps = 14,
-                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                )
-            }
-
-            HorizontalDivider(Modifier.padding(vertical = 6.dp))
-
-            // === Provider-specific config — only show selected provider ===
-            if (currentProvider == TTSProviderType.EDGE_TTS) {
-                val localEp = remember(edgeEndpoint) { mutableStateOf(edgeEndpoint) }
-                val localVoice = remember(edgeVoice) { mutableStateOf(edgeVoice) }
-                var showVoicePicker by remember { mutableStateOf(false) }
-                val isPreviewing = remember { mutableStateOf(false) }
-                val previewRef = remember { mutableStateOf<TTSProvider?>(null as TTSProvider?) }
-                val context = LocalContext.current
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    OutlinedTextField(
-                        value = localEp.value,
-                        onValueChange = { localEp.value = it; onEdgeConfigChange(it, localVoice.value) },
-                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_server_url), fontSize = 11.sp) },
-                        singleLine = true, modifier = Modifier.weight(1.2f),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                        textStyle = TextStyle(fontSize = 12.sp),
-                    )
-                    Box(modifier = Modifier.weight(1f)) {
-                        OutlinedTextField(
-                            value = EdgeVoiceManager.getVoices(context).find { it.id == localVoice.value }?.displayName(context) ?: localVoice.value,
-                            onValueChange = {}, readOnly = true,
-                            label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_voice), fontSize = 11.sp) },
-                            singleLine = true, modifier = Modifier.fillMaxWidth(),
-                            textStyle = TextStyle(fontSize = 12.sp),
-                            trailingIcon = {
-                                IconButton(onClick = { showVoicePicker = true }) {
-                                    Icon(
-                                        Icons.Default.KeyboardArrowDown,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                            },
+                Tab(
+                    selected = selectedTabIndex == 0,
+                    onClick = { selectedTabIndex = 0 },
+                    text = {
+                        Text(
+                            stringResource(R.string.settings_tab_voice),
+                            fontSize = 13.sp,
+                            fontWeight = if (selectedTabIndex == 0) FontWeight.Bold else FontWeight.Normal
                         )
-                    }
-                }
-                // Preview button row
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    PreviewButton(
-                        isPreviewing = isPreviewing,
-                        previewRef = previewRef,
-                        makeProvider = { EdgeTTSProvider(localEp.value, localVoice.value) },
-                        previewText = previewTextForVoice(localVoice.value, isEdge = true),
-                    )
-                }
-                if (showVoicePicker) {
-                    VoicePickerDialog(
-                        endpoint = localEp.value,
-                        currentVoiceId = localVoice.value,
-                        onVoiceSelected = { voiceId ->
-                            localVoice.value = voiceId
-                            onEdgeConfigChange(localEp.value, voiceId)
-                            showVoicePicker = false
-                        },
-                        onDismiss = { showVoicePicker = false },
-                    )
-                }
-            }
-
-            if (currentProvider == TTSProviderType.AI_VOICE) {
-                val localEp = remember(aiEndpoint) { mutableStateOf(aiEndpoint) }
-                val localKey = remember(aiApiKey) { mutableStateOf(aiApiKey) }
-                val localModel = remember(aiModel) { mutableStateOf(aiModel) }
-                val localVoice = remember(aiVoice) { mutableStateOf(aiVoice) }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(
-                        value = localEp.value, onValueChange = { localEp.value = it; onAIVoiceConfigChange(it, localKey.value, localModel.value, localVoice.value) },
-                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_base_url), fontSize = 11.sp) },
-                        singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
-                    )
-                    OutlinedTextField(
-                        value = localKey.value, onValueChange = { localKey.value = it; onAIVoiceConfigChange(localEp.value, it, localModel.value, localVoice.value) },
-                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_api_key), fontSize = 11.sp) },
-                        singleLine = true, visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(
-                        value = localModel.value, onValueChange = { localModel.value = it; onAIVoiceConfigChange(localEp.value, localKey.value, it, localVoice.value) },
-                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_model), fontSize = 11.sp) },
-                        singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
-                    )
-                    OutlinedTextField(
-                        value = localVoice.value, onValueChange = { localVoice.value = it; onAIVoiceConfigChange(localEp.value, localKey.value, localModel.value, it) },
-                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_voice), fontSize = 11.sp) },
-                        singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
-                    )
-                }
-                // Preview button row
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    val isPreviewing = remember { mutableStateOf(false) }
-                    val previewRef = remember { mutableStateOf<TTSProvider?>(null as TTSProvider?) }
-                    PreviewButton(
-                        isPreviewing = isPreviewing,
-                        previewRef = previewRef,
-                        makeProvider = { AIVoiceTTSProvider(localEp.value, localKey.value, localModel.value, localVoice.value) },
-                        previewText = previewTextForVoice(localVoice.value, isEdge = false),
-                    )
-                }
-            }
-
-            if (currentProvider == TTSProviderType.CUSTOM_TTS) {
-                Text(
-                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_custom_tts_hint),
-                    fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                )
-                Spacer(Modifier.height(4.dp))
-                val localEp = remember(customEndpoint) { mutableStateOf(customEndpoint) }
-                val localKey = remember(customApiKey) { mutableStateOf(customApiKey) }
-                val localModel = remember(customModel) { mutableStateOf(customModel) }
-                val localVoice = remember(customVoice) { mutableStateOf(customVoice) }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(
-                        value = localEp.value, onValueChange = { localEp.value = it; onCustomTTSConfigChange(it, localKey.value, localModel.value, localVoice.value) },
-                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_base_url), fontSize = 11.sp) },
-                        singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
-                    )
-                    OutlinedTextField(
-                        value = localKey.value, onValueChange = { localKey.value = it; onCustomTTSConfigChange(localEp.value, it, localModel.value, localVoice.value) },
-                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_api_key), fontSize = 11.sp) },
-                        singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(
-                        value = localModel.value, onValueChange = { localModel.value = it; onCustomTTSConfigChange(localEp.value, localKey.value, it, localVoice.value) },
-                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_model), fontSize = 11.sp) },
-                        singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
-                    )
-                    OutlinedTextField(
-                        value = localVoice.value, onValueChange = { localVoice.value = it; onCustomTTSConfigChange(localEp.value, localKey.value, localModel.value, it) },
-                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_label_voice), fontSize = 11.sp) },
-                        singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
-                    )
-                }
-                // Preview button row
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    val isPreviewing = remember { mutableStateOf(false) }
-                    val previewRef = remember { mutableStateOf<TTSProvider?>(null as TTSProvider?) }
-                    PreviewButton(
-                        isPreviewing = isPreviewing,
-                        previewRef = previewRef,
-                        makeProvider = { CustomTTSProvider(localEp.value, localKey.value, localModel.value, localVoice.value) },
-                        previewText = previewTextForVoice(localVoice.value, isEdge = false),
-                    )
-                }
-            }
-
-            if (currentProvider == TTSProviderType.SYSTEM) {
-                val context = LocalContext.current
-                var showSysVoiceMenu by remember { mutableStateOf(false) }
-                // voice name → display name pairs from the engine companion
-                val sysVoices = remember { mutableStateListOf<Pair<String, String>>() }
-                LaunchedEffect(Unit) {
-                    sysVoices.clear()
-                    val engineVoices = com.moyue.app.tts.SystemTTSProvider.getCurrentVoices()
-                    sysVoices.addAll(engineVoices.map { it.name to it.displayName })
-                }
-                val sysEngine = com.moyue.app.tts.SystemTTSProvider.getCurrentEngineName()
-
-                Text(
-                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_system_engine) + ": ${sysEngine.ifEmpty { "—" }}",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                )
-                Spacer(Modifier.height(4.dp))
-
-                // Voice picker dropdown (same style as Edge TTS)
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    val displayText = sysVoices.firstOrNull { it.first == systemTtsVoice }?.second
-                        ?: androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_system_default_voice)
-                    OutlinedTextField(
-                        value = displayText,
-                        onValueChange = {}, readOnly = true,
-                        label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_voice), fontSize = 11.sp) },
-                        singleLine = true, modifier = Modifier.fillMaxWidth(),
-                        textStyle = TextStyle(fontSize = 12.sp),
-                        trailingIcon = {
-                            IconButton(onClick = { showSysVoiceMenu = true }) {
-                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
-                            }
-                        },
-                    )
-                    DropdownMenu(
-                        expanded = showSysVoiceMenu,
-                        onDismissRequest = { showSysVoiceMenu = false },
-                        modifier = Modifier.heightIn(max = 300.dp),
-                    ) {
-                        if (sysVoices.isEmpty()) {
-                            DropdownMenuItem(
-                                text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_system_voices_loading), fontSize = 12.sp) },
-                                onClick = { showSysVoiceMenu = false },
-                                enabled = false,
-                            )
-                        } else {
-                            // Group by locale (extract from display name parenthetical)
-                            val grouped = sysVoices.groupBy { (_, display) ->
-                                val idx = display.lastIndexOf('(')
-                                if (idx > 0) display.substring(idx) else ""
-                            }
-                            grouped.forEach { (locale, voices) ->
-                                DropdownMenuItem(
-                                    text = { Text(locale.ifEmpty { "other" }, fontWeight = FontWeight.Bold, fontSize = 11.sp) },
-                                    onClick = {},
-                                    enabled = false,
-                                )
-                                voices.forEach { (name, display) ->
-                                    DropdownMenuItem(
-                                        text = { Text((if (name == systemTtsVoice) "✓ " else "    ") + display, fontSize = 12.sp) },
-                                        onClick = { onSystemVoiceChange(name); showSysVoiceMenu = false },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(4.dp))
-                // Preview button row (System TTS: uses device engine + selected voice)
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    val isPreviewing = remember { mutableStateOf(false) }
-                    val previewRef = remember { mutableStateOf<TTSProvider?>(null as TTSProvider?) }
-                    PreviewButton(
-                        isPreviewing = isPreviewing,
-                        previewRef = previewRef,
-                        makeProvider = {
-                            SystemTTSProvider(context).also { p ->
-                                if (systemTtsVoice.isNotEmpty()) p.setVoice(systemTtsVoice)
-                            }
-                        },
-                        previewText = previewTextForVoice(systemTtsVoice, isEdge = false),
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                // Link to system TTS settings
-                OutlinedCard(
-                    onClick = {
-                        try {
-                            val intent = android.content.Intent("com.android.settings.TTS_SETTINGS")
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            try {
-                                val intent = android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                                context.startActivity(intent)
-                            } catch (_: Exception) {}
-                        }
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp).fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_system_settings),
-                                fontWeight = FontWeight.Medium, fontSize = 13.sp,
-                            )
-                            Text(
-                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_system_settings_desc),
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            )
-                        }
-                        Icon(
-                            Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                        )
+                    icon = {
+                        Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
-                }
-            }
-
-            // === AI 翻译设置 (LLM) — collapsible ===
-            HorizontalDivider(Modifier.padding(vertical = 6.dp))
-            SectionHeader(
-                title = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_settings),
-                expanded = showLLMConfig,
-                onToggle = { showLLMConfig = !showLLMConfig },
-                help = {
-                    var showCloudAiHelp by remember { mutableStateOf(false) }
-                    TextButton(onClick = { showCloudAiHelp = true }, contentPadding = PaddingValues(4.dp)) {
-                        Text("?", fontSize = 12.sp, color = Color(0xFFE53935))
-                    }
-                    if (showCloudAiHelp) {
-                        HelpDialog(
-                            title = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_btn_cloud_ai),
-                            onDismiss = { showCloudAiHelp = false },
-                        ) {
-                            HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_intro))
-                            HelpSection("☁️ " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_default_title))
-                            HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_default))
-                            HelpSection("📌 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_get_key_title))
-                            HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_steps))
-                            HelpHighlight(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_bonus))
-                            HelpSection("💡 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_alternative_title))
-                            HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_cloud_ai_alternative))
-                        }
-                    }
-                },
-            )
-            AnimatedVisibility(visible = showLLMConfig, enter = expandVertically(), exit = shrinkVertically()) {
-                Column(modifier = Modifier.padding(start = 22.dp)) {
-                    // 翻译引擎选择 — 云端/本地
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(
-                            selected = translateEngine == com.moyue.app.data.models.TranslateEngine.CLOUD,
-                            onClick = { onTranslateEngineChange(com.moyue.app.data.models.TranslateEngine.CLOUD) },
-                            label = { Text("☁️ " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_engine_cloud), fontSize = 12.sp) },
-                            modifier = Modifier.weight(1f),
-                        )
-                        FilterChip(
-                            selected = translateEngine == com.moyue.app.data.models.TranslateEngine.LOCAL,
-                            onClick = { onTranslateEngineChange(com.moyue.app.data.models.TranslateEngine.LOCAL) },
-                            label = { Text("📱 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_engine_local), fontSize = 12.sp) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
-
-                    val defaultEndpoint = "https://api.deepseek.com"
-                    val defaultModel = "deepseek-v4-flash"
-
-                    val llmEp = remember(llmConfig.endpoint) { mutableStateOf(llmConfig.endpoint.ifEmpty { defaultEndpoint }) }
-                    val llmKey = remember(llmConfig.apiKey) { mutableStateOf(llmConfig.apiKey) }
-                    val llmModel = remember(llmConfig.model) { mutableStateOf(llmConfig.model.ifEmpty { defaultModel }) }
-                    val llmTargetLang = remember(llmConfig.targetLang) { mutableStateOf(llmConfig.targetLang.ifEmpty { "Chinese" }) }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        OutlinedTextField(
-                            value = llmEp.value,
-                            onValueChange = { llmEp.value = it },
-                            label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.endpoint_url), fontSize = 11.sp) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                            textStyle = TextStyle(fontSize = 12.sp),
-                        )
-                        OutlinedTextField(
-                            value = llmKey.value,
-                            onValueChange = { llmKey.value = it },
-                            label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_api_key_only_hint), fontSize = 11.sp) },
-                            singleLine = true,
-                            visualTransformation = PasswordVisualTransformation(),
-                            modifier = Modifier.weight(1f),
-                            textStyle = TextStyle(fontSize = 12.sp),
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = llmModel.value,
-                            onValueChange = { llmModel.value = it },
-                            label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.model_name), fontSize = 11.sp) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1.2f),
-                            textStyle = TextStyle(fontSize = 12.sp),
-                        )
-                        OutlinedTextField(
-                            value = llmTargetLang.value,
-                            onValueChange = { llmTargetLang.value = it },
-                            label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_target_language_label), fontSize = 11.sp) },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                            textStyle = TextStyle(fontSize = 12.sp),
-                        )
-                        Button(
-                            onClick = {
-                                onLLMConfigChange(LLMConfig("custom", llmKey.value, llmEp.value, llmModel.value, llmTargetLang.value))
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        ) {
-                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.save), fontSize = 12.sp)
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        listOf(
-                            "Chinese" to "中文",
-                            "English" to "English",
-                            "Japanese" to "日本語",
-                            "Korean" to "한국어",
-                            "French" to "Français",
-                            "Spanish" to "Español",
-                            "German" to "Deutsch"
-                        ).forEach { (langCode, langTitle) ->
-                            val selected = llmTargetLang.value.equals(langCode, ignoreCase = true)
-                            FilterChip(
-                                selected = selected,
-                                onClick = { llmTargetLang.value = langCode },
-                                label = { Text(langTitle, fontSize = 11.sp) }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // === 本地 AI 设置 — collapsible ===
-            HorizontalDivider(Modifier.padding(vertical = 6.dp))
-            SectionHeader(
-                title = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_section),
-                expanded = showLocalAiConfig,
-                onToggle = { showLocalAiConfig = !showLocalAiConfig },
-                help = {
-                    var showLocalAiHelp by remember { mutableStateOf(false) }
-                    TextButton(onClick = { showLocalAiHelp = true }, contentPadding = PaddingValues(4.dp)) {
-                        Text("?", fontSize = 12.sp, color = Color(0xFFE53935))
-                    }
-                    if (showLocalAiHelp) {
-                        HelpDialog(
-                            title = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_btn_local_ai),
-                            onDismiss = { showLocalAiHelp = false },
-                        ) {
-                            HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_intro))
-                            HelpSection("📌 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_steps_title))
-                            HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_steps))
-                            HelpSection("📥 " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_model_title))
-                            HelpHighlight("⭐ " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_recommended))
-                            HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_light))
-                            HelpSection("⚡ " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_speed_title))
-                            HelpText(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_local_ai_speed))
-                        }
-                    }
-                },
-            )
-            AnimatedVisibility(visible = showLocalAiConfig, enter = expandVertically(), exit = shrinkVertically()) {
-                Column(modifier = Modifier.padding(start = 22.dp)) {
-                    // Engine toggle
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(
-                            selected = translateEngine == com.moyue.app.data.models.TranslateEngine.CLOUD,
-                            onClick = { onTranslateEngineChange(com.moyue.app.data.models.TranslateEngine.CLOUD) },
-                            label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_engine_cloud), fontSize = 12.sp) },
-                            modifier = Modifier.weight(1f),
-                        )
-                        FilterChip(
-                            selected = translateEngine == com.moyue.app.data.models.TranslateEngine.LOCAL,
-                            onClick = { onTranslateEngineChange(com.moyue.app.data.models.TranslateEngine.LOCAL) },
-                            label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_engine_local), fontSize = 12.sp) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
-
-                    // GPU toggle
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                )
+                Tab(
+                    selected = selectedTabIndex == 1,
+                    onClick = { selectedTabIndex = 1 },
+                    text = {
                         Text(
-                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_gpu_accel),
-                            fontSize = 12.sp,
-                            modifier = Modifier.weight(1f),
+                            stringResource(R.string.settings_tab_llm),
+                            fontSize = 13.sp,
+                            fontWeight = if (selectedTabIndex == 1) FontWeight.Bold else FontWeight.Normal
                         )
-                        Switch(
-                            checked = localAiGpuLayers > 0,
-                            onCheckedChange = { onGpuLayersChange(if (it) 999 else 0) },
-                        )
+                    },
+                    icon = {
+                        Icon(Icons.Default.SmartToy, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
-                    Text(
-                        androidx.compose.ui.res.stringResource(if (localAiGpuLayers > 0) com.moyue.app.R.string.local_ai_gpu_on else com.moyue.app.R.string.local_ai_gpu_off),
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    )
-                    Spacer(Modifier.height(4.dp))
-
-                    // Model status
-                    if (localAiModelName.isNotEmpty() && localAiModelName != "No model loaded") {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("✅ $localAiModelName", fontSize = 12.sp, color = Color(0xFF4CAF50), modifier = Modifier.weight(1f))
-                            Button(
-                                onClick = { onLocalAiModelUnload() },
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            ) {
-                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_unload), fontSize = 11.sp)
-                            }
-                        }
-                    } else {
+                )
+                Tab(
+                    selected = selectedTabIndex == 2,
+                    onClick = { selectedTabIndex = 2 },
+                    text = {
                         Text(
-                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_no_model),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            stringResource(R.string.settings_tab_display),
+                            fontSize = 13.sp,
+                            fontWeight = if (selectedTabIndex == 2) FontWeight.Bold else FontWeight.Normal
                         )
+                    },
+                    icon = {
+                        Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
-                    Spacer(Modifier.height(4.dp))
-
-                    // File picker
-                    val modelPicker = rememberLauncherForActivityResult(
-                        contract = ActivityResultContracts.OpenDocument(),
-                    ) { uri -> uri?.let { onLocalAiModelSelect(it) } }
-                    OutlinedButton(onClick = { modelPicker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            if (localAiModelName.isNotEmpty() && localAiModelName != "No model loaded")
-                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_change_model)
-                            else
-                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_select_model),
-                            fontSize = 12.sp,
-                        )
-                    }
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_recommend),
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                    )
-
-                    // Log viewer
-                    var showLogs by remember { mutableStateOf(false) }
-                    OutlinedButton(
-                        onClick = { showLogs = true },
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    ) {
-                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_view_logs), fontSize = 11.sp)
-                    }
-
-                    if (showLogs) {
-                        val logs = getLocalAiLogs()
-                        var logCopied by remember { mutableStateOf(false) }
-                        val context = androidx.compose.ui.platform.LocalContext.current
-                        AlertDialog(
-                            onDismissRequest = { showLogs = false },
-                            title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.setting_view_logs), fontSize = 14.sp) },
-                            text = {
-                                val scrollState = rememberScrollState()
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        text = logs.ifEmpty { androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_log_empty) },
-                                        fontSize = 10.sp,
-                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(max = 260.dp)
-                                            .verticalScroll(scrollState),
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        OutlinedButton(
-                                            onClick = {
-                                                val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                                cm.setPrimaryClip(android.content.ClipData.newPlainText("AI Log", logs))
-                                                logCopied = true
-                                            },
-                                            modifier = Modifier.weight(1f),
-                                        ) {
-                                            Text(
-                                                if (logCopied) "✅ " + androidx.compose.ui.res.stringResource(com.moyue.app.R.string.copied)
-                                                else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.copy_log),
-                                                fontSize = 11.sp,
-                                            )
-                                        }
-                                        OutlinedButton(
-                                            onClick = { clearLocalAiLogs(); logCopied = false },
-                                            modifier = Modifier.weight(1f),
-                                        ) {
-                                            Text("🗑️ ${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.delete)}", fontSize = 11.sp)
-                                        }
-                                    }
-                                }
-                            },
-                            confirmButton = {
-                                TextButton(onClick = { showLogs = false }) {
-                                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.local_ai_close))
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-
-            // === E-Ink Mode ===
-            HorizontalDivider(Modifier.padding(vertical = 6.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.setting_eink_mode),
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.setting_eink_mode_desc),
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    )
-                }
-                Switch(
-                    checked = isEinkMode,
-                    onCheckedChange = onEinkModeChange,
                 )
             }
 
-            // === Theme selection ===
-            HorizontalDivider(Modifier.padding(vertical = 6.dp))
-            Text(
-                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.theme),
-                fontWeight = FontWeight.Medium,
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(Modifier.height(4.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+            // ── 选项卡对应的内容区 ──
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
             ) {
-                ReaderTheme.entries.forEach { theme ->
-                    FilterChip(
-                        selected = currentTheme == theme,
-                        onClick = { onThemeChange(theme) },
-                        label = {
-                            Text(
-                                androidx.compose.ui.res.stringResource(
-                                    when (theme) {
-                                        ReaderTheme.LIGHT -> com.moyue.app.R.string.theme_name_light
-                                        ReaderTheme.PARCHMENT -> com.moyue.app.R.string.theme_name_parchment
-                                        ReaderTheme.GRAY -> com.moyue.app.R.string.theme_name_gray
-                                        ReaderTheme.DARK -> com.moyue.app.R.string.theme_name_dark
-                                        ReaderTheme.SLATE -> com.moyue.app.R.string.theme_name_slate
-                                    }
-                                ),
-                                fontSize = 10.sp,
-                            )
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = Color(android.graphics.Color.parseColor(theme.bgColor)),
-                            labelColor = Color(android.graphics.Color.parseColor(theme.textColor)),
-                            selectedContainerColor = Color(android.graphics.Color.parseColor(theme.bgColor)),
-                            selectedLabelColor = Color(android.graphics.Color.parseColor(theme.textColor)),
-                        ),
+                when (selectedTabIndex) {
+                    0 -> VoiceSettingsTab(
+                        currentProvider = currentProvider,
+                        ttsSpeed = ttsSpeed,
+                        edgeEndpoint = edgeEndpoint,
+                        edgeVoice = edgeVoice,
+                        aiEndpoint = aiEndpoint,
+                        aiApiKey = aiApiKey,
+                        aiModel = aiModel,
+                        aiVoice = aiVoice,
+                        customEndpoint = customEndpoint,
+                        customApiKey = customApiKey,
+                        customModel = customModel,
+                        customVoice = customVoice,
+                        systemTtsVoice = systemTtsVoice,
+                        onProviderChange = onProviderChange,
+                        onSpeedChange = onSpeedChange,
+                        onEdgeConfigChange = onEdgeConfigChange,
+                        onAIVoiceConfigChange = onAIVoiceConfigChange,
+                        onCustomTTSConfigChange = onCustomTTSConfigChange,
+                        onSystemVoiceChange = onSystemVoiceChange,
+                        onRecordingClick = onRecordingClick,
+                        onBrowseRecordingsClick = onBrowseRecordingsClick,
+                    )
+                    1 -> LlmSettingsTab(
+                        llmConfig = llmConfig,
+                        onLLMConfigChange = onLLMConfigChange,
+                    )
+                    2 -> DisplaySettingsTab(
+                        currentTheme = currentTheme,
+                        currentTextBrightness = currentTextBrightness,
+                        isEinkMode = isEinkMode,
+                        onThemeChange = onThemeChange,
+                        onTextBrightnessChange = onTextBrightnessChange,
+                        onEinkModeChange = onEinkModeChange,
                     )
                 }
             }
-
-            // === Text brightness (dark themes only) ===
-            if (currentTheme.isDark) {
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        androidx.compose.ui.res.stringResource(com.moyue.app.R.string.text_brightness),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.width(36.dp),
-                    )
-                    Slider(
-                        value = currentTextBrightness.toFloat(),
-                        onValueChange = { onTextBrightnessChange(it.toInt()) },
-                        valueRange = 0f..100f,
-                        modifier = Modifier.weight(1f).height(24.dp),
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.primary,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                        ),
-                    )
-                    Text(
-                        "${currentTextBrightness}%",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        modifier = Modifier.width(38.dp).wrapContentWidth(Alignment.End),
-                    )
-                }
-            }
-
-            // === Recording ===
-            HorizontalDivider(Modifier.padding(vertical = 6.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                FilledTonalButton(
-                    onClick = onRecordingClick,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("🎙️ ${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.recording_entry)}", fontSize = 12.sp, maxLines = 1)
-                }
-                FilledTonalButton(
-                    onClick = onBrowseRecordingsClick,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("📂 ${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.recording_browse)}", fontSize = 12.sp, maxLines = 1)
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-        }
-        // ── Floating header (always visible, overlays content) ──
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.tts_settings),
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-            )
-            IconButton(onClick = onClose) {
-                Icon(
-                    Icons.Default.Close,
-                    contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close),
-                )
-            }
-        }
         }
     }
 }
 
 // ============================================================
-// Help dialog helpers (unchanged)
+// 1. 语音设置选项卡 (Voice Settings)
 // ============================================================
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun VoiceSettingsTab(
+    currentProvider: TTSProviderType,
+    ttsSpeed: Float,
+    edgeEndpoint: String,
+    edgeVoice: String,
+    aiEndpoint: String,
+    aiApiKey: String,
+    aiModel: String,
+    aiVoice: String,
+    customEndpoint: String,
+    customApiKey: String,
+    customModel: String,
+    customVoice: String,
+    systemTtsVoice: String,
+    onProviderChange: (TTSProviderType) -> Unit,
+    onSpeedChange: (Float) -> Unit,
+    onEdgeConfigChange: (endpoint: String, voice: String) -> Unit,
+    onAIVoiceConfigChange: (endpoint: String, apiKey: String, model: String, voice: String) -> Unit,
+    onCustomTTSConfigChange: (endpoint: String, apiKey: String, model: String, voice: String) -> Unit,
+    onSystemVoiceChange: (String) -> Unit,
+    onRecordingClick: () -> Unit,
+    onBrowseRecordingsClick: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        // === 引擎选择与帮助 ===
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                stringResource(R.string.tts_engine),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.width(4.dp))
+            var showTtsHelp by remember { mutableStateOf(false) }
+            TextButton(
+                onClick = { showTtsHelp = true },
+                contentPadding = PaddingValues(4.dp),
+            ) {
+                Text("?", fontSize = 12.sp, color = Color(0xFFE53935))
+            }
+            if (showTtsHelp) {
+                HelpDialog(
+                    title = stringResource(R.string.help_btn_tts),
+                    onDismiss = { showTtsHelp = false },
+                ) {
+                    HelpText(stringResource(R.string.help_tts_intro))
+                    HelpSection(stringResource(R.string.help_tts_edge_title))
+                    HelpBullet(stringResource(R.string.help_tts_edge_bullet1))
+                    HelpBullet(stringResource(R.string.help_tts_edge_bullet2))
+                    HelpBullet(stringResource(R.string.help_tts_edge_bullet3))
+                    HelpSection(stringResource(R.string.help_tts_ai_title))
+                    HelpBullet(stringResource(R.string.help_tts_ai_bullet1))
+                    HelpBullet(stringResource(R.string.help_tts_ai_bullet2))
+                    HelpBullet(stringResource(R.string.help_tts_ai_bullet3))
+                    HelpText(stringResource(R.string.help_tts_ai_example))
+                    HelpSection(stringResource(R.string.help_tts_custom_title))
+                    HelpBullet(stringResource(R.string.help_tts_custom_bullet1))
+                    HelpBullet(stringResource(R.string.help_tts_custom_bullet2))
+                    HelpSection(stringResource(R.string.help_tts_speed_title))
+                    HelpBullet(stringResource(R.string.help_tts_speed_bullet1))
+                    HelpBullet(stringResource(R.string.help_tts_speed_bullet2))
+                }
+            }
+        }
 
+        // 引擎 FilterChips
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            TTSProviderType.entries.forEach { provider ->
+                FilterChip(
+                    selected = currentProvider == provider,
+                    onClick = { onProviderChange(provider) },
+                    label = {
+                        Text(
+                            stringResource(
+                                when (provider) {
+                                    TTSProviderType.EDGE_TTS -> R.string.tts_provider_edge
+                                    TTSProviderType.AI_VOICE -> R.string.tts_provider_ai
+                                    TTSProviderType.CUSTOM_TTS -> R.string.tts_provider_custom
+                                    TTSProviderType.SYSTEM -> R.string.tts_provider_system
+                                }
+                            ),
+                            fontSize = 12.sp,
+                        )
+                    },
+                )
+            }
+        }
+
+        // Speed 语速滑块
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        ) {
+            Text(
+                stringResource(
+                    R.string.tts_speed,
+                    String.format("%.1f", ttsSpeed),
+                ),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Slider(
+                value = ttsSpeed,
+                onValueChange = onSpeedChange,
+                valueRange = 0.5f..2.0f,
+                steps = 14,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            )
+        }
+
+        HorizontalDivider(Modifier.padding(vertical = 6.dp))
+
+        // === Provider-specific config ===
+        if (currentProvider == TTSProviderType.EDGE_TTS) {
+            val localEp = remember(edgeEndpoint) { mutableStateOf(edgeEndpoint) }
+            val localVoice = remember(edgeVoice) { mutableStateOf(edgeVoice) }
+            var showVoicePicker by remember { mutableStateOf(false) }
+            val isPreviewing = remember { mutableStateOf(false) }
+            val previewRef = remember { mutableStateOf<TTSProvider?>(null as TTSProvider?) }
+            val context = LocalContext.current
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                OutlinedTextField(
+                    value = localEp.value,
+                    onValueChange = { localEp.value = it; onEdgeConfigChange(it, localVoice.value) },
+                    label = { Text(stringResource(R.string.tts_server_url), fontSize = 11.sp) },
+                    singleLine = true, modifier = Modifier.weight(1.2f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    textStyle = TextStyle(fontSize = 12.sp),
+                )
+                Box(modifier = Modifier.weight(1f)) {
+                    OutlinedTextField(
+                        value = EdgeVoiceManager.getVoices(context).find { it.id == localVoice.value }?.displayName(context) ?: localVoice.value,
+                        onValueChange = {}, readOnly = true,
+                        label = { Text(stringResource(R.string.tts_voice), fontSize = 11.sp) },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(fontSize = 12.sp),
+                        trailingIcon = {
+                            IconButton(onClick = { showVoicePicker = true }) {
+                                Icon(
+                                    Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+            // Preview button row
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                PreviewButton(
+                    isPreviewing = isPreviewing,
+                    previewRef = previewRef,
+                    makeProvider = { EdgeTTSProvider(localEp.value, localVoice.value) },
+                    previewText = previewTextForVoice(localVoice.value, isEdge = true),
+                )
+            }
+            if (showVoicePicker) {
+                VoicePickerDialog(
+                    endpoint = localEp.value,
+                    currentVoiceId = localVoice.value,
+                    onVoiceSelected = { voiceId ->
+                        localVoice.value = voiceId
+                        onEdgeConfigChange(localEp.value, voiceId)
+                        showVoicePicker = false
+                    },
+                    onDismiss = { showVoicePicker = false },
+                )
+            }
+        }
+
+        if (currentProvider == TTSProviderType.AI_VOICE) {
+            val localEp = remember(aiEndpoint) { mutableStateOf(aiEndpoint) }
+            val localKey = remember(aiApiKey) { mutableStateOf(aiApiKey) }
+            val localModel = remember(aiModel) { mutableStateOf(aiModel) }
+            val localVoice = remember(aiVoice) { mutableStateOf(aiVoice) }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    value = localEp.value, onValueChange = { localEp.value = it; onAIVoiceConfigChange(it, localKey.value, localModel.value, localVoice.value) },
+                    label = { Text(stringResource(R.string.tts_label_base_url), fontSize = 11.sp) },
+                    singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
+                )
+                OutlinedTextField(
+                    value = localKey.value, onValueChange = { localKey.value = it; onAIVoiceConfigChange(localEp.value, it, localModel.value, localVoice.value) },
+                    label = { Text(stringResource(R.string.tts_label_api_key), fontSize = 11.sp) },
+                    singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    value = localModel.value, onValueChange = { localModel.value = it; onAIVoiceConfigChange(localEp.value, localKey.value, it, localVoice.value) },
+                    label = { Text(stringResource(R.string.tts_model), fontSize = 11.sp) },
+                    singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
+                )
+                OutlinedTextField(
+                    value = localVoice.value, onValueChange = { localVoice.value = it; onAIVoiceConfigChange(localEp.value, localKey.value, localModel.value, it) },
+                    label = { Text(stringResource(R.string.tts_voice), fontSize = 11.sp) },
+                    singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                val isPreviewing = remember { mutableStateOf(false) }
+                val previewRef = remember { mutableStateOf<TTSProvider?>(null as TTSProvider?) }
+                PreviewButton(
+                    isPreviewing = isPreviewing,
+                    previewRef = previewRef,
+                    makeProvider = { AIVoiceTTSProvider(localEp.value, localKey.value, localModel.value, localVoice.value) },
+                    previewText = previewTextForVoice(localVoice.value, isEdge = false),
+                )
+            }
+        }
+
+        if (currentProvider == TTSProviderType.CUSTOM_TTS) {
+            Text(
+                stringResource(R.string.tts_custom_tts_hint),
+                fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            )
+            Spacer(Modifier.height(4.dp))
+            val localEp = remember(customEndpoint) { mutableStateOf(customEndpoint) }
+            val localKey = remember(customApiKey) { mutableStateOf(customApiKey) }
+            val localModel = remember(customModel) { mutableStateOf(customModel) }
+            val localVoice = remember(customVoice) { mutableStateOf(customVoice) }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    value = localEp.value, onValueChange = { localEp.value = it; onCustomTTSConfigChange(it, localKey.value, localModel.value, localVoice.value) },
+                    label = { Text(stringResource(R.string.tts_label_base_url), fontSize = 11.sp) },
+                    singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
+                )
+                OutlinedTextField(
+                    value = localKey.value, onValueChange = { localKey.value = it; onCustomTTSConfigChange(localEp.value, it, localModel.value, localVoice.value) },
+                    label = { Text(stringResource(R.string.tts_label_api_key), fontSize = 11.sp) },
+                    singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    value = localModel.value, onValueChange = { localModel.value = it; onCustomTTSConfigChange(localEp.value, localKey.value, it, localVoice.value) },
+                    label = { Text(stringResource(R.string.tts_label_model), fontSize = 11.sp) },
+                    singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
+                )
+                OutlinedTextField(
+                    value = localVoice.value, onValueChange = { localVoice.value = it; onCustomTTSConfigChange(localEp.value, localKey.value, localModel.value, it) },
+                    label = { Text(stringResource(R.string.tts_label_voice), fontSize = 11.sp) },
+                    singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                val isPreviewing = remember { mutableStateOf(false) }
+                val previewRef = remember { mutableStateOf<TTSProvider?>(null as TTSProvider?) }
+                PreviewButton(
+                    isPreviewing = isPreviewing,
+                    previewRef = previewRef,
+                    makeProvider = { CustomTTSProvider(localEp.value, localKey.value, localModel.value, localVoice.value) },
+                    previewText = previewTextForVoice(localVoice.value, isEdge = false),
+                )
+            }
+        }
+
+        if (currentProvider == TTSProviderType.SYSTEM) {
+            val context = LocalContext.current
+            var showSysVoiceMenu by remember { mutableStateOf(false) }
+            val sysVoices = remember { mutableStateListOf<Pair<String, String>>() }
+            LaunchedEffect(Unit) {
+                sysVoices.clear()
+                val engineVoices = com.moyue.app.tts.SystemTTSProvider.getCurrentVoices()
+                sysVoices.addAll(engineVoices.map { it.name to it.displayName })
+            }
+            val sysEngine = com.moyue.app.tts.SystemTTSProvider.getCurrentEngineName()
+
+            Text(
+                stringResource(R.string.tts_system_engine) + ": ${sysEngine.ifEmpty { "—" }}",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            )
+            Spacer(Modifier.height(4.dp))
+
+            Box(modifier = Modifier.fillMaxWidth()) {
+                val displayText = sysVoices.firstOrNull { it.first == systemTtsVoice }?.second
+                    ?: stringResource(R.string.tts_system_default_voice)
+                OutlinedTextField(
+                    value = displayText,
+                    onValueChange = {}, readOnly = true,
+                    label = { Text(stringResource(R.string.tts_voice), fontSize = 11.sp) },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(fontSize = 12.sp),
+                    trailingIcon = {
+                        IconButton(onClick = { showSysVoiceMenu = true }) {
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
+                    },
+                )
+                DropdownMenu(
+                    expanded = showSysVoiceMenu,
+                    onDismissRequest = { showSysVoiceMenu = false },
+                    modifier = Modifier.heightIn(max = 300.dp),
+                ) {
+                    if (sysVoices.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.tts_system_voices_loading), fontSize = 12.sp) },
+                            onClick = { showSysVoiceMenu = false },
+                            enabled = false,
+                        )
+                    } else {
+                        val grouped = sysVoices.groupBy { (_, display) ->
+                            val idx = display.lastIndexOf('(')
+                            if (idx > 0) display.substring(idx) else ""
+                        }
+                        grouped.forEach { (locale, voices) ->
+                            DropdownMenuItem(
+                                text = { Text(locale.ifEmpty { "other" }, fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                                onClick = {},
+                                enabled = false,
+                            )
+                            voices.forEach { (name, display) ->
+                                DropdownMenuItem(
+                                    text = { Text((if (name == systemTtsVoice) "✓ " else "    ") + display, fontSize = 12.sp) },
+                                    onClick = { onSystemVoiceChange(name); showSysVoiceMenu = false },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                val isPreviewing = remember { mutableStateOf(false) }
+                val previewRef = remember { mutableStateOf<TTSProvider?>(null as TTSProvider?) }
+                PreviewButton(
+                    isPreviewing = isPreviewing,
+                    previewRef = previewRef,
+                    makeProvider = {
+                        SystemTTSProvider(context).also { p ->
+                            if (systemTtsVoice.isNotEmpty()) p.setVoice(systemTtsVoice)
+                        }
+                    },
+                    previewText = previewTextForVoice(systemTtsVoice, isEdge = false),
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            OutlinedCard(
+                onClick = {
+                    try {
+                        val intent = android.content.Intent("com.android.settings.TTS_SETTINGS")
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        try {
+                            val intent = android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                            context.startActivity(intent)
+                        } catch (_: Exception) {}
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.tts_system_settings),
+                            fontWeight = FontWeight.Medium, fontSize = 13.sp,
+                        )
+                        Text(
+                            stringResource(R.string.tts_system_settings_desc),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        )
+                    }
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    )
+                }
+            }
+        }
+
+        // === 录制操作按钮 ===
+        HorizontalDivider(Modifier.padding(vertical = 10.dp))
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            FilledTonalButton(
+                onClick = onRecordingClick,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("🎙️ ${stringResource(R.string.recording_entry)}", fontSize = 12.sp, maxLines = 1)
+            }
+            FilledTonalButton(
+                onClick = onBrowseRecordingsClick,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("📂 ${stringResource(R.string.recording_browse)}", fontSize = 12.sp, maxLines = 1)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+// ============================================================
+// 2. 大模型设置选项卡 (AI Model Settings - 纯粹在线做减法)
+// ============================================================
+@Composable
+private fun LlmSettingsTab(
+    llmConfig: LLMConfig,
+    onLLMConfigChange: (LLMConfig) -> Unit,
+) {
+    val defaultEndpoint = "https://api.deepseek.com"
+    val defaultModel = "deepseek-chat"
+
+    val llmEp = remember(llmConfig.endpoint) { mutableStateOf(llmConfig.endpoint.ifEmpty { defaultEndpoint }) }
+    val llmKey = remember(llmConfig.apiKey) { mutableStateOf(llmConfig.apiKey) }
+    val llmModel = remember(llmConfig.model) { mutableStateOf(llmConfig.model.ifEmpty { defaultModel }) }
+    val llmTargetLang = remember(llmConfig.targetLang) { mutableStateOf(llmConfig.targetLang.ifEmpty { "Chinese" }) }
+    var keyVisible by remember { mutableStateOf(false) }
+    var saveFeedback by remember { mutableStateOf(false) }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        // 标题与帮助
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                stringResource(R.string.ai_model_settings_title),
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.width(4.dp))
+            var showCloudAiHelp by remember { mutableStateOf(false) }
+            TextButton(onClick = { showCloudAiHelp = true }, contentPadding = PaddingValues(4.dp)) {
+                Text("?", fontSize = 12.sp, color = Color(0xFFE53935))
+            }
+            if (showCloudAiHelp) {
+                HelpDialog(
+                    title = stringResource(R.string.help_btn_cloud_ai),
+                    onDismiss = { showCloudAiHelp = false },
+                ) {
+                    HelpText(stringResource(R.string.help_cloud_ai_intro))
+                    HelpSection("☁️ " + stringResource(R.string.help_cloud_ai_default_title))
+                    HelpText(stringResource(R.string.help_cloud_ai_default))
+                    HelpSection("📌 " + stringResource(R.string.help_cloud_ai_get_key_title))
+                    HelpText(stringResource(R.string.help_cloud_ai_steps))
+                    HelpHighlight(stringResource(R.string.help_cloud_ai_bonus))
+                    HelpSection("💡 " + stringResource(R.string.help_cloud_ai_alternative_title))
+                    HelpText(stringResource(R.string.help_cloud_ai_alternative))
+                }
+            }
+        }
+
+        Text(
+            stringResource(R.string.ai_model_role_desc),
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        // 常用预设快捷填充
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Presets:", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+            SuggestionChip(
+                onClick = {
+                    llmEp.value = "https://api.deepseek.com"
+                    llmModel.value = "deepseek-chat"
+                    saveFeedback = false
+                },
+                label = { Text("DeepSeek", fontSize = 11.sp) }
+            )
+            SuggestionChip(
+                onClick = {
+                    llmEp.value = "https://api.openai.com/v1"
+                    llmModel.value = "gpt-4o-mini"
+                    saveFeedback = false
+                },
+                label = { Text("OpenAI", fontSize = 11.sp) }
+            )
+            SuggestionChip(
+                onClick = {
+                    llmEp.value = "https://api.siliconflow.cn/v1"
+                    llmModel.value = "deepseek-ai/DeepSeek-V3"
+                    saveFeedback = false
+                },
+                label = { Text("SiliconFlow", fontSize = 11.sp) }
+            )
+        }
+
+        // Endpoint
+        OutlinedTextField(
+            value = llmEp.value,
+            onValueChange = { llmEp.value = it; saveFeedback = false },
+            label = { Text(stringResource(R.string.endpoint_url), fontSize = 11.sp) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = TextStyle(fontSize = 12.sp),
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        // API Key (带密码显示/隐藏)
+        OutlinedTextField(
+            value = llmKey.value,
+            onValueChange = { llmKey.value = it; saveFeedback = false },
+            label = { Text(stringResource(R.string.tts_api_key_only_hint), fontSize = 11.sp) },
+            singleLine = true,
+            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { keyVisible = !keyVisible }) {
+                    Icon(
+                        imageVector = if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = TextStyle(fontSize = 12.sp),
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        // Model Name & Target Lang
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = llmModel.value,
+                onValueChange = { llmModel.value = it; saveFeedback = false },
+                label = { Text(stringResource(R.string.model_name), fontSize = 11.sp) },
+                singleLine = true,
+                modifier = Modifier.weight(1.2f),
+                textStyle = TextStyle(fontSize = 12.sp),
+            )
+            OutlinedTextField(
+                value = llmTargetLang.value,
+                onValueChange = { llmTargetLang.value = it; saveFeedback = false },
+                label = { Text(stringResource(R.string.ai_target_language_label), fontSize = 11.sp) },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                textStyle = TextStyle(fontSize = 12.sp),
+            )
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        // Language Quick Chips
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            listOf(
+                "Chinese" to "中文",
+                "English" to "English",
+                "Japanese" to "日本語",
+                "Korean" to "한국어",
+                "French" to "Français",
+                "Spanish" to "Español",
+                "German" to "Deutsch"
+            ).forEach { (langCode, langTitle) ->
+                val selected = llmTargetLang.value.equals(langCode, ignoreCase = true)
+                FilterChip(
+                    selected = selected,
+                    onClick = { llmTargetLang.value = langCode; saveFeedback = false },
+                    label = { Text(langTitle, fontSize = 11.sp) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Save Button
+        Button(
+            onClick = {
+                onLLMConfigChange(LLMConfig("custom", llmKey.value, llmEp.value, llmModel.value, llmTargetLang.value))
+                saveFeedback = true
+            },
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                if (saveFeedback) "✓ " + stringResource(R.string.sync_config_saved) else stringResource(R.string.save),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+// ============================================================
+// 3. 显示与外观选项卡 (Display & Appearance - 展开式主题胶囊)
+// ============================================================
+@Composable
+private fun DisplaySettingsTab(
+    currentTheme: ReaderTheme,
+    currentTextBrightness: Int,
+    isEinkMode: Boolean,
+    onThemeChange: (ReaderTheme) -> Unit,
+    onTextBrightnessChange: (Int) -> Unit,
+    onEinkModeChange: (Boolean) -> Unit,
+) {
+    var isThemeExpanded by remember { mutableStateOf(false) }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        // === 1. E-Ink Mode ===
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.setting_eink_mode),
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    stringResource(R.string.setting_eink_mode_desc),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
+            }
+            Switch(
+                checked = isEinkMode,
+                onCheckedChange = onEinkModeChange,
+            )
+        }
+
+        HorizontalDivider(Modifier.padding(vertical = 10.dp))
+
+        // === 2. 主题选择 (可折叠/展开的主题胶囊，解决英文换行变形问题) ===
+        Text(
+            stringResource(R.string.theme),
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(6.dp))
+
+        val curThemeBg = Color(android.graphics.Color.parseColor(currentTheme.bgColor))
+        val curThemeText = Color(android.graphics.Color.parseColor(currentTheme.textColor))
+
+        // 主胶囊条（显示当前选中的主题，精致典雅）
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = curThemeBg,
+            border = BorderStroke(
+                1.5.dp,
+                if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+            ),
+            shadowElevation = 2.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .clickable { isThemeExpanded = !isThemeExpanded }
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(curThemeBg)
+                            .border(1.2.dp, curThemeText.copy(alpha = 0.4f), CircleShape)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            stringResource(R.string.theme_current_label),
+                            fontSize = 11.sp,
+                            color = curThemeText.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            stringResource(themeNameRes(currentTheme)),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = curThemeText
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(
+                            if (isThemeExpanded) R.string.theme_capsule_collapse
+                            else R.string.theme_capsule_expand
+                        ),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = curThemeText.copy(alpha = 0.8f)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = if (isThemeExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = curThemeText,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+
+        // 展开的主题卡片列表 (两列宽敞卡片，单词绝不截断折行)
+        AnimatedVisibility(
+            visible = isThemeExpanded,
+            enter = expandVertically(),
+            exit = shrinkVertically()
+        ) {
+            val themes = ReaderTheme.entries
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                for (i in 0 until themes.size step 2) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        for (j in i until minOf(i + 2, themes.size)) {
+                            val theme = themes[j]
+                            val isSelected = currentTheme == theme
+                            val themeBg = Color(android.graphics.Color.parseColor(theme.bgColor))
+                            val themeText = Color(android.graphics.Color.parseColor(theme.textColor))
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = themeBg,
+                                border = BorderStroke(
+                                    if (isSelected) 2.dp else 1.dp,
+                                    if (isSelected) {
+                                        if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary
+                                    } else {
+                                        themeText.copy(alpha = 0.25f)
+                                    }
+                                ),
+                                shadowElevation = if (isSelected) 3.dp else 1.dp,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        onThemeChange(theme)
+                                        isThemeExpanded = false
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(14.dp)
+                                                .clip(CircleShape)
+                                                .background(themeBg)
+                                                .border(1.dp, themeText.copy(alpha = 0.4f), CircleShape)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text = stringResource(themeNameRes(theme)),
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = themeText,
+                                            maxLines = 1
+                                        )
+                                    }
+                                    if (isSelected) {
+                                        Text(
+                                            "✓",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (i + 1 >= themes.size) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+
+        // === 3. Text Brightness (深色主题下调节文字亮度) ===
+        if (currentTheme.isDark) {
+            Spacer(Modifier.height(10.dp))
+            HorizontalDivider(Modifier.padding(vertical = 6.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    stringResource(R.string.text_brightness),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    modifier = Modifier.width(42.dp),
+                )
+                Slider(
+                    value = currentTextBrightness.toFloat(),
+                    onValueChange = { onTextBrightnessChange(it.toInt()) },
+                    valueRange = 0f..100f,
+                    modifier = Modifier.weight(1f).height(24.dp),
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                )
+                Text(
+                    "${currentTextBrightness}%",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.width(38.dp).wrapContentWidth(Alignment.End),
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+// ============================================================
+// 帮助弹窗辅助组件
+// ============================================================
 @Composable
 private fun HelpDialog(
     title: String,
@@ -1074,7 +1208,7 @@ private fun HelpDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.help_close))
+                Text(stringResource(R.string.help_close))
             }
         },
     )
@@ -1102,21 +1236,18 @@ private fun HelpBullet(text: String, indent: Boolean = true) {
 
 @Composable
 private fun HelpHighlight(text: String) {
+    Spacer(Modifier.height(4.dp))
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(6.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Text(text, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(10.dp))
-    }
-}
-
-@Composable
-private fun HelpLink(text: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 2.dp, bottom = 2.dp)) {
-        Text("🔗  ", fontSize = 11.sp)
-        SelectionContainer {
-            Text(text, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-        }
+        Text(
+            text,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.padding(8.dp),
+        )
     }
 }
