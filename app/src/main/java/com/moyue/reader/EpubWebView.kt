@@ -477,10 +477,18 @@ fun EpubWebView(
             factory = { ctx ->
                 object : WebView(ctx) {
                     override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? {
-                        return null
+                        return if (callback != null) {
+                            super.startActionMode(EmptyActionModeCallback(callback), type)
+                        } else {
+                            super.startActionMode(callback, type)
+                        }
                     }
                     override fun startActionMode(callback: ActionMode.Callback?): ActionMode? {
-                        return null
+                        return if (callback != null) {
+                            super.startActionMode(EmptyActionModeCallback(callback))
+                        } else {
+                            super.startActionMode(callback)
+                        }
                     }
                 }.apply {
                     webView = this
@@ -569,6 +577,28 @@ fun EpubWebView(
                                         document.body.style.setProperty('margin', '0px', 'important');
                                         document.body.style.setProperty('box-sizing', 'border-box', 'important');
                                         document.body.style.setProperty('column-rule', '1px solid rgba(128,128,128,0.18)', 'important');
+
+                                        // 针对大图/封面/插图做自适应高度约束与禁止跨栏裁切：
+                                        // 避免图片高度超出单栏可用高度从而被跨栏切成两半
+                                        var availImgH = Math.max(100, H - 48);
+                                        document.querySelectorAll('img').forEach(function(img){
+                                            img.style.setProperty('max-width', '100%', 'important');
+                                            img.style.setProperty('max-height', availImgH + 'px', 'important');
+                                            img.style.setProperty('width', 'auto', 'important');
+                                            img.style.setProperty('height', 'auto', 'important');
+                                            img.style.setProperty('object-fit', 'contain', 'important');
+                                            img.style.setProperty('display', 'block', 'important');
+                                            img.style.setProperty('margin', '0 auto', 'important');
+                                            img.style.setProperty('break-inside', 'avoid', 'important');
+                                            img.style.setProperty('page-break-inside', 'avoid', 'important');
+                                        });
+                                        document.querySelectorAll('.cover, .titlepage').forEach(function(el){
+                                            el.style.setProperty('max-height', availImgH + 'px', 'important');
+                                            el.style.setProperty('text-align', 'center', 'important');
+                                            el.style.setProperty('break-inside', 'avoid', 'important');
+                                            el.style.setProperty('page-break-inside', 'avoid', 'important');
+                                        });
+
                                         if (window._spreadIndex !== undefined && window._spreadIndex > 0) {
                                             window._applySpread(window._spreadIndex);
                                         }
@@ -583,6 +613,22 @@ fun EpubWebView(
                                         document.body.style.removeProperty('padding');
                                         document.body.style.removeProperty('margin');
                                         document.body.style.removeProperty('column-rule');
+                                        document.querySelectorAll('img').forEach(function(img){
+                                            img.style.removeProperty('max-height');
+                                            img.style.removeProperty('width');
+                                            img.style.removeProperty('height');
+                                            img.style.removeProperty('object-fit');
+                                            img.style.removeProperty('display');
+                                            img.style.removeProperty('margin');
+                                            img.style.removeProperty('break-inside');
+                                            img.style.removeProperty('page-break-inside');
+                                        });
+                                        document.querySelectorAll('.cover, .titlepage').forEach(function(el){
+                                            el.style.removeProperty('max-height');
+                                            el.style.removeProperty('text-align');
+                                            el.style.removeProperty('break-inside');
+                                            el.style.removeProperty('page-break-inside');
+                                        });
                                     }
                                 };
                                 window.addEventListener('resize', function(){ window._updateLayout(); });
@@ -1311,3 +1357,28 @@ private fun guessMimeType(url: String): String = when {
     url.endsWith(".woff2") -> "font/woff2"
     else -> "application/octet-stream"
 }
+
+private class EmptyActionModeCallback(
+    private val wrapped: ActionMode.Callback
+) : ActionMode.Callback {
+    override fun onCreateActionMode(mode: ActionMode?, menu: android.view.Menu?): Boolean {
+        wrapped.onCreateActionMode(mode, menu)
+        menu?.clear() // 清空系统的 Copy, Share, Select all 等全部按钮，不弹出系统黑框
+        return true   // 保持 ActionMode 处于活跃态，保留划选光标与 selectionchange 正常事件流
+    }
+
+    override fun onPrepareActionMode(mode: ActionMode?, menu: android.view.Menu?): Boolean {
+        wrapped.onPrepareActionMode(mode, menu)
+        menu?.clear()
+        return false
+    }
+
+    override fun onActionItemClicked(mode: ActionMode?, item: android.view.MenuItem?): Boolean {
+        return wrapped.onActionItemClicked(mode, item)
+    }
+
+    override fun onDestroyActionMode(mode: ActionMode?) {
+        wrapped.onDestroyActionMode(mode)
+    }
+}
+
