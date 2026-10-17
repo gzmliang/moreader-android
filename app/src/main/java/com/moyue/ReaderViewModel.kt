@@ -98,10 +98,10 @@ data class ReaderUiState(
     val llmConfig: LLMConfig = LLMConfig(),
     val edgeTtsEndpoint: String = "http://p-plus.duckdns.org:5001",
     val edgeTtsVoice: String = "zh-CN-XiaoxiaoNeural",
-    val aiVoiceEndpoint: String = "https://api.siliconflow.cn/v1",
+    val aiVoiceEndpoint: String = "",
     val aiVoiceApiKey: String = "",
-    val aiVoiceModel: String = "fnlp/MOSS-TTSD-v0.5",
-    val aiVoiceId: String = "fnlp/MOSS-TTSD-v0.5:anna",
+    val aiVoiceModel: String = "",
+    val aiVoiceId: String = "",
     // Custom TTS (OpenAI-compatible)
     val customTtsEndpoint: String = "",
     val customTtsApiKey: String = "",
@@ -206,10 +206,10 @@ class ReaderViewModel(
         ReaderUiState(
             edgeTtsEndpoint = prefs.getString("edge_endpoint", "http://p-plus.duckdns.org:5001") ?: "http://p-plus.duckdns.org:5001",
             edgeTtsVoice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural",
-            aiVoiceEndpoint = prefs.getString("ai_endpoint", "https://api.siliconflow.cn/v1") ?: "https://api.siliconflow.cn/v1",
+            aiVoiceEndpoint = prefs.getString("ai_endpoint", "") ?: "",
             aiVoiceApiKey = prefs.getString("ai_apikey", "") ?: "",
-            aiVoiceModel = prefs.getString("ai_model", "fnlp/MOSS-TTSD-v0.5") ?: "fnlp/MOSS-TTSD-v0.5",
-            aiVoiceId = prefs.getString("ai_voice_id", "fnlp/MOSS-TTSD-v0.5:anna") ?: "fnlp/MOSS-TTSD-v0.5:anna",
+            aiVoiceModel = prefs.getString("ai_model", "") ?: "",
+            aiVoiceId = prefs.getString("ai_voice_id", "") ?: "",
             llmConfig = LLMConfig(
                 provider = prefs.getString("llm_provider", "custom") ?: "custom",
                 apiKey = prefs.getString("llm_apikey", "") ?: "",

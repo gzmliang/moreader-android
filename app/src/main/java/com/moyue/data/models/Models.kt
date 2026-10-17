@@ -71,9 +71,9 @@ enum class TranslateEngine {
 
 // AI translation config
 data class LLMConfig(
-    val provider: String = "siliconflow",
+    val provider: String = "custom",
     val apiKey: String = "",
-    val endpoint: String = "https://api.siliconflow.cn/v1",
-    val model: String = "Qwen/Qwen2.5-72B-Instruct",
+    val endpoint: String = "",
+    val model: String = "",
     val targetLang: String = "Chinese",
 )

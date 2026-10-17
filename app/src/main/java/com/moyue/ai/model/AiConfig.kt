@@ -1,10 +1,10 @@
 package com.moyue.ai.model
 
 data class AiConfig(
-    val provider: String = "OpenAI",
-    val baseUrl: String = "https://api.openai.com/v1",
+    val provider: String = "Custom",
+    val baseUrl: String = "",
     val apiKey: String = "",
-    val model: String = "gpt-4o-mini",
+    val model: String = "",
     val sourceLang: String = "Auto",
     val targetLang: String = "Chinese"
 ) {

@@ -157,12 +157,14 @@ fun TtsSettingsSheet(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
 
     Surface(
-        modifier = Modifier.fillMaxWidth().heightIn(max = 580.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(540.dp),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         shadowElevation = 8.dp,
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Column(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxSize()) {
             // ── 顶部 Header ──
             Row(
                 Modifier
@@ -249,7 +251,7 @@ fun TtsSettingsSheet(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f, fill = false)
+                    .weight(1f, fill = true)
             ) {
                 when (selectedTabIndex) {
                     0 -> VoiceSettingsTab(
@@ -740,12 +742,9 @@ private fun LlmSettingsTab(
     llmConfig: LLMConfig,
     onLLMConfigChange: (LLMConfig) -> Unit,
 ) {
-    val defaultEndpoint = "https://api.deepseek.com"
-    val defaultModel = "deepseek-chat"
-
-    val llmEp = remember(llmConfig.endpoint) { mutableStateOf(llmConfig.endpoint.ifEmpty { defaultEndpoint }) }
+    val llmEp = remember(llmConfig.endpoint) { mutableStateOf(llmConfig.endpoint) }
     val llmKey = remember(llmConfig.apiKey) { mutableStateOf(llmConfig.apiKey) }
-    val llmModel = remember(llmConfig.model) { mutableStateOf(llmConfig.model.ifEmpty { defaultModel }) }
+    val llmModel = remember(llmConfig.model) { mutableStateOf(llmConfig.model) }
     val llmTargetLang = remember(llmConfig.targetLang) { mutableStateOf(llmConfig.targetLang.ifEmpty { "Chinese" }) }
     var keyVisible by remember { mutableStateOf(false) }
     var saveFeedback by remember { mutableStateOf(false) }
