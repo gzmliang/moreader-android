@@ -125,6 +125,10 @@ class AiCacheRepository(private val context: Context) {
     fun getQuizFeedbackMode(): String = prefs.getString("ai_quiz_feedback_mode", "submit") ?: "submit"
     fun setQuizFeedbackMode(mode: String) = prefs.edit().putString("ai_quiz_feedback_mode", mode).apply()
 
+    // Quiz TTS (题目朗读) global toggle：默认开启，家长可关掉让孩子自己认字
+    fun getQuizTtsEnabled(): Boolean = prefs.getBoolean("ai_quiz_tts_enabled", true)
+    fun setQuizTtsEnabled(enabled: Boolean) = prefs.edit().putBoolean("ai_quiz_tts_enabled", enabled).apply()
+
     // Summary Cache (Strict bookId + scope + ratio + level + mode key)
     fun getSummary(bookId: String, chapterIndex: Int, scope: String, ratio: Int, level: String = "standard", mode: String = "bilingual"): AiSummaryResult? {
         val primaryKey = if (scope == "book") {

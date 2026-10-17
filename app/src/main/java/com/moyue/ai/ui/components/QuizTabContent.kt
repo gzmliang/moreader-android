@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -73,6 +74,7 @@ fun QuizTabContent(
     var questionCount by remember { mutableIntStateOf(repository.getLastQuizCount(bookId)) }
     var difficulty by remember { mutableStateOf(repository.getLastQuizDifficulty(bookId)) } // "Basic", "Intermediate", "Advanced"
     var feedbackMode by remember { mutableStateOf(QuizRules.normalizeMode(repository.getQuizFeedbackMode())) } // "submit"(默认) or "instant"
+    var quizTtsEnabled by remember { mutableStateOf(repository.getQuizTtsEnabled()) } // 题目朗读全局开关
 
     // 章节目录（用于自定义章节下拉选择真实章节名）
     var tocEntries by remember { mutableStateOf<List<com.moyue.app.data.models.TocEntry>>(emptyList()) }
@@ -663,6 +665,29 @@ fun QuizTabContent(
                         }
                     }
 
+                    // 题目朗读全局开关：🔊 开 / 🔇 关
+                    IconButton(
+                        onClick = {
+                            quizTtsEnabled = !quizTtsEnabled
+                            repository.setQuizTtsEnabled(quizTtsEnabled)
+                            if (!quizTtsEnabled) stopSpeaking()
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (quizTtsEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                            contentDescription = stringResource(
+                                if (quizTtsEnabled) R.string.ai_quiz_tts_on else R.string.ai_quiz_tts_off
+                            ),
+                            tint = when {
+                                isEink -> Color.Black
+                                quizTtsEnabled -> MaterialTheme.colorScheme.primary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                            },
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
                     IconButton(
                         onClick = { startGenerateQuiz() },
                         modifier = Modifier.size(32.dp)
@@ -735,6 +760,7 @@ fun QuizTabContent(
                                 isEink = isEink,
                                 textSizeSp = textSizeSp,
                                 displayMode = displayMode,
+                                ttsEnabled = quizTtsEnabled,
                                 speakingKey = speakingKey,
                                 onSpeak = { key, segments -> speak(key, segments) },
                                 onSelectOption = { opt ->
@@ -1242,6 +1268,7 @@ private fun QuizQuestionItem(
     isEink: Boolean,
     textSizeSp: Float,
     displayMode: String,
+    ttsEnabled: Boolean,
     speakingKey: String?,
     onSpeak: (String, List<String>) -> Unit,
     onSelectOption: (String) -> Unit
@@ -1295,6 +1322,7 @@ private fun QuizQuestionItem(
                 QuizSpeakerButton(
                     isPlaying = speakingKey == questionKey,
                     isEink = isEink,
+                    ttsEnabled = ttsEnabled,
                     contentDescription = questionReadLabel,
                     onClick = { onSpeak(questionKey, questionSegments) }
                 )
@@ -1369,6 +1397,7 @@ private fun QuizQuestionItem(
                         QuizSpeakerButton(
                             isPlaying = speakingKey == "${questionKey}_$optPrefix",
                             isEink = isEink,
+                            ttsEnabled = ttsEnabled,
                             contentDescription = optionReadLabel,
                             onClick = {
                                 onSpeak(
@@ -1411,6 +1440,7 @@ private fun QuizQuestionItem(
                             QuizSpeakerButton(
                                 isPlaying = speakingKey == analysisKey,
                                 isEink = isEink,
+                                ttsEnabled = ttsEnabled,
                                 contentDescription = analysisReadLabel,
                                 onClick = { onSpeak(analysisKey, analysisSegments) }
                             )
@@ -1443,9 +1473,11 @@ private fun QuizQuestionItem(
 private fun QuizSpeakerButton(
     isPlaying: Boolean,
     isEink: Boolean,
+    ttsEnabled: Boolean,
     contentDescription: String,
     onClick: () -> Unit
 ) {
+    if (!ttsEnabled) return  // 朗读关闭时隐藏啦唄按钮，不占位
     IconButton(onClick = onClick, modifier = Modifier.size(30.dp)) {
         Icon(
             imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.VolumeUp,
