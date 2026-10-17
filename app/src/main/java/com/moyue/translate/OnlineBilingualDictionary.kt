@@ -3,11 +3,9 @@ package com.moyue.app.translate
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -15,17 +13,21 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
- * Universal online bilingual dictionary engine for overseas and multilingual users.
- * Supports arbitrary source language -> arbitrary target language translation (e.g. EN->ES, FR->EN, DE->JA, etc.).
+ * Universal fast bilingual dictionary engine aligned with Moreader Web Extension.
  * Features:
- * - Free, public APIs without API keys (MyMemory + Free Dictionary API)
- * - Automatic IPA phonetics and English definition breakdown for English words
- * - Local disk caching via SharedPreferences for instantaneous offline repeat lookups
+ * - Dual-channel translation: Google Translate (primary, ~200ms) with circuit breaker + MyMemory (fallback)
+ * - Local offline phonetic extraction via ECDICT (0ms, no network delay)
+ * - Persistent disk caching via SharedPreferences for instantaneous repeat queries
  */
 object OnlineBilingualDictionary {
 
     private const val TAG = "OnlineBilingualDict"
     private const val PREFS_CACHE = "online_dict_cache"
+    private const val GOOGLE_GTX_URL = "https://translate.googleapis.com/translate_a/single"
+    private const val MYMEMORY_URL = "https://api.mymemory.translated.net/get"
+
+    private var isGoogleReachable: Boolean? = null
+    private var lastGoogleCheckTime = 0L
 
     data class LanguageOption(
         val code: String,
@@ -45,6 +47,7 @@ object OnlineBilingualDictionary {
         LanguageOption("ru", "Russian", "🇷🇺 Русский"),
         LanguageOption("it", "Italian", "🇮🇹 Italiano"),
         LanguageOption("pt", "Portuguese", "🇵🇹 Português"),
+        LanguageOption("nl", "Dutch", "🇳🇱 Nederlands"),
         LanguageOption("ar", "Arabic", "🇸🇦 العربية"),
         LanguageOption("vi", "Vietnamese", "🇻🇳 Tiếng Việt"),
         LanguageOption("th", "Thai", "🇹🇭 ไทย"),
@@ -52,16 +55,12 @@ object OnlineBilingualDictionary {
         LanguageOption("hi", "Hindi", "🇮🇳 हिन्दी")
     )
 
+    // Fast HTTP client with tight timeouts (no hanging)
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(4, TimeUnit.SECONDS)
         .build()
 
-    /**
-     * Detect default target language code based on device system locale.
-     * E.g. device in Spain -> "es", device in France -> "fr", device in China -> "zh-CN".
-     * Defaults to "en" if no specific match.
-     */
     fun getDefaultTargetLangCode(): String {
         val locale = Locale.getDefault()
         val lang = locale.language.lowercase()
@@ -75,6 +74,7 @@ object OnlineBilingualDictionary {
             "ru" -> "ru"
             "it" -> "it"
             "pt" -> "pt"
+            "nl" -> "nl"
             "ar" -> "ar"
             "vi" -> "vi"
             "th" -> "th"
@@ -84,9 +84,6 @@ object OnlineBilingualDictionary {
         }
     }
 
-    /**
-     * Map standard language name or code to two-letter code.
-     */
     fun normalizeLangCode(lang: String): String {
         val trimmed = lang.trim()
         val found = SUPPORTED_LANGUAGES.find { 
@@ -114,7 +111,7 @@ object OnlineBilingualDictionary {
         rawWord: String,
         targetLang: String = getDefaultTargetLangCode()
     ): Result<DictLookupResult> = withContext(Dispatchers.IO) {
-        val word = rawWord.trim().trim('"', '\'', '.', ',', '!', '?', ';', ':')
+        val word = rawWord.trim().trim('"', '\'', '.', ',', '!', '?', ';', ':', '(', ')', '[', ']')
         if (word.isBlank()) {
             return@withContext Result.failure(IllegalArgumentException("Empty word"))
         }
@@ -123,7 +120,7 @@ object OnlineBilingualDictionary {
         val cacheKey = "${word.lowercase(Locale.ROOT)}|$targetCode"
         val prefs = context.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE)
 
-        // 1. Check local persistent cache
+        // 1. Instant local cache lookup (0ms)
         val cachedJson = prefs.getString(cacheKey, null)
         if (!cachedJson.isNullOrBlank()) {
             try {
@@ -134,85 +131,144 @@ object OnlineBilingualDictionary {
             }
         }
 
-        // 2. Query online APIs concurrently
+        // 2. Instant local phonetic extraction via ECDICT (0ms, 100% offline)
+        var localPhonetic: String? = null
         try {
-            val isLatinWord = word.all { it in 'a'..'z' || it in 'A'..'Z' || it == '-' || it == '\'' || it == ' ' }
-
-            val encodedWord = URLEncoder.encode(word, StandardCharsets.UTF_8.name())
-            val myMemoryUrl = "https://api.mymemory.translated.net/get?q=$encodedWord&langpair=autodetect|$targetCode"
-
-            // Concurrently fetch MyMemory translation + optional English phonetics/definitions
-            val translationDeferred = async { fetchMyMemoryTranslation(myMemoryUrl) }
-            val phoneticDeferred = async {
-                if (isLatinWord) fetchDictionaryApiPhonetic(encodedWord) else null
+            com.moyue.app.localai.DictionaryEngine.init(context)
+            val localEntry = com.moyue.app.localai.DictionaryEngine.query(word)
+            if (localEntry is com.moyue.app.data.models.DictionaryResult.Found) {
+                localPhonetic = localEntry.entry.phonetic?.ifBlank { null }
             }
-
-            val transPair = translationDeferred.await()
-            val primaryTrans = transPair?.first.orEmpty()
-            val alternatives = transPair?.second.orEmpty()
-
-            val dictApiData = phoneticDeferred.await()
-            val phonetic = dictApiData?.first
-            val enDefinitions = dictApiData?.second.orEmpty()
-
-            if (primaryTrans.isBlank() && enDefinitions.isEmpty()) {
-                return@withContext Result.failure(Exception("No translation found"))
-            }
-
-            val targetOption = SUPPORTED_LANGUAGES.find { it.code == targetCode }
-            val targetLabel = targetOption?.displayName ?: targetCode
-
-            // Build formatted display markdown
-            val displayBuilder = StringBuilder()
-            displayBuilder.append(word)
-            if (!phonetic.isNullOrBlank()) {
-                displayBuilder.append("  ").append(phonetic)
-            }
-            displayBuilder.append("\n\n")
-
-            displayBuilder.append("[$targetLabel]\n")
-            if (primaryTrans.isNotBlank()) {
-                displayBuilder.append("• ").append(primaryTrans).append("\n")
-            }
-            alternatives.take(4).forEach { alt ->
-                if (!alt.equals(primaryTrans, ignoreCase = true)) {
-                    displayBuilder.append("• ").append(alt).append("\n")
-                }
-            }
-
-            if (enDefinitions.isNotEmpty()) {
-                displayBuilder.append("\n[English Definitions]\n")
-                enDefinitions.take(3).forEach { (pos, def) ->
-                    val posLabel = if (pos.isNotBlank()) "($pos) " else ""
-                    displayBuilder.append("• ").append(posLabel).append(def).append("\n")
-                }
-            }
-
-            val formatted = displayBuilder.toString().trimEnd()
-
-            val result = DictLookupResult(
-                word = word,
-                phonetic = phonetic,
-                targetLangCode = targetCode,
-                primaryTranslation = primaryTrans,
-                alternativeTranslations = alternatives,
-                englishDefinitions = enDefinitions,
-                formattedDisplay = formatted
-            )
-
-            // Cache result to disk
-            saveResultToCache(prefs, cacheKey, result)
-
-            Result.success(result)
         } catch (e: Exception) {
-            Log.e(TAG, "Error looking up word '$word': ${e.message}", e)
-            Result.failure(e)
+            Log.w(TAG, "Local phonetic check failed", e)
         }
+
+        val encodedWord = URLEncoder.encode(word, StandardCharsets.UTF_8.name())
+
+        // 3. Fast Dual-Channel Translation (Google Translate first -> fallback MyMemory)
+        var transPair = fetchGoogleTranslation(encodedWord, targetCode)
+        if (transPair == null || transPair.first.isBlank()) {
+            // Fallback to MyMemory
+            val myMemoryUrl = "$MYMEMORY_URL?q=$encodedWord&langpair=autodetect|$targetCode"
+            transPair = fetchMyMemoryTranslation(myMemoryUrl)
+        }
+
+        val primaryTrans = transPair?.first.orEmpty()
+        val alternatives = transPair?.second.orEmpty()
+
+        if (primaryTrans.isBlank()) {
+            return@withContext Result.failure(Exception("No translation found"))
+        }
+
+        val targetOption = SUPPORTED_LANGUAGES.find { it.code == targetCode }
+        val targetLabel = targetOption?.displayName ?: targetCode
+
+        // Build formatted display markdown
+        val displayBuilder = StringBuilder()
+        displayBuilder.append(word)
+        if (!localPhonetic.isNullOrBlank()) {
+            displayBuilder.append("  /").append(localPhonetic).append("/")
+        }
+        displayBuilder.append("\n\n")
+
+        displayBuilder.append("[$targetLabel]\n")
+        displayBuilder.append("• ").append(primaryTrans).append("\n")
+        alternatives.take(4).forEach { alt ->
+            if (!alt.equals(primaryTrans, ignoreCase = true)) {
+                displayBuilder.append("• ").append(alt).append("\n")
+            }
+        }
+
+        val formatted = displayBuilder.toString().trimEnd()
+
+        val result = DictLookupResult(
+            word = word,
+            phonetic = localPhonetic,
+            targetLangCode = targetCode,
+            primaryTranslation = primaryTrans,
+            alternativeTranslations = alternatives,
+            englishDefinitions = emptyList(),
+            formattedDisplay = formatted
+        )
+
+        // Save to cache for offline repeat lookups
+        saveResultToCache(prefs, cacheKey, result)
+
+        Result.success(result)
     }
 
+    /**
+     * Primary fast channel: Google Translate API (aligned with Moreader Chrome Extension)
+     */
+    private fun fetchGoogleTranslation(encodedWord: String, targetCode: String): Pair<String, List<String>>? {
+        val now = System.currentTimeMillis()
+        if (isGoogleReachable == false && now - lastGoogleCheckTime < 60000) {
+            return null
+        }
+
+        val clients = listOf("dict-chrome-ex", "gtx")
+        for (client in clients) {
+            try {
+                val url = "$GOOGLE_GTX_URL?client=$client&dt=t&dt=bd&dj=1&ie=UTF-8&sl=auto&tl=$targetCode&q=$encodedWord"
+                val request = Request.Builder()
+                    .url(url)
+                    .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/129.0.0.0 Mobile Safari/537.36")
+                    .addHeader("Accept", "application/json")
+                    .build()
+
+                val response = httpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: continue
+                    val json = JSONObject(body)
+
+                    var primary = ""
+                    val sentences = json.optJSONArray("sentences")
+                    if (sentences != null && sentences.length() > 0) {
+                        primary = cleanTranslationText(sentences.getJSONObject(0).optString("trans", ""))
+                    }
+
+                    val alternatives = mutableListOf<String>()
+                    val dictArr = json.optJSONArray("dict")
+                    if (dictArr != null) {
+                        for (i in 0 until dictArr.length()) {
+                            val entryObj = dictArr.optJSONObject(i) ?: continue
+                            val termsArr = entryObj.optJSONArray("terms")
+                            if (termsArr != null) {
+                                for (j in 0 until termsArr.length()) {
+                                    val t = cleanTranslationText(termsArr.optString(j, ""))
+                                    if (t.isNotBlank() && !t.equals(primary, ignoreCase = true) && !alternatives.contains(t)) {
+                                        alternatives.add(t)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (primary.isNotBlank()) {
+                        isGoogleReachable = true
+                        lastGoogleCheckTime = System.currentTimeMillis()
+                        return Pair(primary, alternatives)
+                    }
+                }
+            } catch (e: Exception) {
+                // Client attempt failed, proceed to next
+            }
+        }
+
+        isGoogleReachable = false
+        lastGoogleCheckTime = System.currentTimeMillis()
+        return null
+    }
+
+    /**
+     * Fallback channel: MyMemory Translation API
+     */
     private fun fetchMyMemoryTranslation(url: String): Pair<String, List<String>>? {
         return try {
-            val request = Request.Builder().url(url).build()
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+                .build()
             val response = httpClient.newCall(request).execute()
             if (!response.isSuccessful) return null
             val body = response.body?.string() ?: return null
@@ -240,56 +296,6 @@ object OnlineBilingualDictionary {
         }
     }
 
-    private fun fetchDictionaryApiPhonetic(encodedWord: String): Pair<String?, List<Pair<String, String>>>? {
-        return try {
-            val url = "https://api.dictionaryapi.dev/api/v2/entries/en/$encodedWord"
-            val request = Request.Builder().url(url).build()
-            val response = httpClient.newCall(request).execute()
-            if (!response.isSuccessful) return null
-            val body = response.body?.string() ?: return null
-            val array = JSONArray(body)
-            if (array.length() == 0) return null
-            val first = array.getJSONObject(0)
-
-            var phonetic = first.optString("phonetic", "").trim()
-            if (phonetic.isBlank()) {
-                val phoneticsArr = first.optJSONArray("phonetics")
-                if (phoneticsArr != null) {
-                    for (i in 0 until phoneticsArr.length()) {
-                        val pObj = phoneticsArr.optJSONObject(i) ?: continue
-                        val text = pObj.optString("text", "").trim()
-                        if (text.isNotBlank()) {
-                            phonetic = text
-                            break
-                        }
-                    }
-                }
-            }
-
-            val definitions = mutableListOf<Pair<String, String>>()
-            val meanings = first.optJSONArray("meanings")
-            if (meanings != null) {
-                for (i in 0 until meanings.length()) {
-                    val m = meanings.optJSONObject(i) ?: continue
-                    val pos = m.optString("partOfSpeech", "").trim()
-                    val defs = m.optJSONArray("definitions")
-                    if (defs != null && defs.length() > 0) {
-                        val defObj = defs.optJSONObject(0)
-                        val defText = defObj?.optString("definition", "")?.trim() ?: ""
-                        if (defText.isNotBlank()) {
-                            definitions.add(Pair(pos, defText))
-                        }
-                    }
-                }
-            }
-
-            Pair(phonetic.ifBlank { null }, definitions)
-        } catch (e: Exception) {
-            Log.w(TAG, "DictionaryAPI fetch error", e)
-            null
-        }
-    }
-
     private fun cleanTranslationText(text: String): String {
         return text
             .removeSurrounding("\"")
@@ -310,15 +316,7 @@ object OnlineBilingualDictionary {
                 put("phonetic", result.phonetic ?: "")
                 put("targetLangCode", result.targetLangCode)
                 put("primaryTranslation", result.primaryTranslation)
-                put("alternatives", JSONArray(result.alternativeTranslations))
-                val enDefsArr = JSONArray()
-                result.englishDefinitions.forEach { (pos, def) ->
-                    enDefsArr.put(JSONObject().apply {
-                        put("pos", pos)
-                        put("def", def)
-                    })
-                }
-                put("englishDefinitions", enDefsArr)
+                put("alternatives", org.json.JSONArray(result.alternativeTranslations))
                 put("formattedDisplay", result.formattedDisplay)
             }
             prefs.edit().putString(key, json.toString()).apply()
@@ -341,16 +339,6 @@ object OnlineBilingualDictionary {
                 if (item.isNotBlank()) alts.add(item)
             }
         }
-        val enDefs = mutableListOf<Pair<String, String>>()
-        val enDefsArr = json.optJSONArray("englishDefinitions")
-        if (enDefsArr != null) {
-            for (i in 0 until enDefsArr.length()) {
-                val obj = enDefsArr.optJSONObject(i) ?: continue
-                val pos = obj.optString("pos", "")
-                val def = obj.optString("def", "")
-                if (def.isNotBlank()) enDefs.add(Pair(pos, def))
-            }
-        }
         val formatted = json.optString("formattedDisplay", "")
         return DictLookupResult(
             word = word,
@@ -358,7 +346,7 @@ object OnlineBilingualDictionary {
             targetLangCode = targetCode,
             primaryTranslation = primary,
             alternativeTranslations = alts,
-            englishDefinitions = enDefs,
+            englishDefinitions = emptyList(),
             formattedDisplay = formatted
         )
     }
