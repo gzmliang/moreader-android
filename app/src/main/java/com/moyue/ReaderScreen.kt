@@ -266,37 +266,6 @@ fun ReaderScreen(
                     if (state.translationResult != null) {
                         Text(state.translationResult!!, fontSize = 14.sp, lineHeight = 22.sp)
                     }
-                    // Dictionary debug log — hidden by default, toggle to show
-                    if (state.dictionaryDebugLog.isNotEmpty()) {
-                        Spacer(Modifier.height(12.dp))
-                        androidx.compose.material3.HorizontalDivider()
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(
-                                onClick = { viewModel.toggleDictionaryDebugLog() },
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                            ) {
-                                val arrow = if (state.showDictionaryDebugLog) "▼" else "▶"
-                                Text("$arrow 词典调试", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
-                            }
-                            if (state.showDictionaryDebugLog) {
-                                TextButton(
-                                    onClick = { viewModel.copyDictionaryDebugLog() },
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                                ) {
-                                    Text("📋 复制", fontSize = 10.sp, color = Color(0xFF059669))
-                                }
-                            }
-                        }
-                        if (state.showDictionaryDebugLog) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(state.dictionaryDebugLog, fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 16.sp)
-                        }
-                    }
                 }
             },
             confirmButton = { TextButton(onClick = { viewModel.dismissTranslationPanel() }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close)) } },
