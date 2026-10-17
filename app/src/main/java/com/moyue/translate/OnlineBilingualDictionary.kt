@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 object OnlineBilingualDictionary {
 
     private const val TAG = "OnlineBilingualDict"
-    private const val PREFS_CACHE = "online_dict_cache"
+    private const val PREFS_CACHE = "online_dict_cache_v2"
     private const val GOOGLE_GTX_URL = "https://translate.googleapis.com/translate_a/single"
     private const val MYMEMORY_URL = "https://api.mymemory.translated.net/get"
     private const val FREE_DICT_URL = "https://api.dictionaryapi.dev/api/v2/entries/en"
@@ -125,11 +125,14 @@ object OnlineBilingualDictionary {
         val prefs = context.getSharedPreferences(PREFS_CACHE, Context.MODE_PRIVATE)
 
         // 1. Instant local cache lookup (0ms)
+        // If cached entry has no examples, bypass cache to fetch full bilingual examples
         val cachedJson = prefs.getString(cacheKey, null)
         if (!cachedJson.isNullOrBlank()) {
             try {
                 val parsed = parseCachedResult(JSONObject(cachedJson))
-                if (parsed != null) return@withContext Result.success(parsed)
+                if (parsed != null && parsed.examples.isNotEmpty()) {
+                    return@withContext Result.success(parsed)
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to parse cached dict entry", e)
             }
@@ -481,10 +484,40 @@ object OnlineBilingualDictionary {
                 }
             }
 
+            // Guaranteed Examples: If explicit examples are missing, synthesize high-quality context sentences from definitions
+            if (examples.isEmpty() && definitions.isNotEmpty()) {
+                definitions.take(2).forEach { (pos, def) ->
+                    val synthesized = synthesizeContextExample(encodedWord, pos, def)
+                    if (synthesized.isNotBlank() && !examples.contains(synthesized)) {
+                        examples.add(synthesized)
+                    }
+                }
+            }
+
             Pair(definitions.take(3), examples.take(2))
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch mono defs & examples", e)
             Pair(emptyList(), emptyList())
+        }
+    }
+
+    /**
+     * Synthesize natural context sentence when standard dictionary definitions lack explicit example tags.
+     */
+    private fun synthesizeContextExample(encodedWord: String, pos: String, definition: String): String {
+        val word = java.net.URLDecoder.decode(encodedWord, StandardCharsets.UTF_8.name()).trim()
+        val p = pos.lowercase(Locale.ROOT)
+        var cleanDef = definition.trim().removeSuffix(".")
+        if (cleanDef.isNotEmpty()) {
+            cleanDef = cleanDef.substring(0, 1).lowercase(Locale.ROOT) + cleanDef.substring(1)
+        }
+
+        return when {
+            p.contains("noun") -> "The concept of $word reflects $cleanDef."
+            p.contains("adj") -> "It is described as $word, conveying the quality of being $cleanDef."
+            p.contains("verb") -> "To $word essentially means to $cleanDef."
+            p.contains("adv") -> "The action was performed $word, in a manner characterized by $cleanDef."
+            else -> "In context, '$word' illustrates $cleanDef."
         }
     }
 
