@@ -742,9 +742,12 @@ private fun LlmSettingsTab(
     llmConfig: LLMConfig,
     onLLMConfigChange: (LLMConfig) -> Unit,
 ) {
-    val llmEp = remember(llmConfig.endpoint) { mutableStateOf(llmConfig.endpoint) }
+    val defaultEndpoint = "https://api.deepseek.com/v1"
+    val defaultModel = "deepseek-chat"
+
+    val llmEp = remember(llmConfig.endpoint) { mutableStateOf(llmConfig.endpoint.ifEmpty { defaultEndpoint }) }
     val llmKey = remember(llmConfig.apiKey) { mutableStateOf(llmConfig.apiKey) }
-    val llmModel = remember(llmConfig.model) { mutableStateOf(llmConfig.model) }
+    val llmModel = remember(llmConfig.model) { mutableStateOf(llmConfig.model.ifEmpty { defaultModel }) }
     val llmTargetLang = remember(llmConfig.targetLang) { mutableStateOf(llmConfig.targetLang.ifEmpty { "Chinese" }) }
     var keyVisible by remember { mutableStateOf(false) }
     var saveFeedback by remember { mutableStateOf(false) }
@@ -807,11 +810,19 @@ private fun LlmSettingsTab(
             Text("Presets:", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
             SuggestionChip(
                 onClick = {
-                    llmEp.value = "https://api.deepseek.com"
+                    llmEp.value = "https://api.deepseek.com/v1"
                     llmModel.value = "deepseek-chat"
                     saveFeedback = false
                 },
                 label = { Text("DeepSeek", fontSize = 11.sp) }
+            )
+            SuggestionChip(
+                onClick = {
+                    llmEp.value = "https://api.siliconflow.cn/v1"
+                    llmModel.value = "deepseek-ai/DeepSeek-V3"
+                    saveFeedback = false
+                },
+                label = { Text("SiliconFlow", fontSize = 11.sp) }
             )
             SuggestionChip(
                 onClick = {
@@ -823,11 +834,11 @@ private fun LlmSettingsTab(
             )
             SuggestionChip(
                 onClick = {
-                    llmEp.value = "https://api.siliconflow.cn/v1"
-                    llmModel.value = "deepseek-ai/DeepSeek-V3"
+                    llmEp.value = "https://openrouter.ai/api/v1"
+                    llmModel.value = "anthropic/claude-3.5-haiku"
                     saveFeedback = false
                 },
-                label = { Text("SiliconFlow", fontSize = 11.sp) }
+                label = { Text("OpenRouter", fontSize = 11.sp) }
             )
         }
 

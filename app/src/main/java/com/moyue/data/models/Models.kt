@@ -71,9 +71,9 @@ enum class TranslateEngine {
 
 // AI translation config
 data class LLMConfig(
-    val provider: String = "custom",
+    val provider: String = "DeepSeek",
     val apiKey: String = "",
-    val endpoint: String = "",
-    val model: String = "",
+    val endpoint: String = "https://api.deepseek.com/v1",
+    val model: String = "deepseek-chat",
     val targetLang: String = "Chinese",
 )

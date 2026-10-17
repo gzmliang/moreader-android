@@ -1,10 +1,10 @@
 package com.moyue.ai.model
 
 data class AiConfig(
-    val provider: String = "Custom",
-    val baseUrl: String = "",
+    val provider: String = "DeepSeek",
+    val baseUrl: String = "https://api.deepseek.com/v1",
     val apiKey: String = "",
-    val model: String = "",
+    val model: String = "deepseek-chat",
     val sourceLang: String = "Auto",
     val targetLang: String = "Chinese"
 ) {
