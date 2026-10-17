@@ -48,7 +48,7 @@
     <string name="dict_strokes">Strokes</string>
     <string name="dict_word_forms">📝 Word Forms</string>
     <string name="dict_word_groups">📝 Word Combinations</string>
-    <string name="dictionary">📖 Dictionary</string>
+    <string name="dictionary">📖 Dict</string>
     <string name="empty_library_hint">Import an EPUB to start reading</string>
     <string name="sort_title">Sort By</string>
     <string name="sort_recent">Recent / Newly Added</string>
@@ -277,7 +277,7 @@ Just change the Base URL and API Key</string>
     <string name="pause">Pause</string>
     <string name="play_chapter">Read Chapter</string>
     <string name="previous_chapter">Previous Chapter</string>
-    <string name="read_aloud">🔊 Read Aloud</string>
+    <string name="read_aloud">🔊 Read</string>
     <string name="read_from_here">Read from here</string>
     <string name="reader_exit_fullscreen">Exit Fullscreen</string>
     <string name="reader_font_family_label">Font</string>
@@ -381,7 +381,7 @@ Just change the Base URL and API Key</string>
     <string name="vocab_select_all">Select All</string>
     <string name="vocab_select_mode">Multi-select</string>
     <string name="vocab_selected_count">%1$d selected</string>
-    <string name="vocabulary_add">Add to Vocabulary</string>
+    <string name="vocabulary_add">Vocab</string>
     <string name="vocabulary_added">Added to vocabulary</string>
     <string name="vocabulary_already_exists">Word already in vocabulary</string>
     <string name="vocabulary_empty">No words yet</string>
