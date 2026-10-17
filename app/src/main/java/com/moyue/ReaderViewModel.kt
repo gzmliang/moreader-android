@@ -811,31 +811,9 @@ class ReaderViewModel(
         val t = _uiState.value.selectedText ?: return
         _uiState.update { it.copy(isTranslating = true, translationMode = mode, showTranslationPanel = true, translationResult = null, isDictionaryResult = false, dictionaryDebugLog = "") }
 
-        // === Dictionary mode: try local dictionary, fallback to AI with label ===
+        // === Dictionary mode: Universal Dual-Mode (Source Lang Dict + Target Lang Dict + Examples) ===
         if (mode == "dictionary") {
             val targetLang = _uiState.value.dictionaryTargetLang
-            val isChineseTarget = targetLang.startsWith("zh", ignoreCase = true) || targetLang.equals("Chinese", ignoreCase = true)
-
-            // If target is Chinese, try local offline ECDICT / Hanzi dict first
-            if (isChineseTarget) {
-                com.moyue.app.localai.DictionaryEngine.clearDebugLog()  // clear BEFORE init so we keep init logs
-                com.moyue.app.localai.DictionaryEngine.init(getApplication())
-                val dictResult = com.moyue.app.localai.DictionaryEngine.query(t.trim())
-                val debugLog = com.moyue.app.localai.DictionaryEngine.getDebugLog()
-
-                if (dictResult is com.moyue.app.data.models.DictionaryResult.Found) {
-                    val ctx = getApplication<android.app.Application>()
-                    _uiState.update { 
-                        it.copy(
-                            isTranslating = false,
-                            translationResult = dictResult.entry.formatForDisplay(ctx),
-                            isDictionaryResult = true,
-                            dictionaryDebugLog = debugLog
-                        )
-                    }
-                    return
-                }
-            }
 
             // Universal Online Bilingual Dictionary lookup
             viewModelScope.launch {
@@ -849,8 +827,7 @@ class ReaderViewModel(
                         it.copy(
                             isTranslating = false,
                             translationResult = entry.formattedDisplay,
-                            isDictionaryResult = true,
-                            dictionaryDebugLog = "OnlineBilingualDict ($targetLang)"
+                            isDictionaryResult = true
                         )
                     }
                 }.onFailure { err ->
@@ -863,8 +840,7 @@ class ReaderViewModel(
                             it.copy(
                                 isTranslating = false,
                                 translationResult = localFallback.entry.formatForDisplay(ctx),
-                                isDictionaryResult = true,
-                                dictionaryDebugLog = "Fallback: ECDICT"
+                                isDictionaryResult = true
                             )
                         }
                     } else {

@@ -15,12 +15,11 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
- * Universal fast bilingual dictionary engine aligned with Moreader Web Extension.
- * Features:
- * - Dual-channel translation: Google Translate (primary, ~200ms) with circuit breaker + MyMemory (fallback)
- * - Authentic bilingual example sentences (up to 2 curated examples with target language translation)
- * - Local offline phonetic extraction via ECDICT (0ms, no network delay)
- * - Persistent disk caching via SharedPreferences for instantaneous repeat queries
+ * Universal bilingual dictionary engine aligned with professional monolingual & bilingual reference specs:
+ * 1. Monolingual Definition: Explains in the word's own native language (e.g. English-English, Chinese-Chinese)
+ * 2. Bilingual Target Translation: Explains in user's selected target language (e.g. English-Chinese, English-French)
+ * 3. Authentic Bilingual Examples: Up to 2 real-world sentences with dual-language translations
+ * 4. 0ms offline phonetic & CJK radical/stroke support with persistent disk caching
  */
 object OnlineBilingualDictionary {
 
@@ -103,12 +102,13 @@ object OnlineBilingualDictionary {
         val targetLangCode: String,
         val primaryTranslation: String,
         val alternativeTranslations: List<String> = emptyList(),
+        val monoDefinitions: List<Pair<String, String>> = emptyList(),
         val examples: List<Pair<String, String>> = emptyList(),
         val formattedDisplay: String
     )
 
     /**
-     * Query bilingual dictionary entry for a word with authentic bilingual examples.
+     * Query bilingual dictionary entry with native monolingual definition + target language definition + dual examples.
      */
     suspend fun lookup(
         context: Context,
@@ -135,13 +135,96 @@ object OnlineBilingualDictionary {
             }
         }
 
-        // 2. Instant local phonetic extraction via ECDICT (0ms, 100% offline)
+        // Check if word is Chinese/Hanzi
+        val isChineseChar = word.any { it in '\u4e00'..'\u9fff' }
+
+        if (isChineseChar) {
+            return@withContext handleChineseLookup(context, prefs, cacheKey, word, targetCode)
+        } else {
+            return@withContext handleEnglishLookup(context, prefs, cacheKey, word, targetCode)
+        }
+    }
+
+    /**
+     * Handle Chinese character / word lookup:
+     * 1. Monolingual: Hanzi Dict (Pinyin, Radical, Strokes, Native Chinese Definition, Word Groups)
+     * 2. Target Translation: Translate word/char into target language (e.g. English, French, etc.)
+     */
+    private fun handleChineseLookup(
+        context: Context,
+        prefs: android.content.SharedPreferences,
+        cacheKey: String,
+        word: String,
+        targetCode: String
+    ): Result<DictLookupResult> {
+        try {
+            com.moyue.app.localai.DictionaryEngine.init(context)
+            val localEntry = com.moyue.app.localai.DictionaryEngine.query(word)
+            val localText = if (localEntry is com.moyue.app.data.models.DictionaryResult.Found) {
+                localEntry.entry.formatForDisplay(context)
+            } else {
+                ""
+            }
+
+            val encoded = URLEncoder.encode(word, StandardCharsets.UTF_8.name())
+            var targetTrans = ""
+            if (!targetCode.startsWith("zh", ignoreCase = true)) {
+                val pair = fetchGoogleTranslation(encoded, targetCode) ?: fetchMyMemoryTranslation("$MYMEMORY_URL?q=$encoded&langpair=zh|$targetCode")
+                targetTrans = pair?.first.orEmpty()
+            }
+
+            val targetOption = SUPPORTED_LANGUAGES.find { it.code == targetCode }
+            val targetLabel = targetOption?.displayName ?: targetCode
+
+            val display = StringBuilder()
+            if (localText.isNotBlank()) {
+                display.append("[📖 现代汉语字典]\n").append(localText).append("\n\n")
+            } else {
+                display.append(word).append("\n\n")
+            }
+
+            if (targetTrans.isNotBlank() && !targetCode.startsWith("zh", ignoreCase = true)) {
+                display.append("[$targetLabel]\n• ").append(targetTrans).append("\n")
+            }
+
+            val formatted = display.toString().trimEnd()
+            val result = DictLookupResult(
+                word = word,
+                phonetic = null,
+                targetLangCode = targetCode,
+                primaryTranslation = targetTrans,
+                formattedDisplay = formatted
+            )
+            saveResultToCache(prefs, cacheKey, result)
+            return Result.success(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "Hanzi lookup error", e)
+            return Result.failure(e)
+        }
+    }
+
+    /**
+     * Handle English word lookup:
+     * 1. Monolingual: English-English Definition (Part of Speech + Precise English definition)
+     * 2. Target Translation: Target language definition (e.g. Chinese, French, Spanish, Dutch, etc.)
+     * 3. Authentic Bilingual Examples: 2 native English sentences with dual translations
+     */
+    private suspend fun handleEnglishLookup(
+        context: Context,
+        prefs: android.content.SharedPreferences,
+        cacheKey: String,
+        word: String,
+        targetCode: String
+    ): Result<DictLookupResult> = withContext(Dispatchers.IO) {
+        // 1. Instant local phonetic extraction via ECDICT (0ms, 100% offline)
         var localPhonetic: String? = null
+        var localCnTranslation: String? = null
         try {
             com.moyue.app.localai.DictionaryEngine.init(context)
             val localEntry = com.moyue.app.localai.DictionaryEngine.query(word)
             if (localEntry is com.moyue.app.data.models.DictionaryResult.Found) {
                 localPhonetic = localEntry.entry.phonetic?.ifBlank { null }
+                localCnTranslation = localEntry.entry.translation.replace("\\n", "\n").trim()
             }
         } catch (e: Exception) {
             Log.w(TAG, "Local phonetic check failed", e)
@@ -149,32 +232,35 @@ object OnlineBilingualDictionary {
 
         val encodedWord = URLEncoder.encode(word, StandardCharsets.UTF_8.name())
 
-        // 3. Concurrently fetch translation + raw English example sentences
+        // 2. Concurrently fetch target language translation + English monolingual definitions & raw examples
         val transJob = async {
-            var transPair = fetchGoogleTranslation(encodedWord, targetCode)
-            if (transPair == null || transPair.first.isBlank()) {
-                val myMemoryUrl = "$MYMEMORY_URL?q=$encodedWord&langpair=autodetect|$targetCode"
-                transPair = fetchMyMemoryTranslation(myMemoryUrl)
+            if (targetCode.startsWith("zh", ignoreCase = true) && !localCnTranslation.isNullOrBlank()) {
+                Pair(localCnTranslation, emptyList<String>())
+            } else {
+                var transPair = fetchGoogleTranslation(encodedWord, targetCode)
+                if (transPair == null || transPair.first.isBlank()) {
+                    val myMemoryUrl = "$MYMEMORY_URL?q=$encodedWord&langpair=autodetect|$targetCode"
+                    transPair = fetchMyMemoryTranslation(myMemoryUrl)
+                }
+                transPair
             }
-            transPair
         }
 
-        val rawExamplesJob = async {
-            val isLatin = word.all { it in 'a'..'z' || it in 'A'..'Z' || it == '-' || it == '\'' || it == ' ' }
-            if (isLatin) fetchRawExamples(encodedWord) else emptyList()
+        val monoAndExamplesJob = async {
+            fetchMonolingualDefsAndExamples(encodedWord)
         }
 
         val transPair = transJob.await()
         val primaryTrans = transPair?.first.orEmpty()
         val alternatives = transPair?.second.orEmpty()
 
-        if (primaryTrans.isBlank()) {
-            return@withContext Result.failure(Exception("No translation found"))
+        val (monoDefs, rawExamples) = monoAndExamplesJob.await()
+
+        if (primaryTrans.isBlank() && monoDefs.isEmpty()) {
+            return@withContext Result.failure(Exception("No definition found"))
         }
 
-        val rawExamples = rawExamplesJob.await()
-
-        // 4. Concurrently translate raw examples into target language (up to 2 examples)
+        // 3. Concurrently translate raw examples into target language (up to 2 examples)
         val bilingualExamples = mutableListOf<Pair<String, String>>()
         if (rawExamples.isNotEmpty()) {
             val transExampleJobs = rawExamples.take(2).map { rawEx ->
@@ -195,7 +281,7 @@ object OnlineBilingualDictionary {
         val targetOption = SUPPORTED_LANGUAGES.find { it.code == targetCode }
         val targetLabel = targetOption?.displayName ?: targetCode
 
-        // 5. Build formatted display markdown
+        // 4. Assemble formatted display
         val displayBuilder = StringBuilder()
         displayBuilder.append(word)
         if (!localPhonetic.isNullOrBlank()) {
@@ -203,14 +289,30 @@ object OnlineBilingualDictionary {
         }
         displayBuilder.append("\n\n")
 
+        // ① 英文原语释义 (English-English Dictionary)
+        if (monoDefs.isNotEmpty()) {
+            displayBuilder.append("[📖 English Definition / 英文释义]\n")
+            monoDefs.take(3).forEach { (pos, def) ->
+                val posStr = if (pos.isNotBlank()) "($pos) " else ""
+                displayBuilder.append("• ").append(posStr).append(def).append("\n")
+            }
+            displayBuilder.append("\n")
+        }
+
+        // ② 目标语言释义 (Target Language Translation)
         displayBuilder.append("[$targetLabel]\n")
-        displayBuilder.append("• ").append(primaryTrans).append("\n")
-        alternatives.take(4).forEach { alt ->
-            if (!alt.equals(primaryTrans, ignoreCase = true)) {
-                displayBuilder.append("• ").append(alt).append("\n")
+        if (primaryTrans.contains("\n")) {
+            displayBuilder.append(primaryTrans).append("\n")
+        } else {
+            displayBuilder.append("• ").append(primaryTrans).append("\n")
+            alternatives.take(3).forEach { alt ->
+                if (!alt.equals(primaryTrans, ignoreCase = true)) {
+                    displayBuilder.append("• ").append(alt).append("\n")
+                }
             }
         }
 
+        // ③ 双语例句 (Bilingual Examples)
         if (bilingualExamples.isNotEmpty()) {
             displayBuilder.append("\n[📝 Examples / 例句]\n")
             bilingualExamples.forEach { (enEx, targetEx) ->
@@ -229,6 +331,7 @@ object OnlineBilingualDictionary {
             targetLangCode = targetCode,
             primaryTranslation = primaryTrans,
             alternativeTranslations = alternatives,
+            monoDefinitions = monoDefs,
             examples = bilingualExamples,
             formattedDisplay = formatted
         )
@@ -339,9 +442,9 @@ object OnlineBilingualDictionary {
     }
 
     /**
-     * Fetch authentic English example sentences (or definition examples) from public dictionary
+     * Concurrently fetch English monolingual definitions + real-world example sentences
      */
-    private fun fetchRawExamples(encodedWord: String): List<String> {
+    private fun fetchMonolingualDefsAndExamples(encodedWord: String): Pair<List<Pair<String, String>>, List<String>> {
         return try {
             val url = "$FREE_DICT_URL/$encodedWord"
             val request = Request.Builder()
@@ -349,44 +452,39 @@ object OnlineBilingualDictionary {
                 .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
                 .build()
             val response = httpClient.newCall(request).execute()
-            if (!response.isSuccessful) return emptyList()
-            val body = response.body?.string() ?: return emptyList()
+            if (!response.isSuccessful) return Pair(emptyList(), emptyList())
+            val body = response.body?.string() ?: return Pair(emptyList(), emptyList())
             val array = JSONArray(body)
-            if (array.length() == 0) return emptyList()
+            if (array.length() == 0) return Pair(emptyList(), emptyList())
 
+            val definitions = mutableListOf<Pair<String, String>>()
             val examples = mutableListOf<String>()
-            val definitions = mutableListOf<String>()
 
             for (i in 0 until array.length()) {
                 val item = array.optJSONObject(i) ?: continue
                 val meanings = item.optJSONArray("meanings") ?: continue
                 for (j in 0 until meanings.length()) {
                     val m = meanings.optJSONObject(j) ?: continue
+                    val pos = m.optString("partOfSpeech", "").trim()
                     val defs = m.optJSONArray("definitions") ?: continue
                     for (k in 0 until defs.length()) {
                         val d = defs.optJSONObject(k) ?: continue
+                        val defText = d.optString("definition", "").trim()
+                        if (defText.isNotBlank() && definitions.none { it.second == defText }) {
+                            definitions.add(Pair(pos, defText))
+                        }
                         val ex = d.optString("example", "").trim()
                         if (ex.isNotBlank() && !examples.contains(ex)) {
                             examples.add(ex)
-                            if (examples.size >= 2) return examples
-                        }
-                        val defText = d.optString("definition", "").trim()
-                        if (defText.isNotBlank() && !definitions.contains(defText)) {
-                            definitions.add(defText)
                         }
                     }
                 }
             }
 
-            // If no explicit examples found, fallback to definitions as context
-            if (examples.isEmpty() && definitions.isNotEmpty()) {
-                examples.addAll(definitions.take(2))
-            }
-
-            examples.take(2)
+            Pair(definitions.take(3), examples.take(2))
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to fetch raw examples", e)
-            emptyList()
+            Log.w(TAG, "Failed to fetch mono defs & examples", e)
+            Pair(emptyList(), emptyList())
         }
     }
 
@@ -398,7 +496,6 @@ object OnlineBilingualDictionary {
         if (trimmed.isBlank() || targetCode.equals("en", ignoreCase = true)) return trimmed
 
         val encoded = URLEncoder.encode(trimmed, StandardCharsets.UTF_8.name())
-        // Try Google gtx
         try {
             val url = "$GOOGLE_GTX_URL?client=gtx&dt=t&dj=1&ie=UTF-8&sl=auto&tl=$targetCode&q=$encoded"
             val request = Request.Builder().url(url).build()
@@ -459,6 +556,14 @@ object OnlineBilingualDictionary {
                 put("targetLangCode", result.targetLangCode)
                 put("primaryTranslation", result.primaryTranslation)
                 put("alternatives", JSONArray(result.alternativeTranslations))
+                val monoArr = JSONArray()
+                result.monoDefinitions.forEach { (pos, def) ->
+                    monoArr.put(JSONObject().apply {
+                        put("pos", pos)
+                        put("def", def)
+                    })
+                }
+                put("monoDefinitions", monoArr)
                 val exArr = JSONArray()
                 result.examples.forEach { (en, target) ->
                     exArr.put(JSONObject().apply {
@@ -489,6 +594,16 @@ object OnlineBilingualDictionary {
                 if (item.isNotBlank()) alts.add(item)
             }
         }
+        val monoDefs = mutableListOf<Pair<String, String>>()
+        val monoArr = json.optJSONArray("monoDefinitions")
+        if (monoArr != null) {
+            for (i in 0 until monoArr.length()) {
+                val obj = monoArr.optJSONObject(i) ?: continue
+                val pos = obj.optString("pos", "")
+                val def = obj.optString("def", "")
+                if (def.isNotBlank()) monoDefs.add(Pair(pos, def))
+            }
+        }
         val examples = mutableListOf<Pair<String, String>>()
         val exArr = json.optJSONArray("examples")
         if (exArr != null) {
@@ -506,6 +621,7 @@ object OnlineBilingualDictionary {
             targetLangCode = targetCode,
             primaryTranslation = primary,
             alternativeTranslations = alts,
+            monoDefinitions = monoDefs,
             examples = examples,
             formattedDisplay = formatted
         )
