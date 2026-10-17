@@ -85,6 +85,7 @@ fun EpubWebView(
     pageAnimationMode: String = "smooth", // "smooth" or "instant"
     clearSelectionTrigger: Long = 0L,
     pageScrollTrigger: Long = 0L, // Positive: pageDown, Negative: pageUp
+    onPageTurned: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     onWebViewCreated: ((WebView) -> Unit)? = null,
 ) {
@@ -97,6 +98,9 @@ fun EpubWebView(
     val footnoteCallbackRef = remember { mutableStateOf<(String, String, Int, Int) -> Unit>({ _, _, _, _ -> }) }
     val prevChapterCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
     val nextChapterCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
+    val pageTurnedCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
+
+    LaunchedEffect(onPageTurned) { pageTurnedCallbackRef.value = { onPageTurned?.invoke() } }
 
     var slideBitmap by remember { mutableStateOf<Bitmap?>(null) }
     val slideOffset = remember { Animatable(0f) }
@@ -1119,6 +1123,7 @@ fun EpubWebView(
                                 };
 
                                 window.pageUp = function() {
+                                    MoreaderBridge.onPageTurned();
                                     if (window._isPageAnimating) return;
                                     if (window.isDualPage) {
                                         if (window._spreadIndex <= 0) {
@@ -1148,6 +1153,7 @@ fun EpubWebView(
                                 };
 
                                 window.pageDown = function() {
+                                    MoreaderBridge.onPageTurned();
                                     if (window._isPageAnimating) return;
                                     if (window.isDualPage) {
                                         var maxIdx = window._getMaxSpreadIndex();
@@ -1195,6 +1201,12 @@ fun EpubWebView(
                                         e.preventDefault();
                                         e.stopPropagation();
                                         window.pageDown();
+                                    } else {
+                                        var para = t ? t.closest('p,h1,h2,h3,h4,h5,h6') : null;
+                                        if (!para) {
+                                            var vIdx = window.getVisiblePara ? window.getVisiblePara() : 0;
+                                            MoreaderBridge.onParagraphClicked(vIdx);
+                                        }
                                     }
                                 }, true);
                                 // Get current visible paragraph index
@@ -1253,6 +1265,10 @@ fun EpubWebView(
                         @JavascriptInterface
                         fun onNextChapter() {
                             android.os.Handler(android.os.Looper.getMainLooper()).post { nextChapterCallbackRef.value() }
+                        }
+                        @JavascriptInterface
+                        fun onPageTurned() {
+                            android.os.Handler(android.os.Looper.getMainLooper()).post { pageTurnedCallbackRef.value() }
                         }
                         @JavascriptInterface
                         fun requestPageSlide(direction: Int, scrollYDelta: Float) {

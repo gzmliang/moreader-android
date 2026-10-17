@@ -1039,4 +1039,10 @@ AI Voice（云端 TTS）：
     <string name="theme_capsule_expand">更换主题</string>
     <string name="theme_capsule_collapse">收起</string>
     <string name="theme_current_label">当前阅读主题</string>
+
+    <!-- Global Bilingual Dictionary -->
+    <string name="dict_target_lang_label">目标语言</string>
+    <string name="dict_online_badge">全球双语词典</string>
+    <string name="dict_local_badge">本地离线词典</string>
+    <string name="dict_switch_target_lang">切换目标语言</string>
 </resources>

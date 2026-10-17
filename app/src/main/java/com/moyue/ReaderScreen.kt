@@ -98,6 +98,10 @@ fun ReaderScreen(
     // Fullscreen: hide system status bar and navigation bar
     var showFullscreenHint by remember { mutableStateOf(false) }
     var showAiCompanion by remember { mutableStateOf(false) }
+    var isToolbarVisible by rememberSaveable { mutableStateOf(false) }
+    var showDictLangMenu by remember { mutableStateOf(false) }
+    var showParagraphMenu by rememberSaveable { mutableStateOf(false) }
+    var clickedParagraphIndex by rememberSaveable { mutableStateOf(-1) }
     val view = LocalView.current
     LaunchedEffect(state.isFullscreen) {
         val window = (view.context as? android.app.Activity)?.window
@@ -180,6 +184,53 @@ fun ReaderScreen(
                         .heightIn(max = 400.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
+                    // Target language selector for universal bilingual dictionary
+                    if (state.translationMode == "dictionary") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .clickable { showDictLangMenu = true }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val currentLang = com.moyue.app.translate.OnlineBilingualDictionary.SUPPORTED_LANGUAGES.find {
+                                        it.code.equals(state.dictionaryTargetLang, ignoreCase = true)
+                                    }
+                                    Text(
+                                        text = "${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.dict_target_lang_label)}: ${currentLang?.displayName ?: state.dictionaryTargetLang}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Spacer(Modifier.width(2.dp))
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = showDictLangMenu,
+                                onDismissRequest = { showDictLangMenu = false }
+                            ) {
+                                com.moyue.app.translate.OnlineBilingualDictionary.SUPPORTED_LANGUAGES.forEach { lang ->
+                                    DropdownMenuItem(
+                                        text = { Text(lang.displayName, fontSize = 13.sp) },
+                                        onClick = {
+                                            showDictLangMenu = false
+                                            viewModel.setDictionaryTargetLang(lang.code)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Show original text
                     val selectedTxt = state.selectedText
                     if (selectedTxt != null) {
@@ -289,169 +340,47 @@ fun ReaderScreen(
     
     Scaffold(
         snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
-        topBar = {
-            AnimatedVisibility(visible = !state.isFullscreen) {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = state.book?.title ?: androidx.compose.ui.res.stringResource(com.moyue.app.R.string.loading),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.back)) } },
-                    actions = {
-                        IconButton(onClick = { showAiCompanion = true }) {
-                            val textColor = Color(android.graphics.Color.parseColor(state.theme.textColor))
-                            Surface(
-                                shape = RoundedCornerShape(5.dp),
-                                color = if (state.isEinkMode) Color.Transparent else textColor.copy(alpha = 0.08f),
-                                border = BorderStroke(
-                                    width = 1.2.dp,
-                                    color = if (state.isEinkMode) Color.Black else textColor.copy(alpha = 0.65f)
-                                ),
-                                modifier = Modifier.padding(horizontal = 2.dp)
-                            ) {
-                                Text(
-                                    text = "AI",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Black,
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
-                                    letterSpacing = 0.8.sp,
-                                    color = if (state.isEinkMode) Color.Black else textColor,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                        IconButton(onClick = { viewModel.toggleFullscreen() }) { Icon(Icons.Default.Fullscreen, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_fullscreen)) }
-                        IconButton(onClick = { viewModel.toggleBookmarkPanel() }) { Icon(Icons.Outlined.BookmarkBorder, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title)) }
-                        IconButton(onClick = { viewModel.toggleHighlightPanel() }) { Icon(Icons.Default.Star, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_list_title)) }
-                        IconButton(onClick = { viewModel.toggleTocPanel() }) { Icon(Icons.Default.List, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.table_of_contents)) }
-                        IconButton(onClick = { viewModel.toggleTtsSettingsPanel() }) { Icon(Icons.Default.Settings, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_settings_title)) }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(android.graphics.Color.parseColor(state.theme.bgColor)),
-                        titleContentColor = Color(android.graphics.Color.parseColor(state.theme.textColor)),
-                        actionIconContentColor = Color(android.graphics.Color.parseColor(state.theme.textColor)),
-                        navigationIconContentColor = Color(android.graphics.Color.parseColor(state.theme.textColor)),
-                    ),
-                )
-            }
-        },
-        bottomBar = {
-            Column(Modifier.fillMaxWidth()) {
-                // Debug Log panel
-                AnimatedVisibility(visible = state.showTtsDebugLog && !state.isFullscreen) {
-                    Surface(tonalElevation = 4.dp, color = Color(0xFF1A1A2E)) {
-                        Column(Modifier.fillMaxWidth().heightIn(max = 200.dp).padding(8.dp).verticalScroll(rememberScrollState())) {
-                            Text(text = state.ttsDebugLog.ifEmpty { androidx.compose.ui.res.stringResource(com.moyue.app.R.string.debug_no_log) },
-                                fontSize = 10.sp, color = Color(0xFF00FF88),
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, lineHeight = 14.sp)
-                        }
-                    }
-                    Surface(color = Color(0xFF2A2A3E)) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_offset), fontSize = 11.sp, color = Color(0xFF888888))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { viewModel.decreaseHighlightOffset() }, modifier = Modifier.size(28.dp)) { Text("-", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White) }
-                                Text("${state.ttsHighlightOffset}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
-                                IconButton(onClick = { viewModel.increaseHighlightOffset() }, modifier = Modifier.size(28.dp)) { Text("+", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White) }
-                            }
-                        }
-                    }
-                    Surface(color = Color(0xFF1A1A2E)) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
-                            horizontalArrangement = Arrangement.End) {
-                            TextButton(
-                                onClick = {
-                                    viewModel.copyTtsDebugLog()
-                                    android.widget.Toast.makeText(context, "TTS 日志已复制!", android.widget.Toast.LENGTH_SHORT).show()
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                            ) {
-                                Text("📋 复制 TTS 日志", fontSize = 10.sp, color = Color(0xFF888888))
-                            }
-                        }
-                    }
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    ) { _ ->
+        val insets = WindowInsets.systemBars.asPaddingValues()
+        val topInset = if (state.isFullscreen) 0.dp else insets.calculateTopPadding()
+        val bottomInset = if (state.isFullscreen) 0.dp else insets.calculateBottomPadding()
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = topInset, bottom = bottomInset)
+        ) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val screenWidthDp = maxWidth.value
+                val isLargeScreen = screenWidthDp >= 600f
+                val isDualPageSpread = when (state.layoutSpreadMode) {
+                    "dual" -> true
+                    "single" -> false
+                    else -> isLargeScreen
                 }
 
-                // Selection toolbar moved to floating overlay with drag & persistence
-
-                AnimatedVisibility(visible = !state.isFullscreen) {
-                    ReaderBottomBar(
-                        currentIndex = state.currentChapterIndex, totalChapters = state.chapters.size,
-                        fontSize = state.fontSize,
-                        isTtsPlaying = state.isTtsPlaying, isTtsPaused = state.isTtsPaused,
-                        isTtsGenerating = state.isTtsGenerating,
-                        isTtsLocked = state.ttsLocked,
-                        onPrevPage = { viewModel.pageUp() },
-                        onNextPage = { viewModel.pageDown() },
-                        onPrevChapter = { viewModel.prevChapter() },
-                        onNextChapter = { viewModel.nextChapter() },
-                        onOpenTypography = { viewModel.toggleTypographyPanel() },
-                        onPlayPause = { viewModel.togglePlayPause() },
-                        onStop = { viewModel.ttsStop() },
-                        onToggleLock = { viewModel.toggleTtsLock() },
-                        onNavigateToChapter = { idx ->
-                            val ch = state.chapters.getOrNull(idx)
-                            if (ch != null) viewModel.navigateToChapter(ch.href)
-                        },
-                        bookProgress = if (state.chapters.isNotEmpty()) (state.currentChapterIndex + 1).toFloat() / state.chapters.size else 0f,
-                        bgColor = state.theme.bgColor,
-                        textColor = state.theme.textColor,
-                    )
-                }
-            }
-        }
-    ) { padding ->
-        // In fullscreen, strip status bar and navigation bar padding to avoid the "brow" at top
-        val effectivePadding = if (state.isFullscreen) {
-            PaddingValues(
-                start = padding.calculateStartPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
-                top = 0.dp,
-                end = padding.calculateEndPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
-                bottom = 0.dp,
-            )
-        } else {
-            padding
-        }
-        BoxWithConstraints(Modifier.fillMaxSize().padding(effectivePadding)) {
-            val screenWidthDp = maxWidth.value
-            val isLargeScreen = screenWidthDp >= 600f
-            val isDualPageSpread = when (state.layoutSpreadMode) {
-                "dual" -> true
-                "single" -> false
-                else -> isLargeScreen
-            }
-
-            if (state.isLoading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(16.dp))
-                        Text(state.loadingMessage, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                        Spacer(Modifier.height(8.dp))
-                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.large_book_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                if (state.isLoading) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.height(16.dp))
+                            Text(state.loadingMessage, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Spacer(Modifier.height(8.dp))
+                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.large_book_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                        }
                     }
-                }
-            } else if (state.error != null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(state.error!!, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center, modifier = Modifier.padding(32.dp))
-                }
-            } else {
-                val baseUrl = state.chapters.getOrNull(state.currentChapterIndex)?.href?.let { href ->
-                    val idx = href.lastIndexOf('/')
-                    if (idx >= 0) "file:///${href.substring(0, idx + 1)}" else null
-                }
-                
-                // Paragraph click menu state
-                var showParagraphMenu by remember { mutableStateOf(false) }
-                var clickedParagraphIndex by remember { mutableStateOf(-1) }
-                
-                val computedLineHeight = when (state.lineHeightMode) {
+                } else if (state.error != null) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(state.error!!, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center, modifier = Modifier.padding(32.dp))
+                    }
+                } else {
+                    val baseUrl = state.chapters.getOrNull(state.currentChapterIndex)?.href?.let { href ->
+                        val idx = href.lastIndexOf('/')
+                        if (idx >= 0) "file:///${href.substring(0, idx + 1)}" else null
+                    }
+                    
+                    val computedLineHeight = when (state.lineHeightMode) {
                     "compact" -> 1.45f
                     "relaxed" -> 2.05f
                     else -> 1.72f
@@ -478,7 +407,19 @@ fun ReaderScreen(
                     },
                     onParagraphClicked = { idx ->
                         clickedParagraphIndex = idx
-                        showParagraphMenu = true
+                        if (isToolbarVisible && showParagraphMenu) {
+                            isToolbarVisible = false
+                            showParagraphMenu = false
+                        } else {
+                            isToolbarVisible = true
+                            showParagraphMenu = true
+                        }
+                    },
+                    onPageTurned = {
+                        if (isToolbarVisible) {
+                            isToolbarVisible = false
+                            showParagraphMenu = false
+                        }
                     },
                     onScrollToParagraph = { idx -> viewModel.setCurrentParagraph(idx) },
                     ttsHighlightIndex = ttsHighlightIdx,
@@ -769,7 +710,7 @@ fun ReaderScreen(
                 val paragraphMenuBottom = if (state.footnotePreview != null) {
                     if (state.isFullscreen) 240.dp else 290.dp
                 } else {
-                    if (state.isFullscreen) 24.dp else 80.dp
+                    if (isToolbarVisible) 88.dp else 28.dp
                 }
                 AnimatedVisibility(
                     visible = showParagraphMenu && clickedParagraphIndex >= 0 && state.footnotePreview == null,
@@ -777,10 +718,6 @@ fun ReaderScreen(
                     exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = paragraphMenuBottom),
                 ) {
-                    LaunchedEffect(clickedParagraphIndex) {
-                        kotlinx.coroutines.delay(3000)
-                        showParagraphMenu = false
-                    }
                     Surface(
                         shape = RoundedCornerShape(24.dp),
                         shadowElevation = 6.dp,
@@ -794,6 +731,7 @@ fun ReaderScreen(
                             TextButton(
                                 onClick = {
                                     showParagraphMenu = false
+                                    isToolbarVisible = false
                                     viewModel.readFromParagraph(clickedParagraphIndex)
                                 },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
@@ -824,7 +762,10 @@ fun ReaderScreen(
                             }
                             // Close
                             IconButton(
-                                onClick = { showParagraphMenu = false },
+                                onClick = { 
+                                    showParagraphMenu = false 
+                                    isToolbarVisible = false
+                                },
                                 modifier = Modifier.size(28.dp),
                             ) {
                                 Icon(Icons.Default.Close,
@@ -1309,6 +1250,144 @@ fun ReaderScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Floating TopAppBar overlay
+            AnimatedVisibility(
+                visible = !state.isFullscreen && isToolbarVisible,
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter)
+            ) {
+                Surface(
+                    color = Color(android.graphics.Color.parseColor(state.theme.bgColor)),
+                    shadowElevation = 4.dp,
+                ) {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = state.book?.title ?: androidx.compose.ui.res.stringResource(com.moyue.app.R.string.loading),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.back)) } },
+                        actions = {
+                            IconButton(onClick = { showAiCompanion = true }) {
+                                val textColor = Color(android.graphics.Color.parseColor(state.theme.textColor))
+                                Surface(
+                                    shape = RoundedCornerShape(5.dp),
+                                    color = if (state.isEinkMode) Color.Transparent else textColor.copy(alpha = 0.08f),
+                                    border = BorderStroke(
+                                        width = 1.2.dp,
+                                        color = if (state.isEinkMode) Color.Black else textColor.copy(alpha = 0.65f)
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "AI",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Black,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
+                                        letterSpacing = 0.8.sp,
+                                        color = if (state.isEinkMode) Color.Black else textColor,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { viewModel.toggleFullscreen() }) { Icon(Icons.Default.Fullscreen, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_fullscreen)) }
+                            IconButton(onClick = { viewModel.toggleBookmarkPanel() }) { Icon(Icons.Outlined.BookmarkBorder, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.bookmark_list_title)) }
+                            IconButton(onClick = { viewModel.toggleHighlightPanel() }) { Icon(Icons.Default.Star, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_list_title)) }
+                            IconButton(onClick = { viewModel.toggleTocPanel() }) { Icon(Icons.Default.List, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.table_of_contents)) }
+                            IconButton(onClick = { viewModel.toggleTtsSettingsPanel() }) { Icon(Icons.Default.Settings, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_settings_title)) }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            titleContentColor = Color(android.graphics.Color.parseColor(state.theme.textColor)),
+                            actionIconContentColor = Color(android.graphics.Color.parseColor(state.theme.textColor)),
+                            navigationIconContentColor = Color(android.graphics.Color.parseColor(state.theme.textColor)),
+                        ),
+                    )
+                }
+            }
+
+            // Floating BottomBar overlay
+            AnimatedVisibility(
+                visible = !state.isFullscreen && isToolbarVisible,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                Column(Modifier.fillMaxWidth()) {
+                    // Debug Log panel
+                    AnimatedVisibility(visible = state.showTtsDebugLog && !state.isFullscreen) {
+                        Surface(tonalElevation = 4.dp, color = Color(0xFF1A1A2E)) {
+                            Column(Modifier.fillMaxWidth().heightIn(max = 200.dp).padding(8.dp).verticalScroll(rememberScrollState())) {
+                                Text(text = state.ttsDebugLog.ifEmpty { androidx.compose.ui.res.stringResource(com.moyue.app.R.string.debug_no_log) },
+                                    fontSize = 10.sp, color = Color(0xFF00FF88),
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, lineHeight = 14.sp)
+                            }
+                        }
+                        Surface(color = Color(0xFF2A2A3E)) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.highlight_offset), fontSize = 11.sp, color = Color(0xFF888888))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { viewModel.decreaseHighlightOffset() }, modifier = Modifier.size(28.dp)) { Text("-", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+                                    Text("${state.ttsHighlightOffset}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp))
+                                    IconButton(onClick = { viewModel.increaseHighlightOffset() }, modifier = Modifier.size(28.dp)) { Text("+", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+                                }
+                            }
+                        }
+                        Surface(color = Color(0xFF1A1A2E)) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+                                horizontalArrangement = Arrangement.End) {
+                                TextButton(
+                                    onClick = {
+                                        viewModel.copyTtsDebugLog()
+                                        android.widget.Toast.makeText(context, "TTS 日志已复制!", android.widget.Toast.LENGTH_SHORT).show()
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                ) {
+                                    Text("📋 复制 TTS 日志", fontSize = 10.sp, color = Color(0xFF888888))
+                                }
+                            }
+                        }
+                    }
+
+                    ReaderBottomBar(
+                        currentIndex = state.currentChapterIndex, totalChapters = state.chapters.size,
+                        fontSize = state.fontSize,
+                        isTtsPlaying = state.isTtsPlaying, isTtsPaused = state.isTtsPaused,
+                        isTtsGenerating = state.isTtsGenerating,
+                        isTtsLocked = state.ttsLocked,
+                        onPrevPage = { isToolbarVisible = false; viewModel.pageUp() },
+                        onNextPage = { isToolbarVisible = false; viewModel.pageDown() },
+                        onPrevChapter = { isToolbarVisible = false; viewModel.prevChapter() },
+                        onNextChapter = { isToolbarVisible = false; viewModel.nextChapter() },
+                        onOpenTypography = { viewModel.toggleTypographyPanel() },
+                        onPlayPause = {
+                            viewModel.togglePlayPause()
+                            if (!state.isTtsPlaying) {
+                                isToolbarVisible = false
+                                showParagraphMenu = false
+                            }
+                        },
+                        onStop = { viewModel.ttsStop() },
+                        onToggleLock = { viewModel.toggleTtsLock() },
+                        onNavigateToChapter = { idx ->
+                            isToolbarVisible = false
+                            val ch = state.chapters.getOrNull(idx)
+                            if (ch != null) viewModel.navigateToChapter(ch.href)
+                        },
+                        bookProgress = if (state.chapters.isNotEmpty()) (state.currentChapterIndex + 1).toFloat() / state.chapters.size else 0f,
+                        bgColor = state.theme.bgColor,
+                        textColor = state.theme.textColor,
+                    )
                 }
             }
         }

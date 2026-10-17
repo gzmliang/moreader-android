@@ -144,6 +144,7 @@ data class ReaderUiState(
     val isDictionaryResult: Boolean = false,
     val dictionaryDebugLog: String = "",
     val showDictionaryDebugLog: Boolean = false,
+    val dictionaryTargetLang: String = "",
     // TTS Recording
     val isRecording: Boolean = false,
     val recordingChapterLabel: String = "",
@@ -227,6 +228,7 @@ class ReaderViewModel(
             layoutSpreadMode = prefs.getString("reader_layout_spread", "auto") ?: "auto",
             lineHeightMode = prefs.getString("reader_line_height", "standard") ?: "standard",
             pageAnimationMode = if ((prefs.getString("reader_page_anim", "slide") ?: "slide") == "instant") "instant" else "slide",
+            dictionaryTargetLang = prefs.getString("dict_target_lang", null) ?: com.moyue.app.translate.OnlineBilingualDictionary.getDefaultTargetLangCode(),
             isEinkMode = prefs.getBoolean("eink_mode", false) ||
                 application.getSharedPreferences("moreader_ai_prefs", Context.MODE_PRIVATE).getBoolean("ai_eink_mode", false),
         )
@@ -811,32 +813,72 @@ class ReaderViewModel(
 
         // === Dictionary mode: try local dictionary, fallback to AI with label ===
         if (mode == "dictionary") {
-            com.moyue.app.localai.DictionaryEngine.clearDebugLog()  // clear BEFORE init so we keep init logs
-            com.moyue.app.localai.DictionaryEngine.init(getApplication())
-            val dictResult = com.moyue.app.localai.DictionaryEngine.query(t.trim())
-            val debugLog = com.moyue.app.localai.DictionaryEngine.getDebugLog()
-            
-            if (dictResult is com.moyue.app.data.models.DictionaryResult.Found) {
-                // Found in dictionary — show instantly
-                val ctx = getApplication<android.app.Application>()
-                _uiState.update { 
-                    it.copy(
-                        isTranslating = false,
-                        translationResult = dictResult.entry.formatForDisplay(ctx),
-                        isDictionaryResult = true,
-                        dictionaryDebugLog = debugLog
-                    )
+            val targetLang = _uiState.value.dictionaryTargetLang
+            val isChineseTarget = targetLang.startsWith("zh", ignoreCase = true) || targetLang.equals("Chinese", ignoreCase = true)
+
+            // If target is Chinese, try local offline ECDICT / Hanzi dict first
+            if (isChineseTarget) {
+                com.moyue.app.localai.DictionaryEngine.clearDebugLog()  // clear BEFORE init so we keep init logs
+                com.moyue.app.localai.DictionaryEngine.init(getApplication())
+                val dictResult = com.moyue.app.localai.DictionaryEngine.query(t.trim())
+                val debugLog = com.moyue.app.localai.DictionaryEngine.getDebugLog()
+
+                if (dictResult is com.moyue.app.data.models.DictionaryResult.Found) {
+                    val ctx = getApplication<android.app.Application>()
+                    _uiState.update { 
+                        it.copy(
+                            isTranslating = false,
+                            translationResult = dictResult.entry.formatForDisplay(ctx),
+                            isDictionaryResult = true,
+                            dictionaryDebugLog = debugLog
+                        )
+                    }
+                    return
                 }
-                return
             }
-            // Not in dictionary — fallback to AI translation with label
-            _uiState.update { 
-                it.copy(
-                    translationResult = "${getApplication<android.app.Application>().getString(com.moyue.app.R.string.dict_not_found_fallback)}\n\n",
-                    dictionaryDebugLog = debugLog
+
+            // Universal Online Bilingual Dictionary lookup
+            viewModelScope.launch {
+                val result = com.moyue.app.translate.OnlineBilingualDictionary.lookup(
+                    getApplication(),
+                    t.trim(),
+                    targetLang
                 )
+                result.onSuccess { entry ->
+                    _uiState.update {
+                        it.copy(
+                            isTranslating = false,
+                            translationResult = entry.formattedDisplay,
+                            isDictionaryResult = true,
+                            dictionaryDebugLog = "OnlineBilingualDict ($targetLang)"
+                        )
+                    }
+                }.onFailure { err ->
+                    // Fallback: check local dict if available
+                    com.moyue.app.localai.DictionaryEngine.init(getApplication())
+                    val localFallback = com.moyue.app.localai.DictionaryEngine.query(t.trim())
+                    if (localFallback is com.moyue.app.data.models.DictionaryResult.Found) {
+                        val ctx = getApplication<android.app.Application>()
+                        _uiState.update {
+                            it.copy(
+                                isTranslating = false,
+                                translationResult = localFallback.entry.formatForDisplay(ctx),
+                                isDictionaryResult = true,
+                                dictionaryDebugLog = "Fallback: ECDICT"
+                            )
+                        }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                isTranslating = false,
+                                translationResult = "${getApplication<android.app.Application>().getString(com.moyue.app.R.string.dict_not_found_fallback)}\n\n(${err.message ?: ""})",
+                                isDictionaryResult = false
+                            )
+                        }
+                    }
+                }
             }
-            // Fall through to AI/cloud route below
+            return
         }
 
         if (_uiState.value.translateEngine == TranslateEngine.LOCAL) {
@@ -2179,6 +2221,14 @@ class ReaderViewModel(
     fun updateCustomTTSConfig(endpoint: String, apiKey: String, model: String, voice: String) { log("Custom TTS: $endpoint, model=$model, voice=$voice"); killPlayChain(); currentTTSProvider?.destroy(); currentTTSProvider = null; _uiState.update { it.copy(customTtsEndpoint = endpoint, customTtsApiKey = apiKey, customTtsModel = model, customTtsVoice = voice) }; prefs.edit().putString("custom_endpoint", endpoint).putString("custom_apikey", apiKey).putString("custom_model", model).putString("custom_voice", voice).apply(); savePerBookTtsConfig() }
     fun toggleFullscreen() { _uiState.update { it.copy(isFullscreen = !it.isFullscreen) } }
     fun setFullscreen(enabled: Boolean) { _uiState.update { it.copy(isFullscreen = enabled) } }
+    fun setDictionaryTargetLang(langCode: String) {
+        prefs.edit().putString("dict_target_lang", langCode).apply()
+        _uiState.update { it.copy(dictionaryTargetLang = langCode) }
+        val word = _uiState.value.selectedText
+        if (_uiState.value.showTranslationPanel && _uiState.value.translationMode == "dictionary" && !word.isNullOrBlank()) {
+            translate("dictionary")
+        }
+    }
 
     /** Save current TTS config to the current book's record */
     private fun savePerBookTtsConfig() {
