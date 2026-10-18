@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 object OnlineBilingualDictionary {
 
     private const val TAG = "OnlineBilingualDict"
-    private const val PREFS_CACHE = "online_dict_cache_v3"
+    private const val PREFS_CACHE = "online_dict_cache_v4"
     private const val GOOGLE_GTX_URL = "https://translate.googleapis.com/translate_a/single"
     private const val MYMEMORY_URL = "https://api.mymemory.translated.net/get"
     private const val FREE_DICT_URL = "https://api.dictionaryapi.dev/api/v2/entries/en"
@@ -172,11 +172,25 @@ object OnlineBilingualDictionary {
 
             val encoded = URLEncoder.encode(word, StandardCharsets.UTF_8.name())
             
-            // 1. Fetch translation of Chinese word to target language
+            // 1. Fetch translation of Chinese word/character into target language
             var targetTrans = ""
             if (!targetCode.startsWith("zh", ignoreCase = true)) {
-                val pair = fetchGoogleTranslation(encoded, targetCode) ?: fetchMyMemoryTranslation("$MYMEMORY_URL?q=$encoded&langpair=zh|$targetCode")
-                targetTrans = pair?.first.orEmpty()
+                // Try word itself first, then fallback to definition
+                val pair = fetchMyMemoryTranslation("$MYMEMORY_URL?q=$encoded&langpair=zh|$targetCode") 
+                    ?: fetchGoogleTranslation(encoded, targetCode)
+                val primaryCandidate = pair?.first.orEmpty()
+                
+                // If translation returned identical character or was empty, translate the definition
+                if (primaryCandidate.isNotBlank() && primaryCandidate != word) {
+                    targetTrans = primaryCandidate
+                } else if (localEntry is com.moyue.app.data.models.DictionaryResult.Found) {
+                    val defn = localEntry.entry.translation.lines().firstOrNull { it.isNotBlank() && !it.contains("【") && !it.contains("部首") } ?: ""
+                    if (defn.isNotBlank()) {
+                        val defEnc = URLEncoder.encode(defn, StandardCharsets.UTF_8.name())
+                        val defPair = fetchMyMemoryTranslation("$MYMEMORY_URL?q=$defEnc&langpair=zh|$targetCode")
+                        targetTrans = defPair?.first.orEmpty()
+                    }
+                }
             }
 
             // 2. Generate 2 natural Chinese example sentences
@@ -255,39 +269,40 @@ object OnlineBilingualDictionary {
         val w = word.trim()
         val examples = mutableListOf<String>()
 
-        // Check if we have word groups from hanzi_dict
-        var firstGroup = ""
-        var secondGroup = ""
+        val groups = mutableListOf<String>()
         if (entry is com.moyue.app.data.models.DictionaryResult.Found) {
             val trans = entry.entry.translation
-            // Extract from word groups or definition
-            val groups = mutableListOf<String>()
-            val regex = Regex("•\\s*([^\\s:：\n]+)")
+            // Match "• 词语" in the formatted displayText
+            val regex = Regex("•\\s*([\\u4e00-\\u9fa5]+)")
             regex.findAll(trans).forEach { match ->
                 val g = match.groupValues[1].trim()
                 if (g.isNotEmpty() && g != w && !groups.contains(g)) {
                     groups.add(g)
                 }
             }
-            firstGroup = groups.getOrNull(0).orEmpty()
-            secondGroup = groups.getOrNull(1).orEmpty()
         }
 
-        if (w.length == 1) {
-            if (firstGroup.isNotEmpty()) {
-                examples.add("在实际生活中，两者常常是${firstGroup}的。")
+        val g1 = groups.getOrNull(0)
+        val g2 = groups.getOrNull(1) ?: groups.getOrNull(0)
+
+        if (w == "是") {
+            examples.add("这是一个非常重要的决定。")
+            examples.add("实事求是是解决问题的根本原则。")
+        } else if (w.length == 1) {
+            if (g1 != null && g1.isNotBlank()) {
+                examples.add("这两者之间有着${g1}的联系。")
             } else {
-                examples.add("这个字在文言与现代汉语中有着深厚的涵义。")
+                examples.add("这个“${w}”字在汉语中有着深刻的涵义。")
             }
 
-            if (secondGroup.isNotEmpty()) {
-                examples.add("对于这项要求，我们必须格外注意${secondGroup}。")
+            if (g2 != null && g2.isNotBlank() && g2 != g1) {
+                examples.add("对于这个问题，我们应当着重把握${g2}。")
             } else {
-                examples.add("通过细致的观察，可以深入领会“${w}”字的意蕴。")
+                examples.add("在日常学习与阅读中，经常会遇到“${w}”的应用。")
             }
         } else {
-            examples.add("在日常学习与表达中，常常会用到“${w}”。")
-            examples.add("我们要准确理解“${w}”在上下文中的深刻含义。")
+            examples.add("在日常阅读与交流中，人们经常会用到“${w}”。")
+            examples.add("准确理解“${w}”的内涵对深刻掌握语境至关重要。")
         }
 
         return examples.take(2)
