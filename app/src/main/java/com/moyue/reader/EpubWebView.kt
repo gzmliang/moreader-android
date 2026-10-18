@@ -643,7 +643,21 @@ fun EpubWebView(
                                 window.ttsHL=function(idx){
                                     document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
-                                    if(idx>=0&&idx<all.length){all[idx].classList.add('tts-hl');all[idx].scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});}
+                                    if(idx>=0&&idx<all.length){
+                                        var el = all[idx];
+                                        el.classList.add('tts-hl');
+                                        if(window.isDualPage){
+                                            var rect = el.getBoundingClientRect();
+                                            var vw = window.innerWidth;
+                                            var curOffset = (window._spreadIndex || 0) * vw;
+                                            var targetSpread = Math.floor((curOffset + rect.left) / vw);
+                                            if (targetSpread !== window._spreadIndex) {
+                                                window._applySpread(targetSpread);
+                                            }
+                                        } else {
+                                            el.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
+                                        }
+                                    }
                                 };
                                 window.ttsClear=function(){document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});};
                                 // ===== 【高亮对齐地图】与浏览器扩展端同一套方案 =====
@@ -704,7 +718,17 @@ fun EpubWebView(
                                     if(paraIdx<0||paraIdx>=all.length){MoreaderBridge.jsLog('[JS] initHL bad paraIdx');return;}
                                     var el=all[paraIdx];
                                     el.classList.add('tts-hl');
-                                    el.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
+                                    if(window.isDualPage){
+                                        var rect = el.getBoundingClientRect();
+                                        var vw = window.innerWidth;
+                                        var curOffset = (window._spreadIndex || 0) * vw;
+                                        var targetSpread = Math.floor((curOffset + rect.left) / vw);
+                                        if (targetSpread !== window._spreadIndex) {
+                                            window._applySpread(targetSpread);
+                                        }
+                                    } else {
+                                        el.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
+                                    }
                                     window._ttsSentencePara=el;
                                     // 使用 Kotlin 传来的句子边界
                                     window.ttsSentEnds=sentEnds||[];
@@ -837,15 +861,10 @@ fun EpubWebView(
                                     if(window.isDualPage){
                                         var rect=span.getBoundingClientRect();
                                         var vw=window.innerWidth;
-                                        // 检查是否已经在当前可视对开屏内 (留出左右 15px 安全边距)
-                                        var isVisible=(rect.left >= 15 && rect.right <= vw - 15);
-                                        if(!isVisible){
-                                            // 超出当前屏，根据落点翻页
-                                            if (rect.right > vw - 15) {
-                                                window.pageDown();
-                                            } else if (rect.left < 15) {
-                                                window.pageUp();
-                                            }
+                                        var curOffset = (window._spreadIndex || 0) * vw;
+                                        var targetSpread = Math.floor((curOffset + rect.left) / vw);
+                                        if (targetSpread !== window._spreadIndex) {
+                                            window._applySpread(targetSpread);
                                         }
                                     }else{
                                         // 单页模式：居中平滑跟随
@@ -1110,9 +1129,12 @@ fun EpubWebView(
                                 window._applySpread = function(idx) {
                                     window._spreadIndex = Math.max(0, idx);
                                     if (window.isDualPage) {
-                                        document.body.scrollLeft = window._spreadIndex * window.innerWidth;
+                                        var targetLeft = window._spreadIndex * window.innerWidth;
+                                        document.body.scrollLeft = targetLeft;
+                                        document.documentElement.scrollLeft = targetLeft;
                                     } else {
                                         document.body.scrollLeft = 0;
+                                        document.documentElement.scrollLeft = 0;
                                     }
                                 };
                                 window._getMaxSpreadIndex = function() {
