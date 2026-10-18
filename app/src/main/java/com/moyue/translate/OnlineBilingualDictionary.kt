@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 object OnlineBilingualDictionary {
 
     private const val TAG = "OnlineBilingualDict"
-    private const val PREFS_CACHE = "online_dict_cache_v4"
+    private const val PREFS_CACHE = "online_dict_cache_v5"
     private const val GOOGLE_GTX_URL = "https://translate.googleapis.com/translate_a/single"
     private const val MYMEMORY_URL = "https://api.mymemory.translated.net/get"
     private const val FREE_DICT_URL = "https://api.dictionaryapi.dev/api/v2/entries/en"
@@ -175,20 +175,30 @@ object OnlineBilingualDictionary {
             // 1. Fetch translation of Chinese word/character into target language
             var targetTrans = ""
             if (!targetCode.startsWith("zh", ignoreCase = true)) {
-                // Try word itself first, then fallback to definition
-                val pair = fetchMyMemoryTranslation("$MYMEMORY_URL?q=$encoded&langpair=zh|$targetCode") 
-                    ?: fetchGoogleTranslation(encoded, targetCode)
-                val primaryCandidate = pair?.first.orEmpty()
-                
-                // If translation returned identical character or was empty, translate the definition
-                if (primaryCandidate.isNotBlank() && primaryCandidate != word) {
-                    targetTrans = primaryCandidate
-                } else if (localEntry is com.moyue.app.data.models.DictionaryResult.Found) {
-                    val defn = localEntry.entry.translation.lines().firstOrNull { it.isNotBlank() && !it.contains("【") && !it.contains("部首") } ?: ""
-                    if (defn.isNotBlank()) {
-                        val defEnc = URLEncoder.encode(defn, StandardCharsets.UTF_8.name())
-                        val defPair = fetchMyMemoryTranslation("$MYMEMORY_URL?q=$defEnc&langpair=zh|$targetCode")
-                        targetTrans = defPair?.first.orEmpty()
+                // Extract clean native definition from localEntry
+                var localDefn = ""
+                if (localEntry is com.moyue.app.data.models.DictionaryResult.Found) {
+                    val lines = localEntry.entry.translation.lines()
+                    localDefn = lines.firstOrNull { l ->
+                        val t = l.trim()
+                        t.isNotEmpty() && !t.contains("【") && !t.contains("部首") && !t.contains("组词") && !t.startsWith("•") && t != word
+                    }?.trim() ?: ""
+                }
+
+                // If we have a clear definition, translating the definition gives the most authoritative English translation!
+                if (localDefn.isNotBlank()) {
+                    val defEnc = URLEncoder.encode(localDefn, StandardCharsets.UTF_8.name())
+                    val defPair = fetchMyMemoryTranslation("$MYMEMORY_URL?q=$defEnc&langpair=zh|$targetCode")
+                    targetTrans = defPair?.first.orEmpty()
+                }
+
+                // Fallback to word query if definition translation was empty
+                if (targetTrans.isBlank() || targetTrans.length <= 1) {
+                    val pair = fetchMyMemoryTranslation("$MYMEMORY_URL?q=$encoded&langpair=zh|$targetCode")
+                        ?: fetchGoogleTranslation(encoded, targetCode)
+                    val cand = pair?.first.orEmpty()
+                    if (cand.isNotBlank() && cand != word && cand.length > 1) {
+                        targetTrans = cand
                     }
                 }
             }
@@ -273,36 +283,63 @@ object OnlineBilingualDictionary {
         if (entry is com.moyue.app.data.models.DictionaryResult.Found) {
             val trans = entry.entry.translation
             // Match "• 词语" in the formatted displayText
-            val regex = Regex("•\\s*([\\u4e00-\\u9fa5]+)")
+            val regex = Regex("•\\s*([\\u4e00-\\u9fa5]{2,})")
             regex.findAll(trans).forEach { match ->
                 val g = match.groupValues[1].trim()
                 if (g.isNotEmpty() && g != w && !groups.contains(g)) {
-                    groups.add(g)
+                    // Filter out county names or tech companies
+                    if (!g.contains("县") && !g.contains("科技")) {
+                        groups.add(g)
+                    }
                 }
             }
         }
 
         val g1 = groups.getOrNull(0)
-        val g2 = groups.getOrNull(1) ?: groups.getOrNull(0)
+        val g2 = groups.getOrNull(1)
 
-        if (w == "是") {
-            examples.add("这是一个非常重要的决定。")
-            examples.add("实事求是是解决问题的根本原则。")
-        } else if (w.length == 1) {
-            if (g1 != null && g1.isNotBlank()) {
-                examples.add("这两者之间有着${g1}的联系。")
-            } else {
-                examples.add("这个“${w}”字在汉语中有着深刻的涵义。")
+        // Hardcoded natural literary examples for frequent core words
+        when (w) {
+            "逐" -> {
+                examples.add("我们要把方案中的各项任务逐一落实到位。")
+                examples.add("年轻人在时代的大潮中勇于逐梦前行。")
             }
-
-            if (g2 != null && g2.isNotBlank() && g2 != g1) {
-                examples.add("对于这个问题，我们应当着重把握${g2}。")
-            } else {
-                examples.add("在日常学习与阅读中，经常会遇到“${w}”的应用。")
+            "是" -> {
+                examples.add("这是一个非常关键且正确的决定。")
+                examples.add("实事求是是认识事物和解决问题的根本方法。")
             }
-        } else {
-            examples.add("在日常阅读与交流中，人们经常会用到“${w}”。")
-            examples.add("准确理解“${w}”的内涵对深刻掌握语境至关重要。")
+            "密" -> {
+                examples.add("两国人民之间的文化交流密不可分。")
+                examples.add("这里的保密工作做得密不透风。")
+            }
+            "爱" -> {
+                examples.add("人人都应当热爱生活并关爱他人。")
+                examples.add("他对这套古典书籍爱不释手。")
+            }
+            "勇" -> {
+                examples.add("面对未知的挑战，我们需要有勇往直前的气魄。")
+                examples.add("真正的勇士敢于直面生活中的困难。")
+            }
+            "学" -> {
+                examples.add("我们在工作中要坚持学以致用、知行合一。")
+                examples.add("终身学习是适应时代发展的必备素养。")
+            }
+            "书" -> {
+                examples.add("读书可以开阔视野，丰富人的精神世界。")
+                examples.add("他认真研读了这套具有深远影响的书籍。")
+            }
+            else -> {
+                if (g1 != null && g2 != null) {
+                    examples.add("我们要把【$g1】落到实处，确保取得扎实成效。")
+                    examples.add("在实践探索中，我们需要不断关注【$g2】的具体进展。")
+                } else if (g1 != null) {
+                    examples.add("在实际工作与研究中，【$g1】起着至关重要的作用。")
+                    examples.add("结合上下文认真体察，才能准确领会“${w}”字表达的深意。")
+                } else {
+                    examples.add("我们要结合上下文语境，准确把握“${w}”字的深刻含义。")
+                    examples.add("在古代文学和现代汉语中，“${w}”字都有着生动的用法。")
+                }
+            }
         }
 
         return examples.take(2)

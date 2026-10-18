@@ -171,6 +171,16 @@ fun ReaderScreen(
                             Icon(Icons.Default.VolumeUp, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_tts_speak), tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
                         }
                     }
+                    // Copy dictionary result button
+                    if (state.translationResult != null) {
+                        IconButton(onClick = {
+                            val clip = android.content.ClipData.newPlainText("Dictionary Result", state.translationResult)
+                            (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)?.setPrimaryClip(clip)
+                            android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.copied), android.widget.Toast.LENGTH_SHORT).show()
+                        }) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.action_copy), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(19.dp))
+                        }
+                    }
                     // Add to vocabulary button — saves word + translation in one tap
                     IconButton(onClick = { viewModel.showVocabPlanPicker() }) {
                         Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_add), tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
@@ -264,7 +274,14 @@ fun ReaderScreen(
                         }
                     }
                     if (state.translationResult != null) {
-                        Text(state.translationResult!!, fontSize = 14.sp, lineHeight = 22.sp)
+                        androidx.compose.foundation.text.selection.SelectionContainer {
+                            Text(
+                                text = state.translationResult!!,
+                                fontSize = 14.sp,
+                                lineHeight = 22.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             },
