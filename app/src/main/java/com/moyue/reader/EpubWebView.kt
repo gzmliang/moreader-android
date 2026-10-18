@@ -644,18 +644,9 @@ fun EpubWebView(
                                     document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
                                     if(idx>=0&&idx<all.length){
-                                        var el = all[idx];
-                                        el.classList.add('tts-hl');
-                                        if(window.isDualPage){
-                                            var rect = el.getBoundingClientRect();
-                                            var vw = window.innerWidth;
-                                            var curOffset = (window._spreadIndex || 0) * vw;
-                                            var targetSpread = Math.floor((curOffset + rect.left) / vw);
-                                            if (targetSpread !== window._spreadIndex) {
-                                                window._applySpread(targetSpread);
-                                            }
-                                        } else {
-                                            el.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
+                                        all[idx].classList.add('tts-hl');
+                                        if(!window.isDualPage){
+                                            all[idx].scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
                                         }
                                     }
                                 };
@@ -718,15 +709,7 @@ fun EpubWebView(
                                     if(paraIdx<0||paraIdx>=all.length){MoreaderBridge.jsLog('[JS] initHL bad paraIdx');return;}
                                     var el=all[paraIdx];
                                     el.classList.add('tts-hl');
-                                    if(window.isDualPage){
-                                        var rect = el.getBoundingClientRect();
-                                        var vw = window.innerWidth;
-                                        var curOffset = (window._spreadIndex || 0) * vw;
-                                        var targetSpread = Math.floor((curOffset + rect.left) / vw);
-                                        if (targetSpread !== window._spreadIndex) {
-                                            window._applySpread(targetSpread);
-                                        }
-                                    } else {
+                                    if(!window.isDualPage){
                                         el.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
                                     }
                                     window._ttsSentencePara=el;
@@ -861,10 +844,13 @@ fun EpubWebView(
                                     if(window.isDualPage){
                                         var rect=span.getBoundingClientRect();
                                         var vw=window.innerWidth;
-                                        var curOffset = (window._spreadIndex || 0) * vw;
-                                        var targetSpread = Math.floor((curOffset + rect.left) / vw);
-                                        if (targetSpread !== window._spreadIndex) {
-                                            window._applySpread(targetSpread);
+                                        // 检查当前高亮句是否在当前对开屏内 (留出左右 20px 安全边距)
+                                        if (rect.right > vw - 15) {
+                                            // 朗读走到右边末尾、句子跨入下一屏：触发向后翻一页，画面自动切到下一屏左侧
+                                            window.pageDown();
+                                        } else if (rect.left < 15) {
+                                            // 处于当前屏左侧之外：向前翻一页
+                                            window.pageUp();
                                         }
                                     }else{
                                         // 单页模式：居中平滑跟随
@@ -1129,12 +1115,9 @@ fun EpubWebView(
                                 window._applySpread = function(idx) {
                                     window._spreadIndex = Math.max(0, idx);
                                     if (window.isDualPage) {
-                                        var targetLeft = window._spreadIndex * window.innerWidth;
-                                        document.body.scrollLeft = targetLeft;
-                                        document.documentElement.scrollLeft = targetLeft;
+                                        document.body.scrollLeft = window._spreadIndex * window.innerWidth;
                                     } else {
                                         document.body.scrollLeft = 0;
-                                        document.documentElement.scrollLeft = 0;
                                     }
                                 };
                                 window._getMaxSpreadIndex = function() {
@@ -1223,12 +1206,6 @@ fun EpubWebView(
                                         e.preventDefault();
                                         e.stopPropagation();
                                         window.pageDown();
-                                    } else {
-                                        var para = t ? t.closest('p,h1,h2,h3,h4,h5,h6') : null;
-                                        if (!para) {
-                                            var vIdx = window.getVisiblePara ? window.getVisiblePara() : 0;
-                                            MoreaderBridge.onParagraphClicked(vIdx);
-                                        }
                                     }
                                 }, true);
                                 // Get current visible paragraph index
