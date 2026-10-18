@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 object OnlineBilingualDictionary {
 
     private const val TAG = "OnlineBilingualDict"
-    private const val PREFS_CACHE = "online_dict_cache_v6"
+    private const val PREFS_CACHE = "online_dict_cache_v7"
     private const val GOOGLE_GTX_URL = "https://translate.googleapis.com/translate_a/single"
     private const val MYMEMORY_URL = "https://api.mymemory.translated.net/get"
     private const val FREE_DICT_URL = "https://api.dictionaryapi.dev/api/v2/entries/en"
@@ -232,16 +232,20 @@ object OnlineBilingualDictionary {
             val targetLabel = targetOption?.displayName ?: targetCode
 
             val display = StringBuilder()
+
+            // ① 第一眼：目标语言翻译 (Target Translation)
+            if (targetTrans.isNotBlank() && !targetCode.startsWith("zh", ignoreCase = true)) {
+                display.append("[$targetLabel]\n• ").append(targetTrans).append("\n\n")
+            }
+
+            // ② 第二层：原语现代汉语字典 (Chinese Monolingual Dict)
             if (localText.isNotBlank()) {
                 display.append("[📖 现代汉语字典]\n").append(localText).append("\n\n")
             } else {
                 display.append(word).append("\n\n")
             }
 
-            if (targetTrans.isNotBlank() && !targetCode.startsWith("zh", ignoreCase = true)) {
-                display.append("[$targetLabel]\n• ").append(targetTrans).append("\n\n")
-            }
-
+            // ③ 第三层：双语对照例句 (Bilingual Examples)
             if (bilingualExamples.isNotEmpty()) {
                 display.append("[📝 Examples / 例句]\n")
                 bilingualExamples.forEach { (cnEx, targetEx) ->
@@ -425,7 +429,7 @@ object OnlineBilingualDictionary {
         val targetOption = SUPPORTED_LANGUAGES.find { it.code == targetCode }
         val targetLabel = targetOption?.displayName ?: targetCode
 
-        // 4. Assemble formatted display
+        // 4. Assemble formatted display in optimal psychological order:
         val displayBuilder = StringBuilder()
         displayBuilder.append(word)
         if (!localPhonetic.isNullOrBlank()) {
@@ -433,17 +437,7 @@ object OnlineBilingualDictionary {
         }
         displayBuilder.append("\n\n")
 
-        // ① 英文原语释义 (English-English Dictionary)
-        if (monoDefs.isNotEmpty()) {
-            displayBuilder.append("[📖 English Definition / 英文释义]\n")
-            monoDefs.take(3).forEach { (pos, def) ->
-                val posStr = if (pos.isNotBlank()) "($pos) " else ""
-                displayBuilder.append("• ").append(posStr).append(def).append("\n")
-            }
-            displayBuilder.append("\n")
-        }
-
-        // ② 目标语言释义 (Target Language Translation)
+        // ① 第一眼：目标语言释义 (Target Language Translation)
         displayBuilder.append("[$targetLabel]\n")
         if (primaryTrans.contains("\n")) {
             displayBuilder.append(primaryTrans).append("\n")
@@ -455,10 +449,21 @@ object OnlineBilingualDictionary {
                 }
             }
         }
+        displayBuilder.append("\n")
 
-        // ③ 双语例句 (Bilingual Examples)
+        // ② 第二层：英文原语释义 (English-English Monolingual Dictionary)
+        if (monoDefs.isNotEmpty()) {
+            displayBuilder.append("[📖 English Definition / 英文释义]\n")
+            monoDefs.take(3).forEach { (pos, def) ->
+                val posStr = if (pos.isNotBlank()) "($pos) " else ""
+                displayBuilder.append("• ").append(posStr).append(def).append("\n")
+            }
+            displayBuilder.append("\n")
+        }
+
+        // ③ 第三层：双语对照例句 (Bilingual Examples)
         if (bilingualExamples.isNotEmpty()) {
-            displayBuilder.append("\n[📝 Examples / 例句]\n")
+            displayBuilder.append("[📝 Examples / 例句]\n")
             bilingualExamples.forEach { (enEx, targetEx) ->
                 displayBuilder.append("• ").append(enEx).append("\n")
                 if (targetEx.isNotBlank() && !targetEx.equals(enEx, ignoreCase = true)) {

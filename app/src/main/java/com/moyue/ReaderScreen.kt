@@ -162,28 +162,57 @@ fun ReaderScreen(
         AlertDialog(
             onDismissRequest = { viewModel.dismissTranslationPanel() },
             title = {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(when (state.translationMode) { "translate" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title); "dictionary" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.explain_title); "analyze" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_title); else -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title) },
-                        modifier = Modifier.weight(1f))
-                    // Speaker button to read the selected text aloud
-                    if (state.selectedText != null) {
-                        IconButton(onClick = { viewModel.speakTranslationText(state.selectedText!!) }) {
-                            Icon(Icons.Default.VolumeUp, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_tts_speak), tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = when (state.translationMode) {
+                            "translate" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title)
+                            "dictionary" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.explain_title)
+                            "analyze" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_title)
+                            else -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title)
+                        },
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        // Speaker button to read the selected text aloud
+                        if (state.selectedText != null) {
+                            IconButton(
+                                onClick = { viewModel.speakTranslationText(state.selectedText!!) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.VolumeUp, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_tts_speak), tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
+                            }
                         }
-                    }
-                    // Copy dictionary result button
-                    if (state.translationResult != null) {
-                        IconButton(onClick = {
-                            val clip = android.content.ClipData.newPlainText("Dictionary Result", state.translationResult)
-                            (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)?.setPrimaryClip(clip)
-                            android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.copied), android.widget.Toast.LENGTH_SHORT).show()
-                        }) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.action_copy), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(19.dp))
+                        // Copy dictionary result button
+                        if (state.translationResult != null) {
+                            IconButton(
+                                onClick = {
+                                    val clip = android.content.ClipData.newPlainText("Dictionary Result", state.translationResult)
+                                    (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)?.setPrimaryClip(clip)
+                                    android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.copied), android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.action_copy), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(19.dp))
+                            }
                         }
-                    }
-                    // Add to vocabulary button — saves word + translation in one tap
-                    IconButton(onClick = { viewModel.showVocabPlanPicker() }) {
-                        Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_add), tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
+                        // Add to vocabulary button — saves word + translation in one tap
+                        IconButton(
+                            onClick = { viewModel.showVocabPlanPicker() },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_add), tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
+                        }
                     }
                 }
             },

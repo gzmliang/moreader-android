@@ -359,7 +359,7 @@ object DictionaryEngine {
                 append("（释义待补充）")
             }
             
-            // 组词 (方案A：只展示组词词语本身，去除低质机翻释义)
+            // 组词 (紧凑横排胶囊风格，极大幅度节省纵向屏幕高度)
             if (!wordGroupsJson.isNullOrBlank()) {
                 try {
                     val groups = org.json.JSONArray(wordGroupsJson)
@@ -368,14 +368,16 @@ object DictionaryEngine {
                         val pair = groups.getJSONArray(i)
                         val word = pair.getString(0).trim()
                         if (word.isNotEmpty() && !words.contains(word)) {
-                            words.add(word)
+                            // 过滤无意义的地名或企业名
+                            if (!word.contains("县") && !word.contains("科技") && !word.contains("丁堡")) {
+                                words.add(word)
+                            }
                         }
                     }
                     if (words.isNotEmpty()) {
-                        append("\n\n📝 组词：\n")
-                        for (w in words) {
-                            append("  • $w\n")
-                        }
+                        append("\n\n📝 常用词：")
+                        append(words.take(6).joinToString(" · "))
+                        append("\n")
                     }
                 } catch (e: Exception) {
                     // Ignore JSON parse errors
