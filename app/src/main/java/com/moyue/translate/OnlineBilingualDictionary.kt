@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 object OnlineBilingualDictionary {
 
     private const val TAG = "OnlineBilingualDict"
-    private const val PREFS_CACHE = "online_dict_cache_v5"
+    private const val PREFS_CACHE = "online_dict_cache_v6"
     private const val GOOGLE_GTX_URL = "https://translate.googleapis.com/translate_a/single"
     private const val MYMEMORY_URL = "https://api.mymemory.translated.net/get"
     private const val FREE_DICT_URL = "https://api.dictionaryapi.dev/api/v2/entries/en"
@@ -270,79 +270,81 @@ object OnlineBilingualDictionary {
     }
 
     /**
+     * Common Chinese idioms and natural usage examples for frequent characters.
+     */
+    private val CHINESE_CURATED_EXAMPLES = mapOf(
+        "逐" to listOf(
+            "我们要把方案中的各项任务逐一落实到位。",
+            "年轻人在时代的大潮中勇于逐梦前行。"
+        ),
+        "是" to listOf(
+            "这是一个非常关键且正确的决定。",
+            "实事求是是认识事物和解决问题的根本方法。"
+        ),
+        "密" to listOf(
+            "两国人民之间的文化交流密不可分。",
+            "这里的保密工作做得密不透风。"
+        ),
+        "爱" to listOf(
+            "人人都应当热爱生活并关爱他人。",
+            "他对这套古典书籍爱不释手。"
+        ),
+        "勇" to listOf(
+            "面对未知的挑战，我们需要有勇往直前的气魄。",
+            "真正的勇士敢于直面生活中的困难。"
+        ),
+        "学" to listOf(
+            "我们在工作中要坚持学以致用、知行合一。",
+            "终身学习是适应时代发展的必备素养。"
+        ),
+        "书" to listOf(
+            "读书可以开阔视野，丰富人的精神世界。",
+            "他认真研读了这套具有深远影响的书籍。"
+        ),
+        "楣" to listOf(
+            "光耀门楣是古代读书人一生的追求。",
+            "今天出门遇上暴雨，真有点倒楣。"
+        ),
+        "走" to listOf(
+            "我们要走群众路线，深入基层倾听声音。",
+            "坚定不移地走高质量发展之路。"
+        ),
+        "看" to listOf(
+            "我们要用发展的眼光看问题。",
+            "从当前形势来看，各项工作进展顺利。"
+        )
+    )
+
+    /**
      * Generate natural, textbook-quality Chinese example sentences for a character or word.
+     * ZERO FLUFF: Returns genuine examples or empty list. Never generates generic templates!
      */
     private fun generateChineseExamples(
         word: String,
         entry: com.moyue.app.data.models.DictionaryResult?
     ): List<String> {
         val w = word.trim()
-        val examples = mutableListOf<String>()
 
+        // 1. Direct curated match
+        CHINESE_CURATED_EXAMPLES[w]?.let { return it }
+
+        // 2. If no curated match, check word groups from hanzi_dict
         val groups = mutableListOf<String>()
         if (entry is com.moyue.app.data.models.DictionaryResult.Found) {
             val trans = entry.entry.translation
-            // Match "• 词语" in the formatted displayText
             val regex = Regex("•\\s*([\\u4e00-\\u9fa5]{2,})")
             regex.findAll(trans).forEach { match ->
                 val g = match.groupValues[1].trim()
                 if (g.isNotEmpty() && g != w && !groups.contains(g)) {
-                    // Filter out county names or tech companies
-                    if (!g.contains("县") && !g.contains("科技")) {
+                    if (!g.contains("县") && !g.contains("科技") && !g.contains("丁堡")) {
                         groups.add(g)
                     }
                 }
             }
         }
 
-        val g1 = groups.getOrNull(0)
-        val g2 = groups.getOrNull(1)
-
-        // Hardcoded natural literary examples for frequent core words
-        when (w) {
-            "逐" -> {
-                examples.add("我们要把方案中的各项任务逐一落实到位。")
-                examples.add("年轻人在时代的大潮中勇于逐梦前行。")
-            }
-            "是" -> {
-                examples.add("这是一个非常关键且正确的决定。")
-                examples.add("实事求是是认识事物和解决问题的根本方法。")
-            }
-            "密" -> {
-                examples.add("两国人民之间的文化交流密不可分。")
-                examples.add("这里的保密工作做得密不透风。")
-            }
-            "爱" -> {
-                examples.add("人人都应当热爱生活并关爱他人。")
-                examples.add("他对这套古典书籍爱不释手。")
-            }
-            "勇" -> {
-                examples.add("面对未知的挑战，我们需要有勇往直前的气魄。")
-                examples.add("真正的勇士敢于直面生活中的困难。")
-            }
-            "学" -> {
-                examples.add("我们在工作中要坚持学以致用、知行合一。")
-                examples.add("终身学习是适应时代发展的必备素养。")
-            }
-            "书" -> {
-                examples.add("读书可以开阔视野，丰富人的精神世界。")
-                examples.add("他认真研读了这套具有深远影响的书籍。")
-            }
-            else -> {
-                if (g1 != null && g2 != null) {
-                    examples.add("我们要把【$g1】落到实处，确保取得扎实成效。")
-                    examples.add("在实践探索中，我们需要不断关注【$g2】的具体进展。")
-                } else if (g1 != null) {
-                    examples.add("在实际工作与研究中，【$g1】起着至关重要的作用。")
-                    examples.add("结合上下文认真体察，才能准确领会“${w}”字表达的深意。")
-                } else {
-                    examples.add("我们要结合上下文语境，准确把握“${w}”字的深刻含义。")
-                    examples.add("在古代文学和现代汉语中，“${w}”字都有着生动的用法。")
-                }
-            }
-        }
-
-        return examples.take(2)
+        // Return empty list if no genuine examples exist (strictly no boilerplate fluff)
+        return emptyList()
     }
 
     /**
@@ -623,16 +625,7 @@ object OnlineBilingualDictionary {
                 }
             }
 
-            // Guaranteed Examples: If explicit examples are missing, synthesize high-quality context sentences from definitions
-            if (examples.isEmpty() && definitions.isNotEmpty()) {
-                definitions.take(2).forEach { (pos, def) ->
-                    val synthesized = synthesizeContextExample(encodedWord, pos, def)
-                    if (synthesized.isNotBlank() && !examples.contains(synthesized)) {
-                        examples.add(synthesized)
-                    }
-                }
-            }
-
+            // Clean examples: only real-world authentic examples from dictionary (strictly no boilerplate template synthesis)
             Pair(definitions.take(3), examples.take(2))
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch mono defs & examples", e)
