@@ -1,6 +1,7 @@
 package com.moyue.app.ui
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -157,87 +158,110 @@ fun ReaderScreen(
         )
     }
 
-    // Translation result panel (kept as dialog, less frequent)
+    // Translation result panel (紧凑浮窗设计，右上角关闭按钮，横屏下极大释放正文视野)
     if (state.showTranslationPanel) {
-        AlertDialog(
+        androidx.compose.ui.window.Dialog(
             onDismissRequest = { viewModel.dismissTranslationPanel() },
-            title = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = when (state.translationMode) {
-                            "translate" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title)
-                            "dictionary" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.explain_title)
-                            "analyze" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_title)
-                            else -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title)
-                        },
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        // Speaker button to read the selected text aloud
-                        if (state.selectedText != null) {
-                            IconButton(
-                                onClick = { viewModel.speakTranslationText(state.selectedText!!) },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Default.VolumeUp, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_tts_speak), tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
-                            }
-                        }
-                        // Copy dictionary result button
-                        if (state.translationResult != null) {
-                            IconButton(
-                                onClick = {
-                                    val clip = android.content.ClipData.newPlainText("Dictionary Result", state.translationResult)
-                                    (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)?.setPrimaryClip(clip)
-                                    android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.copied), android.widget.Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.action_copy), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(19.dp))
-                            }
-                        }
-                        // Add to vocabulary button — saves word + translation in one tap
-                        IconButton(
-                            onClick = { viewModel.showVocabPlanPicker() },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_add), tint = Color(0xFF059669), modifier = Modifier.size(20.dp))
-                        }
-                    }
-                }
-            },
-            text = {
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .heightIn(min = 120.dp, max = 340.dp)
+                    .padding(vertical = 8.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 8.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 400.dp)
-                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
-                    // Target language selector for universal bilingual dictionary
+                    // ── 顶部栏：模式标题 / 朗读 / 复制 / 加生词本 / 右上角关闭 ──
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = when (state.translationMode) {
+                                "translate" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title)
+                                "dictionary" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.explain_title)
+                                "analyze" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.grammar_title)
+                                else -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.ai_translate_title)
+                            },
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            // 朗读
+                            if (state.selectedText != null) {
+                                IconButton(
+                                    onClick = { viewModel.speakTranslationText(state.selectedText!!) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.VolumeUp, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_tts_speak), tint = Color(0xFF059669), modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            // 复制
+                            if (state.translationResult != null) {
+                                IconButton(
+                                    onClick = {
+                                        val clip = android.content.ClipData.newPlainText("Dictionary Result", state.translationResult)
+                                        (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)?.setPrimaryClip(clip)
+                                        android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.copied), android.widget.Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.action_copy), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            // 加生词本
+                            IconButton(
+                                onClick = { viewModel.showVocabPlanPicker() },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.vocabulary_add), tint = Color(0xFF059669), modifier = Modifier.size(19.dp))
+                            }
+                            // 右上角轻巧关闭叉叉
+                            IconButton(
+                                onClick = { viewModel.dismissTranslationPanel() },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    // ── 目标语言切换（微型胶囊） ──
                     if (state.translationMode == "dictionary") {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
                             ) {
                                 Row(
                                     modifier = Modifier
                                         .clickable { showDictLangMenu = true }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     val currentLang = com.moyue.app.translate.OnlineBilingualDictionary.SUPPORTED_LANGUAGES.find {
@@ -245,12 +269,12 @@ fun ReaderScreen(
                                     }
                                     Text(
                                         text = "${androidx.compose.ui.res.stringResource(com.moyue.app.R.string.dict_target_lang_label)}: ${currentLang?.displayName ?: state.dictionaryTargetLang}",
-                                        fontSize = 11.sp,
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer
                                     )
                                     Spacer(Modifier.width(2.dp))
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
                                 }
                             }
                             DropdownMenu(
@@ -259,7 +283,7 @@ fun ReaderScreen(
                             ) {
                                 com.moyue.app.translate.OnlineBilingualDictionary.SUPPORTED_LANGUAGES.forEach { lang ->
                                     DropdownMenuItem(
-                                        text = { Text(lang.displayName, fontSize = 13.sp) },
+                                        text = { Text(lang.displayName, fontSize = 12.sp) },
                                         onClick = {
                                             showDictLangMenu = false
                                             viewModel.setDictionaryTargetLang(lang.code)
@@ -270,52 +294,37 @@ fun ReaderScreen(
                         }
                     }
 
-                    // Show original text
-                    val selectedTxt = state.selectedText
-                    if (selectedTxt != null) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                            shape = RoundedCornerShape(8.dp),
-                        ) {
-                            Column(Modifier.padding(8.dp)) {
+                    // ── 结果与原文内容（可平滑滚动区域） ──
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        if (state.isTranslating) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.translating), fontSize = 13.sp)
+                            }
+                        }
+                        if (state.translationResult != null) {
+                            androidx.compose.foundation.text.selection.SelectionContainer {
                                 Text(
-                                    text = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.original_text_label),
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Medium,
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = selectedTxt,
+                                    text = state.translationResult!!,
                                     fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurface,
                                     lineHeight = 20.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    if (state.isTranslating) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp)); Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.translating), fontSize = 14.sp)
-                        }
-                    }
-                    if (state.translationResult != null) {
-                        androidx.compose.foundation.text.selection.SelectionContainer {
-                            Text(
-                                text = state.translationResult!!,
-                                fontSize = 14.sp,
-                                lineHeight = 22.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
                     }
                 }
-            },
-            confirmButton = { TextButton(onClick = { viewModel.dismissTranslationPanel() }) { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.close)) } },
-        )
+            }
+        }
     }
 
     // Main layout
@@ -373,6 +382,23 @@ fun ReaderScreen(
                     "dual" -> true
                     "single" -> false
                     else -> isLargeScreen
+                }
+
+                var isLayoutOptimizing by remember { mutableStateOf(false) }
+                var prevSpreadState by remember { mutableStateOf<Boolean?>(null) }
+                LaunchedEffect(isDualPageSpread) {
+                    if (prevSpreadState != null && prevSpreadState != isDualPageSpread) {
+                        isLayoutOptimizing = true
+                    }
+                    prevSpreadState = isDualPageSpread
+                }
+
+                // 兜底保护：横屏过渡遮罩最多显示 800ms，超时自动解除，绝对不卡住用户
+                LaunchedEffect(isLayoutOptimizing) {
+                    if (isLayoutOptimizing) {
+                        kotlinx.coroutines.delay(800)
+                        isLayoutOptimizing = false
+                    }
                 }
 
                 if (state.isLoading) {
@@ -460,9 +486,54 @@ fun ReaderScreen(
                     pageAnimationMode = state.pageAnimationMode,
                     clearSelectionTrigger = state.clearSelectionTrigger,
                     pageScrollTrigger = state.pageScrollTrigger,
+                    onLayoutReady = { isLayoutOptimizing = false },
                     onWebViewCreated = { webViewInstance = it },
                     modifier = Modifier.fillMaxSize().background(Color(android.graphics.Color.parseColor(state.theme.bgColor))),
                 )
+
+                // 横屏 / 双页排版计算过渡遮罩（防止未完成列宽与分页计算时翻页错乱）
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = isLayoutOptimizing && isDualPageSpread,
+                    enter = fadeIn(animationSpec = tween(150)),
+                    exit = fadeOut(animationSpec = tween(200)),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(android.graphics.Color.parseColor(state.theme.bgColor)).copy(alpha = 0.94f))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = {}
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                            shadowElevation = 4.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.5.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.reader_layout_initializing),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
                 
                 // TTS 防误触锁定遮罩 - 半透明覆盖，拦截所有触摸，只留暂停/继续 + 长按解锁
                 if (state.ttsLocked) {

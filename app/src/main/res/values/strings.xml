@@ -798,6 +798,7 @@ AI Voice（云端 TTS）：
     <string name="reader_page_anim_title">翻页动效</string>
     <string name="reader_page_anim_slide">平滑滑动</string>
     <string name="reader_page_anim_instant">瞬时直切</string>
+    <string name="reader_layout_initializing">正在初始化排版…</string>
 
     <!-- Reports Tab -->
     <string name="ai_reports_title">答题成绩单</string>

@@ -86,6 +86,7 @@ fun EpubWebView(
     clearSelectionTrigger: Long = 0L,
     pageScrollTrigger: Long = 0L, // Positive: pageDown, Negative: pageUp
     onPageTurned: (() -> Unit)? = null,
+    onLayoutReady: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     onWebViewCreated: ((WebView) -> Unit)? = null,
 ) {
@@ -99,8 +100,10 @@ fun EpubWebView(
     val prevChapterCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
     val nextChapterCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
     val pageTurnedCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
+    val layoutReadyCallbackRef = remember { mutableStateOf<() -> Unit>({}) }
 
     LaunchedEffect(onPageTurned) { pageTurnedCallbackRef.value = { onPageTurned?.invoke() } }
+    LaunchedEffect(onLayoutReady) { layoutReadyCallbackRef.value = { onLayoutReady?.invoke() } }
 
     var slideBitmap by remember { mutableStateOf<Bitmap?>(null) }
     val slideOffset = remember { Animatable(0f) }
@@ -158,7 +161,7 @@ fun EpubWebView(
                     slideBitmap?.recycle()
                     slideBitmap = null
                     isPageAnimating = false
-                    wv.evaluateJavascript("window._isPageAnimating=false;", null)
+                    wv.evaluateJavascript("window._isPageAnimating=false; if(window.getVisiblePara){ var idx=window.getVisiblePara(); if(idx>=0){ window._currentVisiblePara=idx; MoreaderBridge.onScrollToParagraph(idx); } }", null)
                 }
             }
 
@@ -168,6 +171,12 @@ fun EpubWebView(
                         triggerAnimation()
                     }
                 })
+                // 防丢帧卡死保护：若 150ms 内未收到 visual state callback，强制启动动画释放锁
+                wv.postDelayed({
+                    if (isPageAnimating && slideBitmap != null) {
+                        triggerAnimation()
+                    }
+                }, 150)
             } else {
                 triggerAnimation()
             }
@@ -198,7 +207,10 @@ fun EpubWebView(
     }
 
     LaunchedEffect(isDualPage) {
-        webView?.evaluateJavascript("window.isDualPage = $isDualPage; if(window._updateLayout) window._updateLayout();", null)
+        webView?.evaluateJavascript(
+            "window.isDualPage = $isDualPage; if(window._updateLayout) window._updateLayout(); if(window.MoreaderBridge && window.MoreaderBridge.onLayoutReady) window.MoreaderBridge.onLayoutReady();",
+            null
+        )
     }
 
     LaunchedEffect(pageAnimationMode) {
@@ -349,7 +361,7 @@ fun EpubWebView(
                 // Construct HTML with initial CSS. 
                 // Note: This uses the *current* values of initCss variables at the moment of loading.
                 val dualCss = if (isDualPage) {
-                    """:root{--edge-pad:28px;--spine-gap:calc(var(--edge-pad)*2);--col-width:calc(50vw - var(--spine-gap));}html{height:100vh!important;overflow:hidden!important}body{height:100vh!important;margin:0!important;padding:24px var(--edge-pad)!important;box-sizing:border-box!important;overflow:hidden!important;column-width:var(--col-width)!important;column-gap:var(--spine-gap)!important;column-fill:auto!important;column-rule:1px solid rgba(128,128,128,0.18)!important;max-width:none!important}"""
+                    """:root{--edge-pad:28px;--spine-gap:calc(var(--edge-pad)*2);--col-width:calc(50vw - var(--spine-gap));}html{height:100vh!important;overflow:hidden!important}body{height:100vh!important;margin:0!important;padding:24px var(--edge-pad)!important;box-sizing:border-box!important;overflow:hidden!important;column-width:var(--col-width)!important;column-gap:var(--spine-gap)!important;column-fill:auto!important;column-rule:1px solid rgba(128,128,128,0.18)!important;max-width:none!important}h1,h2,h3,h4,div,p{margin-top:0.4em!important;margin-bottom:0.4em!important}img{max-height:calc(100vh - 64px)!important;max-width:100%!important;width:auto!important;height:auto!important;object-fit:contain!important;display:block!important;margin:0 auto!important}"""
                 } else {
                     "body{margin:16px!important}"
                 }
@@ -402,7 +414,7 @@ fun EpubWebView(
             lastDualPage = isDualPage
 
             val dualJs = if (isDualPage) {
-                "':root{--edge-pad:28px;--spine-gap:calc(var(--edge-pad)*2);--col-width:calc(50vw - var(--spine-gap));}html{height:100vh!important;overflow:hidden!important}body{height:100vh!important;margin:0!important;padding:24px var(--edge-pad)!important;box-sizing:border-box!important;overflow:hidden!important;column-width:var(--col-width)!important;column-gap:var(--spine-gap)!important;column-fill:auto!important;column-rule:1px solid rgba(128,128,128,0.18)!important;max-width:none!important}'+ "
+                "':root{--edge-pad:28px;--spine-gap:calc(var(--edge-pad)*2);--col-width:calc(50vw - var(--spine-gap));}html{height:100vh!important;overflow:hidden!important}body{height:100vh!important;margin:0!important;padding:24px var(--edge-pad)!important;box-sizing:border-box!important;overflow:hidden!important;column-width:var(--col-width)!important;column-gap:var(--spine-gap)!important;column-fill:auto!important;column-rule:1px solid rgba(128,128,128,0.18)!important;max-width:none!important}h1,h2,h3,h4,div,p{margin-top:0.4em!important;margin-bottom:0.4em!important}img{max-height:calc(100vh - 64px)!important;max-width:100%!important;width:auto!important;height:auto!important;object-fit:contain!important;display:block!important;margin:0 auto!important}'+ "
             } else {
                 "'html{height:auto!important;overflow-x:hidden!important;overflow-y:visible!important}body{height:auto!important;column-count:auto!important;column-width:auto!important;column-gap:normal!important;column-rule:none!important;margin:16px!important;padding:0!important;overflow:visible!important;max-width:100%!important}'+ "
             }
@@ -427,45 +439,29 @@ fun EpubWebView(
             })()"""
             
             if (layoutChanged) {
-                // Step 1: Save scroll ratio
+                // 先根据当前屏幕正在看的段落，精准锚定位置
                 wv.evaluateJavascript(
                     """(function(){
-                        if(window.isDualPage){
-                            var maxIdx=window._getMaxSpreadIndex();
-                            window._savedSpreadRatio=maxIdx>0?(window._spreadIndex/maxIdx):0;
-                        }else{
-                            var sy=window.scrollY;
-                            var sh=document.body.scrollHeight;
-                            var vh=window.innerHeight;
-                            window._savedScrollRatio=sy/Math.max(1,sh-vh);
-                        }
+                        var p = (window._currentVisiblePara !== undefined && window._currentVisiblePara >= 0) ? window._currentVisiblePara : (window.getVisiblePara ? window.getVisiblePara() : 0);
+                        window._savedParaIdx = (p >= 0) ? p : 0;
                     })()"""
                 ) { _ ->
-                    // Step 2: Apply font change
+                    // Step 2: Apply font/layout change
                     wv.evaluateJavascript(js) { _ ->
                         wv.evaluateJavascript("if(window._updateLayout) window._updateLayout();", null)
-                        // Step 3: Restore scroll ratio after reflow
+                        // Step 3: 根据段落精确还原阅读位置（彻底替代失真的百分比估算）
                         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                             wv.evaluateJavascript(
                                 """(function(){
                                     if(window._updateLayout) window._updateLayout();
-                                    if(window.isDualPage){
-                                        if(window._savedSpreadRatio!==undefined){
-                                            var maxIdx=window._getMaxSpreadIndex();
-                                            var targetIdx=Math.round(window._savedSpreadRatio*maxIdx);
-                                            window._applySpread(targetIdx);
-                                        }
-                                    }else{
-                                        if(window._savedScrollRatio!==undefined){
-                                            var sh=document.body.scrollHeight;
-                                            var vh=window.innerHeight;
-                                            window.scrollTo(0,window._savedScrollRatio*Math.max(1,sh-vh));
-                                        }
+                                    var p = window._savedParaIdx;
+                                    if(p !== undefined && p >= 0 && window.scrollToPara){
+                                        window.scrollToPara(p);
                                     }
                                 })()""",
                                 null
                             )
-                        }, 200)
+                        }, 220)
                     }
                 }
             } else {
@@ -554,7 +550,7 @@ fun EpubWebView(
                                             var info=MoreaderBridge._getSelectionInfo();
                                             MoreaderBridge.onTextSelected(info);
                                         }
-                                    },800);
+                                    },200);
                                 });
                                 document.addEventListener('touchstart',function(){
                                     var s=window.getSelection();
@@ -587,20 +583,16 @@ fun EpubWebView(
                                         var availImgH = Math.max(100, H - 48);
                                         document.querySelectorAll('img').forEach(function(img){
                                             img.style.setProperty('max-width', '100%', 'important');
-                                            img.style.setProperty('max-height', availImgH + 'px', 'important');
+                                            img.style.setProperty('max-height', (H - 64) + 'px', 'important');
                                             img.style.setProperty('width', 'auto', 'important');
                                             img.style.setProperty('height', 'auto', 'important');
                                             img.style.setProperty('object-fit', 'contain', 'important');
                                             img.style.setProperty('display', 'block', 'important');
                                             img.style.setProperty('margin', '0 auto', 'important');
-                                            img.style.setProperty('break-inside', 'avoid', 'important');
-                                            img.style.setProperty('page-break-inside', 'avoid', 'important');
                                         });
-                                        document.querySelectorAll('.cover, .titlepage').forEach(function(el){
-                                            el.style.setProperty('max-height', availImgH + 'px', 'important');
-                                            el.style.setProperty('text-align', 'center', 'important');
-                                            el.style.setProperty('break-inside', 'avoid', 'important');
-                                            el.style.setProperty('page-break-inside', 'avoid', 'important');
+                                        document.querySelectorAll('h1, h2, h3, h4, div, p').forEach(function(el){
+                                            el.style.setProperty('margin-top', '0.4em', 'important');
+                                            el.style.setProperty('margin-bottom', '0.4em', 'important');
                                         });
 
                                         if (window._spreadIndex !== undefined && window._spreadIndex > 0) {
@@ -635,10 +627,24 @@ fun EpubWebView(
                                         });
                                     }
                                 };
-                                window.addEventListener('resize', function(){ window._updateLayout(); });
+                                var _resizeTimer = null;
+                                var _preResizePara = 0;
+                                window.addEventListener('resize', function(){
+                                    clearTimeout(_resizeTimer);
+                                    _resizeTimer = setTimeout(function(){
+                                        window._updateLayout();
+                                        var targetPara = (window._currentVisiblePara !== undefined && window._currentVisiblePara >= 0) ? window._currentVisiblePara : 0;
+                                        if (window.scrollToPara) {
+                                            window.scrollToPara(targetPara);
+                                        }
+                                        if (window.MoreaderBridge && window.MoreaderBridge.onLayoutReady) {
+                                            window.MoreaderBridge.onLayoutReady();
+                                        }
+                                    }, 120);
+                                });
                                 window._updateLayout();
-                                setTimeout(function(){ window._updateLayout(); }, 50);
-                                setTimeout(function(){ window._updateLayout(); }, 200);
+                                setTimeout(function(){ window._updateLayout(); MoreaderBridge.onLayoutReady(); }, 50);
+                                setTimeout(function(){ window._updateLayout(); MoreaderBridge.onLayoutReady(); }, 200);
                                 window.getScrollBehavior = function(){ return window.isEink ? 'instant' : 'smooth'; };
                                 window.ttsHL=function(idx){
                                     document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});
@@ -866,7 +872,10 @@ fun EpubWebView(
                                     });
                                 };
                                 window.scrollToPara=function(idx, linkHref){
-                                    if(idx===0 && !linkHref){window.scrollTo(0,0);return;}
+                                    if(idx===0 && !linkHref){
+                                        if(window.isDualPage){ window._applySpread(0); } else { window.scrollTo(0,0); }
+                                        return;
+                                    }
                                     function doHighlightAndScroll(){
                                         var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
                                         if(idx>=0&&idx<all.length){
@@ -885,14 +894,15 @@ fun EpubWebView(
                                             if(window.isDualPage){
                                                 var target = targetA || el;
                                                 var rect = target.getBoundingClientRect();
-                                                var curOffset = window._spreadIndex * window.innerWidth;
-                                                var targetSpread = Math.floor((curOffset + rect.left) / window.innerWidth);
+                                                var curOffset = (window.scrollX || document.body.scrollLeft || document.documentElement.scrollLeft || (window._spreadIndex * window.innerWidth));
+                                                var absLeft = curOffset + rect.left;
+                                                var targetSpread = Math.max(0, Math.floor(absLeft / window.innerWidth));
                                                 window._applySpread(targetSpread);
                                             } else {
                                                 if(targetA){
-                                                    targetA.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
+                                                    targetA.scrollIntoView({behavior: 'instant', block:'start'});
                                                 }else{
-                                                    el.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
+                                                    el.scrollIntoView({behavior: 'instant', block:'start'});
                                                 }
                                             }
                                             if(targetA){
@@ -1115,16 +1125,29 @@ fun EpubWebView(
                                 window._applySpread = function(idx) {
                                     window._spreadIndex = Math.max(0, idx);
                                     if (window.isDualPage) {
-                                        document.body.scrollLeft = window._spreadIndex * window.innerWidth;
+                                        var targetLeft = window._spreadIndex * window.innerWidth;
+                                        window.scrollTo(targetLeft, 0);
+                                        document.body.scrollLeft = targetLeft;
+                                        document.documentElement.scrollLeft = targetLeft;
                                     } else {
+                                        window.scrollTo(0, 0);
                                         document.body.scrollLeft = 0;
+                                        document.documentElement.scrollLeft = 0;
                                     }
                                 };
                                 window._getMaxSpreadIndex = function() {
                                     if (!window.isDualPage) return 0;
                                     var w = window.innerWidth;
-                                    var fullW = document.body.scrollWidth;
-                                    return Math.max(0, Math.ceil(fullW / w) - 1);
+                                    if (w <= 0) return 0;
+                                    var fullW = Math.max(
+                                        document.body.scrollWidth,
+                                        document.documentElement.scrollWidth,
+                                        document.body.offsetWidth,
+                                        document.documentElement.offsetWidth
+                                    );
+                                    // 只要内容总宽超过屏幕宽度（容差 10px），就支持翻页
+                                    if (fullW <= w + 10) return 0;
+                                    return Math.max(0, Math.ceil((fullW - 10) / w) - 1);
                                 };
 
                                 window.pageUp = function() {
@@ -1137,6 +1160,7 @@ fun EpubWebView(
                                         }
                                         if (window.isEink || window.pageAnimationMode === 'instant') {
                                             window._applySpread(window._spreadIndex - 1);
+                                            reportScroll();
                                             return;
                                         }
                                         window._isPageAnimating = true;
@@ -1162,12 +1186,14 @@ fun EpubWebView(
                                     if (window._isPageAnimating) return;
                                     if (window.isDualPage) {
                                         var maxIdx = window._getMaxSpreadIndex();
+                                        // 仅当已经明确处于最后一屏时，才翻入下一章；否则继续向后翻页！
                                         if (window._spreadIndex >= maxIdx) {
                                             MoreaderBridge.onNextChapter();
                                             return;
                                         }
                                         if (window.isEink || window.pageAnimationMode === 'instant') {
                                             window._applySpread(window._spreadIndex + 1);
+                                            reportScroll();
                                             return;
                                         }
                                         window._isPageAnimating = true;
@@ -1211,26 +1237,42 @@ fun EpubWebView(
                                 // Get current visible paragraph index
                                 window.getVisiblePara=function(){
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
+                                    var w = window.innerWidth;
+                                    var h = window.innerHeight;
                                     if(window.isDualPage){
+                                        // 横屏双页：寻找当前屏内主要阅读视线所在的段落（以屏幕中央偏左到右侧为主）
+                                        var bestIdx = -1;
                                         for(var i=0;i<all.length;i++){
                                             var r = all[i].getBoundingClientRect();
-                                            if(r.right > 20 && r.left < window.innerWidth) return i;
+                                            // 只要有文字在当前屏幕内展示
+                                            if(r.right > 40 && r.left < w - 40 && r.bottom > 20 && r.top < h - 20){
+                                                // 优先取左栏顶部第一眼看到的段落
+                                                if(r.left < w * 0.55 && bestIdx < 0){
+                                                    bestIdx = i;
+                                                }
+                                                if(bestIdx < 0) bestIdx = i;
+                                            }
                                         }
-                                        return all.length - 1;
+                                        return (bestIdx >= 0) ? bestIdx : (all.length - 1);
                                     }
-                                    var scrollY=window.scrollY;
                                     for(var i=0;i<all.length;i++){
-                                        if(all[i].offsetTop>scrollY+window.innerHeight*0.3)return i;
+                                        var r = all[i].getBoundingClientRect();
+                                        // 竖屏下单列：寻找顶部在视口上部第一屏主视区的段落
+                                        if(r.bottom > 20 && r.top < h * 0.35) return i;
                                     }
-                                    return all.length-1;
+                                    return all.length - 1;
                                 };
                                 // Track visible paragraph on scroll — reports to Kotlin via bridge
                                 var _lastReportedPara=-1;
+                                window._currentVisiblePara = 0;
                                 var reportScroll = function(){
                                     var idx=window.getVisiblePara();
-                                    if(idx!==_lastReportedPara){
-                                        _lastReportedPara=idx;
-                                        MoreaderBridge.onScrollToParagraph(idx);
+                                    if(idx>=0){
+                                        window._currentVisiblePara = idx;
+                                        if(idx!==_lastReportedPara){
+                                            _lastReportedPara=idx;
+                                            MoreaderBridge.onScrollToParagraph(idx);
+                                        }
                                     }
                                 };
                                 window.addEventListener('scroll', reportScroll, {passive:true});
@@ -1268,6 +1310,10 @@ fun EpubWebView(
                         @JavascriptInterface
                         fun onPageTurned() {
                             android.os.Handler(android.os.Looper.getMainLooper()).post { pageTurnedCallbackRef.value() }
+                        }
+                        @JavascriptInterface
+                        fun onLayoutReady() {
+                            android.os.Handler(android.os.Looper.getMainLooper()).post { layoutReadyCallbackRef.value() }
                         }
                         @JavascriptInterface
                         fun requestPageSlide(direction: Int, scrollYDelta: Float) {

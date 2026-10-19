@@ -675,6 +675,7 @@ Just change the Base URL and API Key</string>
     <string name="reader_page_anim_title">Page Animation</string>
     <string name="reader_page_anim_slide">Smooth Slide</string>
     <string name="reader_page_anim_instant">Instant</string>
+    <string name="reader_layout_initializing">Optimizing layout…</string>
 
     <!-- Reports Tab -->
     <string name="ai_reports_title">History and Reports</string>
