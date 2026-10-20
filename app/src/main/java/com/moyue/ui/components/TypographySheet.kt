@@ -36,6 +36,7 @@ fun TypographySheet(
     pageAnimationMode: String,
     isLargeScreen: Boolean,
     isEinkMode: Boolean,
+    currentTheme: com.moyue.app.data.models.ReaderTheme = com.moyue.app.data.models.ReaderTheme.LIGHT,
     onFontSizeChange: (Int) -> Unit,
     onFontFamilyChange: (String) -> Unit,
     onFontWeightChange: (String) -> Unit,
@@ -44,16 +45,45 @@ fun TypographySheet(
     onPageAnimationModeChange: (String) -> Unit,
     onClose: () -> Unit
 ) {
+    val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDark = currentTheme.isDark || isSystemDark
+
+    val sheetBgColor = when {
+        isEinkMode -> Color.White
+        currentTheme.isDark -> Color(android.graphics.Color.parseColor(currentTheme.bgColor))
+        isSystemDark -> Color(0xFF1E1E1E)
+        else -> MaterialTheme.colorScheme.surface
+    }
+
+    val sheetTextColor = when {
+        isEinkMode -> Color.Black
+        currentTheme.isDark -> Color(android.graphics.Color.parseColor(currentTheme.textColor))
+        isSystemDark -> Color(0xFFE0E0E0)
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
+    val sheetSecondaryTextColor = when {
+        isEinkMode -> Color.DarkGray
+        isDark -> sheetTextColor.copy(alpha = 0.65f)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    val itemCardBg = when {
+        isEinkMode -> Color.White
+        isDark -> Color.White.copy(alpha = 0.08f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    }
+
     ModalBottomSheet(
         onDismissRequest = onClose,
-        containerColor = if (isEinkMode) Color.White else MaterialTheme.colorScheme.surface,
-        contentColor = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.onSurface,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
+        containerColor = sheetBgColor,
+        contentColor = sheetTextColor,
+        dragHandle = { BottomSheetDefaults.DragHandle(color = sheetSecondaryTextColor.copy(alpha = 0.4f)) }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .padding(horizontal = 18.dp, vertical = 4.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             // Header Row
@@ -65,50 +95,56 @@ fun TypographySheet(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Aa",
-                        fontSize = 18.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary
+                        color = if (isEinkMode) Color.Black else if (isDark) Color(0xFF90CAF9) else MaterialTheme.colorScheme.primary
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = stringResource(R.string.reader_typography_title),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = sheetTextColor
                     )
                 }
-                IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Default.Close, 
+                        contentDescription = null, 
+                        modifier = Modifier.size(16.dp),
+                        tint = sheetSecondaryTextColor
+                    )
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
 
             // ── 1. Font Size (Slider with A- / A+) ──
             Text(
                 text = stringResource(R.string.reader_font_size_title),
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                color = sheetSecondaryTextColor
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = if (isEinkMode) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                border = if (isEinkMode) BorderStroke(1.dp, Color.Black) else BorderStroke(0.8.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                shape = RoundedCornerShape(10.dp),
+                color = itemCardBg,
+                border = if (isEinkMode) BorderStroke(1.dp, Color.Black) else BorderStroke(0.6.dp, sheetSecondaryTextColor.copy(alpha = 0.2f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilledTonalIconButton(
                         onClick = { if (fontSize > 14) onFontSizeChange(fontSize - 1) },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(30.dp)
                     ) {
-                        Text("A-", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("A-", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
 
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(8.dp))
 
                     Slider(
                         value = fontSize.toFloat(),
@@ -118,38 +154,38 @@ fun TypographySheet(
                         modifier = Modifier.weight(1f)
                     )
 
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(8.dp))
 
                     FilledTonalIconButton(
                         onClick = { if (fontSize < 32) onFontSizeChange(fontSize + 1) },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(30.dp)
                     ) {
-                        Text("A+", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text("A+", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
 
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(8.dp))
 
                     Text(
                         text = "$fontSize",
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.width(26.dp),
+                        color = if (isEinkMode) Color.Black else if (isDark) Color(0xFF90CAF9) else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.width(22.dp),
                         textAlign = TextAlign.End
                     )
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp))
 
             // ── 2. Font Family Selection ──
             Text(
                 text = stringResource(R.string.reader_font_family_title),
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                color = sheetSecondaryTextColor
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
 
             val fontList = listOf(
                 Triple("serif", R.string.font_name_serif, R.string.font_desc_serif),
@@ -159,33 +195,33 @@ fun TypographySheet(
             )
 
             // Render 2x2 Grid of Font Cards
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (i in 0 until fontList.size step 2) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         for (j in i until minOf(i + 2, fontList.size)) {
                             val (valKey, nameResId, descResId) = fontList[j]
                             val isSelected = (fontFamily == valKey)
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(10.dp),
                                 color = if (isSelected) {
-                                    if (isEinkMode) Color.White else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                                    if (isEinkMode) Color.White else if (isDark) Color(0xFF90CAF9).copy(alpha = 0.22f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
                                 } else {
-                                    if (isEinkMode) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    itemCardBg
                                 },
                                 border = if (isSelected) {
-                                    BorderStroke(1.5.dp, if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary)
+                                    BorderStroke(1.2.dp, if (isEinkMode) Color.Black else if (isDark) Color(0xFF90CAF9) else MaterialTheme.colorScheme.primary)
                                 } else {
-                                    BorderStroke(0.8.dp, if (isEinkMode) Color.LightGray else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                                    BorderStroke(0.6.dp, if (isEinkMode) Color.LightGray else sheetSecondaryTextColor.copy(alpha = 0.2f))
                                 },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(10.dp))
                                     .clickable { onFontFamilyChange(valKey) }
                             ) {
-                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -193,20 +229,20 @@ fun TypographySheet(
                                     ) {
                                         Text(
                                             text = stringResource(nameResId),
-                                            fontSize = 13.sp,
+                                            fontSize = 12.sp,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isEinkMode) Color.Black else if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                            color = if (isEinkMode) Color.Black else if (isSelected) (if (isDark) Color(0xFF90CAF9) else MaterialTheme.colorScheme.primary) else sheetTextColor
                                         )
                                         if (isSelected) {
-                                            Text("✓", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary)
+                                            Text("✓", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isEinkMode) Color.Black else if (isDark) Color(0xFF90CAF9) else MaterialTheme.colorScheme.primary)
                                         }
                                     }
-                                    Spacer(Modifier.height(4.dp))
+                                    Spacer(Modifier.height(2.dp))
                                     Text(
                                         text = stringResource(descResId),
-                                        fontSize = 10.5.sp,
+                                        fontSize = 10.sp,
                                         maxLines = 1,
-                                        color = if (isEinkMode) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                        color = sheetSecondaryTextColor.copy(alpha = 0.75f)
                                     )
                                 }
                             }
@@ -215,19 +251,19 @@ fun TypographySheet(
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp))
 
             // ── 3. Font Weight ──
             Text(
                 text = stringResource(R.string.reader_font_weight_title),
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                color = sheetSecondaryTextColor
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val weightList = listOf(
                     "400" to R.string.font_weight_normal,
@@ -242,7 +278,7 @@ fun TypographySheet(
                         label = {
                             Text(
                                 stringResource(wLabelId),
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 fontWeight = if (wKey == "700") FontWeight.Bold else if (wKey == "600") FontWeight.SemiBold else FontWeight.Normal
                             )
                         },
@@ -251,19 +287,19 @@ fun TypographySheet(
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp))
 
             // ── 4. Line Spacing (Compact / Normal / Relaxed) ──
             Text(
                 text = stringResource(R.string.reader_line_height_title),
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                color = sheetSecondaryTextColor
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val lineModes = listOf(
                     "compact" to R.string.reader_line_height_compact,
@@ -278,7 +314,7 @@ fun TypographySheet(
                         label = {
                             Text(
                                 stringResource(lLabelId),
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
                             )
                         },
@@ -287,25 +323,25 @@ fun TypographySheet(
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp))
 
             // ── 5. Layout Mode (Tablet / Foldable Dual Spread) ──
             Text(
                 text = stringResource(R.string.reader_layout_mode_title),
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                color = sheetSecondaryTextColor
             )
             Text(
                 text = stringResource(R.string.reader_layout_auto_desc),
-                fontSize = 11.sp,
-                color = if (isEinkMode) Color.DarkGray else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                modifier = Modifier.padding(top = 2.dp, bottom = 6.dp)
+                fontSize = 10.5.sp,
+                color = sheetSecondaryTextColor.copy(alpha = 0.65f),
+                modifier = Modifier.padding(top = 1.dp, bottom = 4.dp)
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val modes = listOf(
                     "auto" to R.string.reader_layout_auto,
@@ -320,7 +356,7 @@ fun TypographySheet(
                         label = {
                             Text(
                                 stringResource(mLabelId),
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
                             )
                         },
@@ -329,19 +365,19 @@ fun TypographySheet(
                 }
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp))
 
-            // ── 5. Page Animation Mode (Smooth vs Instant) ──
+            // ── 6. Page Animation Mode (Smooth vs Instant) ──
             Text(
                 text = stringResource(R.string.reader_page_anim_title),
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                color = sheetSecondaryTextColor
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val animModes = listOf(
                     "slide" to R.string.reader_page_anim_slide,
@@ -355,7 +391,7 @@ fun TypographySheet(
                         label = {
                             Text(
                                 stringResource(aLabelId),
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
                             )
                         },
@@ -364,7 +400,7 @@ fun TypographySheet(
                 }
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(20.dp))
         }
     }
 }

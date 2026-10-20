@@ -989,6 +989,7 @@ fun ReaderScreen(
                     pageAnimationMode = state.pageAnimationMode,
                     isLargeScreen = isLargeScreen,
                     isEinkMode = state.isEinkMode,
+                    currentTheme = state.theme,
                     onFontSizeChange = { viewModel.setFontSize(it) },
                     onFontFamilyChange = { viewModel.setFontFamily(it) },
                     onFontWeightChange = { viewModel.setFontWeight(it) },
