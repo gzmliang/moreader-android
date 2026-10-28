@@ -103,6 +103,13 @@ fun ReaderScreen(
     var showDictLangMenu by remember { mutableStateOf(false) }
     var showParagraphMenu by rememberSaveable { mutableStateOf(false) }
     var clickedParagraphIndex by rememberSaveable { mutableStateOf(-1) }
+    // 15秒自动消失
+    LaunchedEffect(showParagraphMenu) {
+        if (showParagraphMenu) {
+            kotlinx.coroutines.delay(15_000)
+            showParagraphMenu = false
+        }
+    }
     val view = LocalView.current
     LaunchedEffect(state.isFullscreen) {
         val window = (view.context as? android.app.Activity)?.window
@@ -378,10 +385,12 @@ fun ReaderScreen(
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val screenWidthDp = maxWidth.value
                 val isLargeScreen = screenWidthDp >= 600f
+                val isLandscapeReader = screenWidthDp > maxHeight.value
+                // 双页开关完全由「设置 > 排版」决定：auto=横屏自动双页(大屏/横屏)，single=永不双页，dual=始终双页
                 val isDualPageSpread = when (state.layoutSpreadMode) {
                     "dual" -> true
                     "single" -> false
-                    else -> isLargeScreen
+                    else -> screenWidthDp > maxHeight.value
                 }
 
                 var isLayoutOptimizing by remember { mutableStateOf(false) }
@@ -487,6 +496,8 @@ fun ReaderScreen(
                     clearSelectionTrigger = state.clearSelectionTrigger,
                     pageScrollTrigger = state.pageScrollTrigger,
                     onLayoutReady = { isLayoutOptimizing = false },
+                    landOnLastSpread = state.landOnLastSpread,
+                    onLandedOnLastSpread = { viewModel.clearLandOnLastSpread() },
                     onWebViewCreated = { webViewInstance = it },
                     modifier = Modifier.fillMaxSize().background(Color(android.graphics.Color.parseColor(state.theme.bgColor))),
                 )
@@ -932,11 +943,17 @@ fun ReaderScreen(
             }
 
             // TTS Settings overlay (includes theme picker now)
+            // 横屏：右侧抽屉（宽约 420dp，贴右全高）；竖屏：保持原底部弹出
             AnimatedVisibility(
                 visible = state.showTtsSettingsPanel,
-                enter = slideInVertically(initialOffsetY = { it }),
-                exit = slideOutVertically(targetOffsetY = { it }),
-                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = if (isLandscapeReader) slideInHorizontally(initialOffsetX = { it }) else slideInVertically(initialOffsetY = { it }),
+                exit = if (isLandscapeReader) slideOutHorizontally(targetOffsetX = { it }) else slideOutVertically(targetOffsetY = { it }),
+                modifier = if (isLandscapeReader) {
+                    // 横屏：右侧抽屉，键盘不干预（小键盘由输入法自己悬浮在右下角）
+                    Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                } else {
+                    Modifier.align(Alignment.BottomCenter).imePadding()
+                },
             ) {
                 TtsSettingsSheet(
                     currentProvider = state.ttsProvider, ttsSpeed = state.ttsSpeed,
@@ -975,6 +992,7 @@ fun ReaderScreen(
                     onRecordingClick = { viewModel.showRecordingDialog() },
                     onBrowseRecordingsClick = { viewModel.showRecordingManager() },
                     onClose = { viewModel.toggleTtsSettingsPanel() },
+                    landscapeDrawer = isLandscapeReader,
                 )
             }
 
@@ -988,6 +1006,7 @@ fun ReaderScreen(
                     lineHeightMode = state.lineHeightMode,
                     pageAnimationMode = state.pageAnimationMode,
                     isLargeScreen = isLargeScreen,
+                    landscapeLimitWidth = isLandscapeReader,
                     isEinkMode = state.isEinkMode,
                     currentTheme = state.theme,
                     onFontSizeChange = { viewModel.setFontSize(it) },
@@ -1110,6 +1129,9 @@ fun ReaderScreen(
                     bookRepository = repository,
                     edgeEndpoint = state.edgeTtsEndpoint,
                     edgeVoice = state.edgeTtsVoice,
+                    paragraphs = state.ttsParagraphs,
+                    currentParagraphIndex = state.currentParagraphIndex,
+                    selectedText = state.selectedText,
                     onDismiss = { 
                         showAiCompanion = false 
                         viewModel.refreshEinkMode()

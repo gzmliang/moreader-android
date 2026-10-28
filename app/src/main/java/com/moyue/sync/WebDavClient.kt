@@ -469,16 +469,17 @@ class WebDavClient(private val context: Context) {
         try {
             val book = repo.getBook(bookId) ?: return@withContext Result.failure(Exception("找不到本地书籍"))
             val localFile = File(book.filePath)
-            if (!localFile.exists()) return@withContext Result.failure(Exception("EPUB 文件不存在"))
+            if (!localFile.exists()) return@withContext Result.failure(Exception("书籍文件不存在"))
 
+            val ext = if (book.filePath.endsWith(".pdf", ignoreCase = true)) ".pdf" else ".epub"
             val dir = if (destDirectory.isBlank()) "" else destDirectory.trimEnd('/')
-            val epubRemotePath = if (dir.isBlank()) "${book.title}.epub" else "$dir/${book.title}.epub"
+            val bookRemotePath = if (dir.isBlank()) "${book.title}$ext" else "$dir/${book.title}$ext"
             val metaRemotePath = if (dir.isBlank()) "${book.title}.moreader.json" else "$dir/${book.title}.moreader.json"
 
-            // 1. 上传 EPUB 文件
-            val epubRes = uploadFile(epubRemotePath, localFile)
-            if (epubRes.isFailure) {
-                return@withContext Result.failure(epubRes.exceptionOrNull() ?: Exception("上传 EPUB 失败"))
+            // 1. 上传书籍文件
+            val fileRes = uploadFile(bookRemotePath, localFile)
+            if (fileRes.isFailure) {
+                return@withContext Result.failure(fileRes.exceptionOrNull() ?: Exception("上传书籍失败"))
             }
 
             // 2. 生成伴侣元数据 JSON
@@ -523,7 +524,7 @@ class WebDavClient(private val context: Context) {
             uploadText(metaRemotePath, metaJson.toString(2))
 
             val countMsg = "${bookmarks.size}个书签，${highlights.size}处高亮"
-            Result.success("已上传至 WebDAV ($countMsg)")
+            Result.success("《${book.title}》已成功备份至网盘 ($countMsg)")
         } catch (e: Exception) {
             Log.e(TAG, "uploadBookWithMetadata failed", e)
             Result.failure(e)

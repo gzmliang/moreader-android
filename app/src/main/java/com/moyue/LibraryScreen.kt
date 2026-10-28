@@ -55,7 +55,7 @@ import java.io.File
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
-    onOpenBook: (String) -> Unit,
+    onOpenBook: (String, Boolean) -> Unit,
     onOpenBookmarks: () -> Unit = {},
     onOpenVocabulary: () -> Unit = {},
     onOpenFlashcards: () -> Unit = {},
@@ -137,12 +137,7 @@ fun LibraryScreen(
         when (extOf(file.name)) {
             "epub" -> viewModel.importLocalEpubFile(context, file)
             "txt" -> viewModel.importTxtFile(context, file)
-            "pdf" -> {
-                val uri = runCatching {
-                    FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                }.getOrNull()
-                if (uri != null) submitPdfUris(listOf(uri))
-            }
+            "pdf" -> viewModel.importLocalPdfFile(context, file)
         }
     }
 
@@ -172,10 +167,10 @@ fun LibraryScreen(
                         else -> zipPickLocal = Pair(dir, books)
                     }
                 }
-                "pdf" -> submitPdfUris(listOf(uri))
+                "pdf" -> viewModel.importPdfUri(context, uri)
                 else -> {
                     if (viewModel.isPdfUri(context, uri)) {
-                        submitPdfUris(listOf(uri))
+                        viewModel.importPdfUri(context, uri)
                     } else {
                         viewModel.importBook(context, uri)
                     }
@@ -217,11 +212,13 @@ fun LibraryScreen(
         dispatchImport(uris)
     }
 
-    // File picker for PDF import（PDF 需上传到云端转成精读本）
+    // File picker for PDF import（直接本地秒级导入，原汁原味阅读）
     val importPdfLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
-        submitPdfUris(uris)
+        if (uris.isNotEmpty()) {
+            uris.forEach { viewModel.importPdfUri(context, it) }
+        }
     }
 
     // App dark mode toggle for UI screens (independent of reader theme)
@@ -534,8 +531,8 @@ fun LibraryScreen(
                                     gridState.animateScrollToItem(0)
                                 }
                             },
-                            // 网盘里的 PDF 也走「先选 AI 纠错级别」的小窗（与本地导入同一口径）
-                            onPickPdf = { uri, _ -> submitPdfUris(listOf(uri)) }
+                            // 网盘里的 PDF 也支持直接本地入库原样阅读
+                            onPickPdf = { uri, _ -> viewModel.importPdfUri(context, uri) }
                         )
                     }
 
@@ -569,7 +566,16 @@ fun LibraryScreen(
                             onDismiss = { showSyncSettings = false },
                             onUpload = { onResult ->
                                 if (webDavClient.isConfigured()) {
-                                    viewModel.uploadAllToWebDav(context, webDavClient)
+                                    viewModel.uploadAllToWebDav(
+                                        context,
+                                        webDavClient,
+                                        onProgress = { current, total, title ->
+                                            onResult(context.getString(com.moyue.app.R.string.sync_uploading) + " ($current/$total): $title")
+                                        },
+                                        onFinished = { finalMsg ->
+                                            onResult(finalMsg)
+                                        }
+                                    )
                                     onResult(context.getString(com.moyue.app.R.string.sync_webdav_uploading))
                                 } else {
                                     onResult(context.getString(com.moyue.app.R.string.webdav_not_configured))
@@ -896,7 +902,7 @@ fun LibraryScreen(
                         TextButton(onClick = {
                             val bookId = focusEntry.bookId
                             PdfImportManager.clearFinished()
-                            if (bookId != null) onOpenBook(bookId)
+                            if (bookId != null) onOpenBook(bookId, false)
                         }) {
                             Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_open_now))
                         }
@@ -1095,8 +1101,9 @@ fun LibraryScreen(
                         val webDavClientForUpload = remember { WebDavClient(context) }
                         BookCard(
                             book = book,
-                            onClick = { onOpenBook(book.id) },
+                            onClick = { onOpenBook(book.id, book.filePath.endsWith(".pdf", ignoreCase = true)) },
                             onDelete = { viewModel.deleteBook(context, book) },
+                            onRename = { newTitle -> viewModel.renameBook(context, book.id, newTitle) },
                             onUploadToWebDav = {
                                 if (webDavClientForUpload.isConfigured()) {
                                     viewModel.uploadSingleBookToWebDav(context, webDavClientForUpload, book.id)
@@ -1119,9 +1126,43 @@ private fun BookCard(
     book: Book,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onRename: (String) -> Unit = {},
     onUploadToWebDav: () -> Unit = {},
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renameInput by remember(book.title) { mutableStateOf(book.title) }
+
+    if (showRenameDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.rename_book)) },
+            text = {
+                OutlinedTextField(
+                    value = renameInput,
+                    onValueChange = { renameInput = it },
+                    label = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.rename_book_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRenameDialog = false
+                    if (renameInput.isNotBlank()) {
+                        onRename(renameInput.trim())
+                    }
+                }) {
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel))
+                }
+            }
+        )
+    }
 
     if (showMenu) {
         AlertDialog(
@@ -1131,6 +1172,17 @@ private fun BookCard(
                 Column {
                     Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.select_action))
                     Spacer(Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { showMenu = false; showRenameDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Edit, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.rename_book),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                     TextButton(
                         onClick = { showMenu = false; onUploadToWebDav() },
                         modifier = Modifier.fillMaxWidth()
@@ -1189,6 +1241,22 @@ private fun BookCard(
                         modifier = Modifier.size(40.dp),
                         tint = Color.Gray.copy(alpha = 0.4f),
                     )
+                }
+
+                if (book.filePath.endsWith(".pdf", ignoreCase = true)) {
+                    Surface(
+                        shape = RoundedCornerShape(bottomStart = 6.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    ) {
+                        Text(
+                            text = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_badge),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
 

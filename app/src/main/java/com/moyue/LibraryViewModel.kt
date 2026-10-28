@@ -241,17 +241,82 @@ class LibraryViewModel(
         }
     }
 
-    /** 把 content:// 拷到缓存目录，返回临时文件（失败返回 null） */
+    /** 本地 PDF 文件（例如外部传入或已下载好的）直接入库 */
+    fun importLocalPdfFile(context: Context, pdfFile: File) {
+        viewModelScope.launch {
+            try {
+                val book = repository.importPdfFile(pdfFile)
+                if (repository.isRecentDuplicate) {
+                    toastShort(context, context.getString(com.moyue.app.R.string.import_duplicate_skip, book.title))
+                } else {
+                    toastShort(context, context.getString(com.moyue.app.R.string.webdav_imported_success, book.title, ""))
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Import", "本地 PDF 导入失败", e)
+                toastLong(context, context.getString(com.moyue.app.R.string.import_failed))
+            }
+        }
+    }
+
+    /** 从系统 Uri 导入 PDF：纯本地秒级复制与提取封面，无需云端 */
+    fun importPdfUri(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val displayName = queryDisplayName(context, uri) ?: "document.pdf"
+                val tmp = copyUriToCache(context, uri, displayName)
+                if (tmp == null || !tmp.exists()) {
+                    android.util.Log.e("Import", "copyUriToCache 失败: uri=$uri, displayName=$displayName")
+                    toastLong(context, "导入失败：无法读取文件流 ($displayName)")
+                    return@launch
+                }
+                val book = repository.importPdfFile(tmp, rawTitle = displayName)
+                if (repository.isRecentDuplicate) {
+                    toastShort(context, context.getString(com.moyue.app.R.string.import_duplicate_skip, book.title))
+                } else {
+                    toastShort(context, context.getString(com.moyue.app.R.string.webdav_imported_success, book.title, ""))
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Import", "PDF Uri 导入失败: uri=$uri", e)
+                toastLong(context, "导入异常：${e.message}")
+            }
+        }
+    }
+
+    /** 把 content:// 或 file:// 拷到缓存目录，返回临时文件（失败返回 null） */
     suspend fun copyUriToCache(context: Context, uri: Uri, fileName: String): File? =
         withContext(Dispatchers.IO) {
             try {
+                // 如果是持久权限支持的 Uri，尝试保持读取权限
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+
                 val safe = fileName.replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { "import.bin" }
-                val tmp = File(context.cacheDir, "import_${System.currentTimeMillis()}_$safe")
-                context.contentResolver.openInputStream(uri)?.use { input ->
+                // 限制文件名长度，避免某些系统文件名过长报错
+                val safeTruncated = if (safe.length > 80) safe.take(40) + "..." + safe.takeLast(30) else safe
+                val tmp = File(context.cacheDir, "import_${System.currentTimeMillis()}_$safeTruncated")
+
+                val openedStream = runCatching { context.contentResolver.openInputStream(uri) }.getOrNull()
+                    ?: runCatching {
+                        // 兜底方案：如果是 file:// 协议或绝对路径
+                        if (uri.scheme == "file" || uri.path?.startsWith("/") == true) {
+                            java.io.FileInputStream(File(uri.path!!))
+                        } else null
+                    }.getOrNull()
+
+                openedStream?.use { input ->
                     tmp.outputStream().use { input.copyTo(it) }
                 } ?: return@withContext null
-                if (tmp.length() > 0) tmp else null
+
+                if (tmp.length() > 0) tmp else {
+                    tmp.delete()
+                    null
+                }
             } catch (e: Exception) {
+                android.util.Log.e("Import", "copyUriToCache 异常", e)
                 null
             }
         }
@@ -268,28 +333,62 @@ class LibraryViewModel(
     // v1.1.1 起 PDF 走「云端后台任务 + 进度轮询」，实现搬到 sync/PdfImportManager.kt
     // （这里只保留 Uri 相关的工具方法）
 
-    /** 判断一个 Uri 是不是 PDF */
-    fun isPdfUri(context: Context, uri: Uri): Boolean {
-        val mime = context.contentResolver.getType(uri) ?: ""
-        if (mime.contains("pdf", ignoreCase = true)) return true
-        return queryDisplayName(context, uri)?.lowercase()?.endsWith(".pdf") == true
-    }
-
     fun queryDisplayName(context: Context, uri: Uri): String? {
-        return try {
+        // 1. 优先尝试 OpenableColumns 查询
+        val fromProvider = try {
             context.contentResolver.query(uri, null, null, null, null)?.use { c ->
                 val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
                 if (idx >= 0 && c.moveToFirst()) c.getString(idx) else null
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
+        if (!fromProvider.isNullOrBlank()) return fromProvider
+
+        // 2. 从 Uri 的 path 提取最后一段
+        val lastSegment = uri.lastPathSegment
+        if (!lastSegment.isNullOrBlank()) {
+            val name = if (lastSegment.contains("/")) lastSegment.substringAfterLast("/") else lastSegment
+            if (name.isNotBlank()) return name
+        }
+
+        // 3. 从整个 Uri 字符串中提取文件名
+        val pathStr = uri.toString()
+        val decoded = runCatching { java.net.URLDecoder.decode(pathStr, "UTF-8") }.getOrDefault(pathStr)
+        val extracted = decoded.substringAfterLast("/").substringBefore("?")
+        if (extracted.isNotBlank() && extracted.contains(".")) {
+            return extracted
+        }
+
+        return null
+    }
+
+    /** 判断一个 Uri 是不是 PDF */
+    fun isPdfUri(context: Context, uri: Uri): Boolean {
+        val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull() ?: ""
+        if (mime.contains("pdf", ignoreCase = true)) return true
+        val name = queryDisplayName(context, uri) ?: uri.lastPathSegment ?: ""
+        if (name.lowercase().endsWith(".pdf")) return true
+        if (uri.path?.lowercase()?.endsWith(".pdf") == true) return true
+        if (uri.toString().lowercase().contains(".pdf")) return true
+        return false
     }
 
 
     fun deleteBook(context: Context, book: Book) {
         viewModelScope.launch {
             repository.deleteBook(book)
+        }
+    }
+
+    /** 修改本地书籍名称 */
+    fun renameBook(context: Context, bookId: String, newTitle: String) {
+        viewModelScope.launch {
+            val clean = newTitle.trim()
+            if (clean.isNotBlank()) {
+                repository.updateBookTitle(bookId, clean)
+                toastShort(context, context.getString(com.moyue.app.R.string.rename_success))
+            }
         }
     }
 
@@ -331,12 +430,17 @@ class LibraryViewModel(
     }
 
     /** 上传全部本地书籍到 WebDAV 网盘（含书签和高亮），自动跳过已在网盘目录的 */
-    fun uploadAllToWebDav(context: Context, webDavClient: com.moyue.app.sync.WebDavClient) {
+    fun uploadAllToWebDav(
+        context: Context,
+        webDavClient: com.moyue.app.sync.WebDavClient,
+        onProgress: ((current: Int, total: Int, title: String) -> Unit)? = null,
+        onFinished: ((String) -> Unit)? = null,
+    ) {
         viewModelScope.launch {
             if (!webDavClient.isConfigured()) {
-                android.widget.Toast.makeText(context,
-                    context.getString(com.moyue.app.R.string.webdav_not_configured),
-                    android.widget.Toast.LENGTH_LONG).show()
+                val errMsg = context.getString(com.moyue.app.R.string.webdav_not_configured)
+                android.widget.Toast.makeText(context, errMsg, android.widget.Toast.LENGTH_LONG).show()
+                onFinished?.invoke(errMsg)
                 return@launch
             }
             _isUploading.value = true
@@ -348,7 +452,10 @@ class LibraryViewModel(
             val remoteFiles = webDavClient.listFiles(destDir).getOrDefault(emptyList())
                 .map { it.name }.toSet()
 
-            val toUpload = allBooks.filter { "${it.title}.epub" !in remoteFiles }
+            val toUpload = allBooks.filter { 
+                val ext = if (it.filePath.endsWith(".pdf", ignoreCase = true)) ".pdf" else ".epub"
+                "${it.title}$ext" !in remoteFiles && "${it.title}.epub" !in remoteFiles
+            }
             val skipped = allBooks.size - toUpload.size
 
             _uploadTotal.value = toUpload.size
@@ -356,6 +463,7 @@ class LibraryViewModel(
             var success = 0
             var fail = 0
             for ((i, book) in toUpload.withIndex()) {
+                onProgress?.invoke(i + 1, toUpload.size, book.title)
                 val result = webDavClient.uploadBookWithMetadata(book.id, repo, destDir)
                 if (result.isSuccess) success++ else fail++
                 _uploadProgress.value = i + 1
@@ -369,20 +477,31 @@ class LibraryViewModel(
                 else -> context.getString(com.moyue.app.R.string.sync_upload_result_success, success)
             }
             android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+            onFinished?.invoke(msg)
         }
     }
 
     /** 上传单本书到 WebDAV 网盘（含书签和高亮） */
-    fun uploadSingleBookToWebDav(context: Context, webDavClient: com.moyue.app.sync.WebDavClient, bookId: String) {
+    fun uploadSingleBookToWebDav(
+        context: Context,
+        webDavClient: com.moyue.app.sync.WebDavClient,
+        bookId: String,
+        onFinished: ((Boolean, String) -> Unit)? = null
+    ) {
         viewModelScope.launch {
             val repo = BookRepository(context)
-            android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.sync_webdav_uploading), android.widget.Toast.LENGTH_SHORT).show()
-            webDavClient.uploadBookWithMetadata(bookId, repo).fold(
+            val destDir = webDavClient.getDefaultUploadDir()
+            val dirDesc = if (destDir.isBlank()) "根目录" else destDir
+            android.widget.Toast.makeText(context, "正在备份到网盘 [$dirDesc]…", android.widget.Toast.LENGTH_SHORT).show()
+            webDavClient.uploadBookWithMetadata(bookId, repo, destDir).fold(
                 onSuccess = { msg ->
-                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(context, "$msg\n已存入网盘：$dirDesc", android.widget.Toast.LENGTH_LONG).show()
+                    onFinished?.invoke(true, msg)
                 },
                 onFailure = { e ->
-                    android.widget.Toast.makeText(context, context.getString(com.moyue.app.R.string.sync_webdav_upload_fail, e.message ?: ""), android.widget.Toast.LENGTH_LONG).show()
+                    val errMsg = context.getString(com.moyue.app.R.string.sync_webdav_upload_fail, e.message ?: "")
+                    android.widget.Toast.makeText(context, errMsg, android.widget.Toast.LENGTH_LONG).show()
+                    onFinished?.invoke(false, errMsg)
                 }
             )
         }

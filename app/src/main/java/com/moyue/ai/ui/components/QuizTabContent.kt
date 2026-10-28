@@ -10,11 +10,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeOff
@@ -40,9 +44,11 @@ import com.moyue.ai.model.AiQuizResult
 import com.moyue.ai.model.QuizQuestion
 import com.moyue.ai.model.QuizReportRecord
 import com.moyue.ai.model.QuizRules
+import com.moyue.ai.model.StudyInsightResult
 import com.moyue.ai.service.AiPromptBuilder
 import com.moyue.ai.service.BookTextExtractor
 import com.moyue.ai.service.LlmClient
+import com.moyue.ai.ui.components.InteractiveQuizDialog
 import com.moyue.ai.util.QuizExporter
 import com.moyue.app.R
 import com.moyue.app.data.BookRepository
@@ -64,17 +70,26 @@ fun QuizTabContent(
     bookRepository: BookRepository? = null,
     edgeEndpoint: String = "",
     edgeVoice: String = "zh-CN-XiaoxiaoNeural",
+    paragraphs: List<String> = emptyList(),
+    currentParagraphIndex: Int = 0,
+    selectedText: String? = null,
     onDisplayModeChange: (String) -> Unit = {},
+    initialDifficulty: String? = null,
+    initialCount: Int? = null,
+    initialScope: String? = null,
+    isPdfMode: Boolean = false,
+    onTriggerPdfRecreate: (() -> Unit)? = null,
     onQuizCompleted: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var selectedScope by remember { mutableStateOf(repository.getLastQuizScope(bookId)) } // "chapter", "book", or "range:start:end"
-    var questionCount by remember { mutableIntStateOf(repository.getLastQuizCount(bookId)) }
-    var difficulty by remember { mutableStateOf(repository.getLastQuizDifficulty(bookId)) } // "Basic", "Intermediate", "Advanced"
+    var selectedScope by remember { mutableStateOf(initialScope ?: repository.getLastQuizScope(bookId)) } // "chapter", "book", or "range:start:end"
+    var questionCount by remember { mutableIntStateOf(initialCount ?: repository.getLastQuizCount(bookId)) }
+    var difficulty by remember { mutableStateOf(initialDifficulty ?: repository.getLastQuizDifficulty(bookId)) } // "Basic", "Intermediate", "Advanced"
     var feedbackMode by remember { mutableStateOf(QuizRules.normalizeMode(repository.getQuizFeedbackMode())) } // "submit"(默认) or "instant"
     var quizTtsEnabled by remember { mutableStateOf(repository.getQuizTtsEnabled()) } // 题目朗读全局开关
+    var showInteractiveDialog by remember { mutableStateOf(false) }
 
     // 章节目录（用于自定义章节下拉选择真实章节名）
     var tocEntries by remember { mutableStateOf<List<com.moyue.app.data.models.TocEntry>>(emptyList()) }
@@ -250,6 +265,137 @@ fun QuizTabContent(
                     val parsed = AiPromptBuilder.parseQuizResponse(json, bookId, chapterIndex, selectedScope, questionCount, difficulty)
                     repository.saveQuiz(parsed)
                     quizResult = parsed
+                    userAnswers.clear()
+                    isSubmitted = false
+                },
+                onFailure = { errorMessage = it.localizedMessage }
+            )
+        }
+    }
+
+    fun rerollInteractiveQuiz() {
+        val current = quizResult ?: return
+        if (current.scope != "interactive" || current.interactiveKeyPoints.isEmpty()) {
+            showInteractiveDialog = true
+            return
+        }
+        isLoading = true
+        errorMessage = null
+        userAnswers.clear()
+        isSubmitted = false
+        stopSpeaking()
+        scope.launch {
+            val textToAnalyze = if (paragraphs.isNotEmpty()) {
+                val start = currentParagraphIndex.coerceIn(0, maxOf(0, paragraphs.size - 1))
+                val slice = paragraphs.subList(start, (start + 5).coerceAtMost(paragraphs.size)).filter { it.isNotBlank() }
+                if (slice.isNotEmpty()) slice.joinToString("\n\n") else chapterText
+            } else {
+                chapterText
+            }
+            val (sys, usr) = AiPromptBuilder.buildInteractiveQuizPrompt(
+                config = config,
+                title = "$bookTitle - $chapterTitle",
+                text = textToAnalyze,
+                keyPoints = current.interactiveKeyPoints,
+                count = current.count,
+                difficulty = current.difficulty,
+                scope = "interactive",
+                userInstruction = current.userInstruction,
+                avoidQuestions = current.questions.map { it.questionOriginal }
+            )
+            val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
+            isLoading = false
+            res.fold(
+                onSuccess = { json ->
+                    val parsed = AiPromptBuilder.parseQuizResponse(json, bookId, chapterIndex, "interactive", current.count, current.difficulty)
+                    val enriched = parsed.copy(
+                        interactiveSummary = current.interactiveSummary,
+                        interactiveKeyPoints = current.interactiveKeyPoints,
+                        userInstruction = current.userInstruction
+                    )
+                    repository.saveQuiz(enriched)
+                    quizResult = enriched
+                    userAnswers.clear()
+                    isSubmitted = false
+                },
+                onFailure = { errorMessage = it.localizedMessage }
+            )
+        }
+    }
+
+    // 针对交卷后根据错题数或自定义题数快速补测新题
+    fun generateRetestQuiz(count: Int) {
+        val current = quizResult ?: return
+        isLoading = true
+        errorMessage = null
+        userAnswers.clear()
+        isSubmitted = false
+        stopSpeaking()
+        scope.launch {
+            val isInteractive = current.scope == "interactive"
+            val textToAnalyze = if (isInteractive && paragraphs.isNotEmpty()) {
+                val start = currentParagraphIndex.coerceIn(0, maxOf(0, paragraphs.size - 1))
+                val slice = paragraphs.subList(start, (start + 5).coerceAtMost(paragraphs.size)).filter { it.isNotBlank() }
+                if (slice.isNotEmpty()) slice.joinToString("\n\n") else chapterText
+            } else {
+                when {
+                    selectedScope == "book" -> BookTextExtractor.extractBookOverview(bookRepository, bookId, bookTitle, chapterText)
+                    selectedScope.startsWith("range:") -> {
+                        val parts = selectedScope.split(":")
+                        val s = parts.getOrNull(1)?.toIntOrNull() ?: 1
+                        val e = parts.getOrNull(2)?.toIntOrNull() ?: s
+                        BookTextExtractor.extractChapterRangeContent(bookRepository, bookId, bookTitle, s, e, chapterText)
+                    }
+                    else -> chapterText
+                }
+            }
+            val promptTitle = "$bookTitle - $chapterTitle"
+            val (sys, usr) = if (isInteractive) {
+                AiPromptBuilder.buildInteractiveQuizPrompt(
+                    config = config,
+                    title = promptTitle,
+                    text = textToAnalyze,
+                    keyPoints = current.interactiveKeyPoints,
+                    count = count,
+                    difficulty = current.difficulty,
+                    scope = "interactive",
+                    userInstruction = current.userInstruction.ifBlank { "Reinforce missed points." },
+                    avoidQuestions = current.questions.map { it.questionOriginal }
+                )
+            } else {
+                AiPromptBuilder.buildInteractiveQuizPrompt(
+                    config = config,
+                    title = promptTitle,
+                    text = textToAnalyze,
+                    keyPoints = emptyList(),
+                    count = count,
+                    difficulty = difficulty,
+                    scope = selectedScope,
+                    userInstruction = "This is an adaptive retest. Focus on fresh angles and avoid duplicate questions.",
+                    avoidQuestions = current.questions.map { it.questionOriginal }
+                )
+            }
+            val res = LlmClient().chatCompletion(config, sys, usr, responseJson = true)
+            isLoading = false
+            res.fold(
+                onSuccess = { json ->
+                    val parsed = AiPromptBuilder.parseQuizResponse(
+                        json,
+                        bookId,
+                        chapterIndex,
+                        if (isInteractive) "interactive" else selectedScope,
+                        count,
+                        if (isInteractive) current.difficulty else difficulty
+                    )
+                    val enriched = if (isInteractive) {
+                        parsed.copy(
+                            interactiveSummary = current.interactiveSummary,
+                            interactiveKeyPoints = current.interactiveKeyPoints,
+                            userInstruction = current.userInstruction
+                        )
+                    } else parsed
+                    repository.saveQuiz(enriched)
+                    quizResult = enriched
                     userAnswers.clear()
                     isSubmitted = false
                 },
@@ -564,6 +710,41 @@ fun QuizTabContent(
                         }
                     }
                 }
+
+                // Interactive Quiz Entry Capsule: [ 💬 研讨定制 ] (挪至常规选项右侧，作为进阶选项)
+                Surface(
+                    color = if (isEink) Color.White else MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .height(32.dp)
+                        .clickable {
+                            if (isPdfMode && onTriggerPdfRecreate != null) {
+                                onTriggerPdfRecreate()
+                            } else {
+                                showInteractiveDialog = true
+                            }
+                        }
+                        .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(16.dp)) else Modifier)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Psychology,
+                            contentDescription = null,
+                            tint = if (isEink) Color.Black else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = stringResource(R.string.ai_quiz_interactive_entry),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
 
             // Right side: ⚡已缓存 & 📤导出 & 🔄重新生成
@@ -751,6 +932,66 @@ fun QuizTabContent(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = 10.dp, bottom = 48.dp)
                     ) {
+                        if (result.scope == "interactive") {
+                            item {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isEink) Color.White else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp)
+                                        .then(if (isEink) Modifier.border(1.dp, Color.Black, RoundedCornerShape(12.dp)) else Modifier)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.Psychology,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = stringResource(R.string.ai_quiz_interactive_tag),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            TextButton(
+                                                onClick = { rerollInteractiveQuiz() },
+                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(28.dp)
+                                            ) {
+                                                Text(stringResource(R.string.ai_quiz_interactive_refresh_batch), fontSize = 11.sp)
+                                            }
+                                            TextButton(
+                                                onClick = {
+                                                    if (isPdfMode && onTriggerPdfRecreate != null) {
+                                                        onTriggerPdfRecreate()
+                                                    } else {
+                                                        showInteractiveDialog = true
+                                                    }
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(28.dp)
+                                            ) {
+                                                Text(stringResource(R.string.ai_quiz_interactive_adjust_req), fontSize = 11.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         items(result.questions) { question ->
                             QuizQuestionItem(
                                 question = question,
@@ -804,17 +1045,22 @@ fun QuizTabContent(
                             }
                         }
 
-                        // Score summary banner after submission + 重做入口
+                        // Score summary banner after submission + 错题追补智能出题
                         if (isSubmitted) {
                             item {
                                 val correctCount = QuizRules.score(result.questions, userAnswers.toMap())
                                 val percent = QuizRules.scorePercent(correctCount, result.questions.size)
+                                val wrongCount = (result.questions.size - correctCount).coerceAtLeast(0)
+                                var selectedRetestCount by remember(wrongCount) {
+                                    mutableIntStateOf(if (wrongCount > 0) wrongCount else 5)
+                                }
+
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
                                     color = if (isEink) Color.White else MaterialTheme.colorScheme.primaryContainer,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 12.dp)
+                                        .padding(vertical = 10.dp)
                                         .then(if (isEink) Modifier.border(2.dp, Color.Black, RoundedCornerShape(12.dp)) else Modifier)
                                 ) {
                                     Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(14.dp)) {
@@ -824,6 +1070,153 @@ fun QuizTabContent(
                                             fontWeight = FontWeight.Bold,
                                             color = if (isEink) Color.Black else MaterialTheme.colorScheme.onPrimaryContainer
                                         )
+                                    }
+                                }
+
+                                // 🎯 错题追补 / 新题挑战专属卡片
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                    border = if (isEink) androidx.compose.foundation.BorderStroke(1.dp, Color.Black) else androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.ai_quiz_retest_count_label),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                                        )
+
+                                        // 自由加减步进器与直接数字输入
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            FilledTonalIconButton(
+                                                onClick = { if (selectedRetestCount > 1) selectedRetestCount-- },
+                                                enabled = selectedRetestCount > 1,
+                                                modifier = Modifier.size(40.dp),
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            }
+
+                                            Surface(
+                                                color = if (isEink) Color.White else MaterialTheme.colorScheme.surface,
+                                                shape = RoundedCornerShape(10.dp),
+                                                border = androidx.compose.foundation.BorderStroke(1.dp, if (isEink) Color.Black else MaterialTheme.colorScheme.outlineVariant),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(40.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                                                    horizontalArrangement = Arrangement.Center,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    var isEditing by remember { mutableStateOf(false) }
+                                                    var inputVal by remember(selectedRetestCount) { mutableStateOf(selectedRetestCount.toString()) }
+
+                                                    if (isEditing) {
+                                                        BasicTextField(
+                                                            value = inputVal,
+                                                            onValueChange = { s ->
+                                                                val clean = s.filter { it.isDigit() }.take(2)
+                                                                inputVal = clean
+                                                                clean.toIntOrNull()?.let { n ->
+                                                                    if (n in 1..30) selectedRetestCount = n
+                                                                }
+                                                            },
+                                                            textStyle = androidx.compose.ui.text.TextStyle(
+                                                                fontSize = 15.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                textAlign = TextAlign.Center,
+                                                                color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                                                            ),
+                                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                            modifier = Modifier.width(42.dp)
+                                                        )
+                                                    } else {
+                                                        Text(
+                                                            text = "$selectedRetestCount " + stringResource(R.string.ai_quiz_count_stepper_unit),
+                                                            fontSize = 14.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface,
+                                                            modifier = Modifier.clickable { isEditing = true }
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            Button(
+                                                onClick = { if (selectedRetestCount < 30) selectedRetestCount++ },
+                                                enabled = selectedRetestCount < 30,
+                                                modifier = Modifier.size(40.dp),
+                                                shape = RoundedCornerShape(10.dp),
+                                                contentPadding = PaddingValues(0.dp)
+                                            ) {
+                                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            }
+                                        }
+
+                                        // 智能快捷推荐胶囊行：包含错题数、1题、3题、5题、6题、10题
+                                        val candidateCounts = remember(wrongCount) {
+                                            val list = mutableListOf<Int>()
+                                            if (wrongCount > 0) list.add(wrongCount)
+                                            list.addAll(listOf(1, 3, 5, 6, 10))
+                                            list.distinct().sorted()
+                                        }
+
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .horizontalScroll(rememberScrollState()),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            candidateCounts.forEach { cnt ->
+                                                val label = if (cnt == wrongCount && wrongCount > 0) {
+                                                    stringResource(R.string.ai_quiz_retest_count_chip, cnt)
+                                                } else {
+                                                    stringResource(R.string.ai_quiz_count_format, cnt)
+                                                }
+                                                FilterChip(
+                                                    selected = (selectedRetestCount == cnt),
+                                                    onClick = { selectedRetestCount = cnt },
+                                                    label = { Text(label, fontSize = 11.sp) }
+                                                )
+                                            }
+                                        }
+
+                                        Button(
+                                            onClick = { generateRetestQuiz(selectedRetestCount) },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(46.dp),
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = if (isEink) ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
+                                            else ButtonDefaults.buttonColors()
+                                        ) {
+                                            Text(
+                                                text = if (wrongCount > 0) {
+                                                    stringResource(R.string.ai_quiz_retest_wrong_btn, selectedRetestCount)
+                                                } else {
+                                                    stringResource(R.string.ai_quiz_retest_perfect_btn, selectedRetestCount)
+                                                },
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
                                 }
 
@@ -839,7 +1232,7 @@ fun QuizTabContent(
                                     },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(48.dp),
+                                        .height(44.dp),
                                     shape = RoundedCornerShape(12.dp),
                                     colors = if (isEink) ButtonDefaults.outlinedButtonColors(contentColor = Color.Black)
                                     else ButtonDefaults.outlinedButtonColors()
@@ -973,6 +1366,36 @@ fun QuizTabContent(
                                         text = stringResource(R.string.ai_quiz_generate_btn),
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                OutlinedButton(
+                                    onClick = {
+                                        if (isPdfMode && onTriggerPdfRecreate != null) {
+                                            onTriggerPdfRecreate()
+                                        } else {
+                                            showInteractiveDialog = true
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(46.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = if (isEink) ButtonDefaults.outlinedButtonColors(contentColor = Color.Black)
+                                    else ButtonDefaults.outlinedButtonColors()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Psychology,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = stringResource(R.string.ai_quiz_interactive_entry),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium
                                     )
                                 }
                             }
@@ -1254,6 +1677,38 @@ fun QuizTabContent(
                 TextButton(onClick = { showCountDialog = false }) {
                     Text(stringResource(R.string.cancel))
                 }
+            }
+        )
+    }
+
+    if (showInteractiveDialog) {
+        InteractiveQuizDialog(
+            bookId = bookId,
+            bookTitle = bookTitle,
+            chapterIndex = chapterIndex,
+            chapterTitle = chapterTitle,
+            fullChapterText = chapterText,
+            paragraphs = paragraphs,
+            currentParagraphIndex = currentParagraphIndex,
+            selectedText = selectedText,
+            config = config,
+            isEink = isEink,
+            initialDifficulty = difficulty,
+            initialCount = questionCount,
+            initialInsight = if (quizResult?.scope == "interactive" && quizResult?.interactiveKeyPoints?.isNotEmpty() == true) {
+                StudyInsightResult(
+                    summary = quizResult?.interactiveSummary ?: "",
+                    keyPoints = quizResult?.interactiveKeyPoints ?: emptyList()
+                )
+            } else null,
+            avoidQuestions = quizResult?.questions?.map { it.questionOriginal } ?: emptyList(),
+            onDismiss = { showInteractiveDialog = false },
+            onQuizGenerated = { enriched ->
+                repository.saveQuiz(enriched)
+                quizResult = enriched
+                userAnswers.clear()
+                isSubmitted = false
+                showInteractiveDialog = false
             }
         )
     }

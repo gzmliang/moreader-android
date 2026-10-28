@@ -188,14 +188,8 @@ object EdgeVoiceManager {
     }
 
     suspend fun syncVoices(context: Context, endpoint: String): List<EdgeVoice>? = withContext(Dispatchers.IO) {
-        val clean = endpoint.removeSuffix("/")
-        val defaultServer = "http://p-plus.duckdns.org:5001"
-        val fallbackServer = "http://powerplus.blogsyte.com:5001"
-        val endpoints = if (clean == defaultServer || clean == fallbackServer) {
-            listOf(clean, if (clean == defaultServer) fallbackServer else defaultServer)
-        } else {
-            listOf(clean)
-        }
+        val clean = com.moyue.util.SecureUrlHelper.secureEdgeEndpoint(endpoint).removeSuffix("/")
+        val endpoints = listOf(clean)
 
         for (ep in endpoints) {
             try {

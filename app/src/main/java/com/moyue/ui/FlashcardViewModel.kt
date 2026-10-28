@@ -584,14 +584,8 @@ val chinese = word.any { it in '一'..'鿿' }
 
     // Copy of working TTS fetch methods from VocabularyViewModel
     private suspend fun fetchEdgeTTSWorking(endpoint: String, voice: String, apiKey: String, text: String, log: StringBuilder): ByteArray? {
-        val clean = endpoint.removeSuffix("/")
-        val defaultServer = "http://p-plus.duckdns.org:5001"
-        val fallbackServer = "http://powerplus.blogsyte.com:5001"
-        val endpointsToTry = if (clean == defaultServer || clean == fallbackServer) {
-            listOf(clean, if (clean == defaultServer) fallbackServer else defaultServer)
-        } else {
-            listOf(clean)
-        }
+        val clean = com.moyue.util.SecureUrlHelper.secureEdgeEndpoint(endpoint).removeSuffix("/")
+        val endpointsToTry = listOf(clean)
         val client = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
         val json = JSONObject().apply {
             put("text", text)
@@ -707,7 +701,7 @@ val chinese = word.any { it in '一'..'鿿' }
                             null
                         }
                         TTSProviderType.EDGE_TTS -> {
-                            val endpoint = prefs.getString("edge_endpoint", "http://p-plus.duckdns.org:5001") ?: "http://p-plus.duckdns.org:5001"
+                            val endpoint = com.moyue.util.SecureUrlHelper.secureEdgeEndpoint(prefs.getString("edge_endpoint", null))
                             var voice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural"
                             // Auto-detect language
 val isChinese = word.any { it in '一'..'鿿' }

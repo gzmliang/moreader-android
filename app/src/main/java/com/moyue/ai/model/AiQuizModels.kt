@@ -10,6 +10,11 @@ data class QuizQuestion(
     val analysisTranslation: String = ""
 )
 
+data class StudyInsightResult(
+    val summary: String = "",
+    val keyPoints: List<String> = emptyList()
+)
+
 data class AiQuizResult(
     val bookId: String,
     val chapterIndex: Int,
@@ -17,7 +22,10 @@ data class AiQuizResult(
     val count: Int,
     val difficulty: String,
     val questions: List<QuizQuestion> = emptyList(),
-    val generatedAt: Long = System.currentTimeMillis()
+    val generatedAt: Long = System.currentTimeMillis(),
+    val interactiveSummary: String = "",
+    val interactiveKeyPoints: List<String> = emptyList(),
+    val userInstruction: String = ""
 )
 
 data class UserQuizAnswer(

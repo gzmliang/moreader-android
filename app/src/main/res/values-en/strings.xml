@@ -630,6 +630,12 @@ Just change the Base URL and API Key</string>
     <string name="ai_quiz_correct_choice">Correct Answer: %1$s</string>
     <string name="ai_quiz_unanswered_warning">Please answer all questions before submitting.</string>
     <string name="ai_quiz_redo_btn">🔄 Redo this quiz</string>
+    <string name="ai_quiz_retest_wrong_btn">🎯 Retest %1$d New Questions for Mistakes</string>
+    <string name="ai_quiz_retest_perfect_btn">🏆 Perfect! Challenge %1$d New Questions</string>
+    <string name="ai_quiz_retest_count_chip">%1$d Qs (Mistakes)</string>
+    <string name="ai_quiz_retest_count_label">Questions to generate (customizable):</string>
+    <string name="ai_quiz_count_stepper_unit">Qs</string>
+    <string name="ai_quiz_retest_generating">Generating new challenge questions…</string>
     <string name="ai_quiz_locked_hint">Answer locked. Submit the whole quiz after the last question.</string>
     <string name="ai_tts_read_question">Read the question aloud</string>
     <string name="ai_tts_read_option">Read this option aloud</string>
@@ -644,6 +650,35 @@ Just change the Base URL and API Key</string>
     <string name="ai_quiz_export_solutions_pdf">📑 Export Full Solutions &amp; Explanations (PDF)</string>
     <string name="ai_quiz_export_success">Successfully exported to: %1$s</string>
     <string name="ai_quiz_export_failed">Export failed: %1$s</string>
+
+    <!-- Interactive Quiz Dialog -->
+    <string name="ai_quiz_interactive_entry">💬 Guided</string>
+    <string name="ai_quiz_interactive_title">Interactive Quiz Wizard</string>
+    <string name="ai_quiz_interactive_desc">AI extracts key insights first; you verify understanding and customize questions.</string>
+    <string name="ai_quiz_scope_selected_text">Selected passage (%1$d chars)</string>
+    <string name="ai_quiz_scope_page_current">Current page (1 page · ~%1$d chars)</string>
+    <string name="ai_quiz_scope_page_expanded">Current page + %1$d pages (%2$d pages · ~%3$d chars)</string>
+    <string name="ai_quiz_page_count_single">1 Page</string>
+    <string name="ai_quiz_page_count_format">%1$d Pages</string>
+    <string name="ai_quiz_scope_btn_add_page">➕ Extend 1 Page</string>
+    <string name="ai_quiz_scope_btn_minus_page">➖ Reduce 1 Page</string>
+    <string name="ai_quiz_scope_btn_reset">Reset</string>
+    <string name="ai_quiz_preview_header">Scope Bounds Preview</string>
+    <string name="ai_quiz_preview_start">Start: %1$s</string>
+    <string name="ai_quiz_preview_end">End: %1$s</string>
+    <string name="ai_quiz_btn_start_study">📖 Study Insights</string>
+    <string name="ai_quiz_studying_hint">AI tutor is analyzing this passage…</string>
+    <string name="ai_quiz_studied_badge">✅ AI Tutor has understood the key points:</string>
+    <string name="ai_quiz_custom_instruction_label">Special instructions (Optional)</string>
+    <string name="ai_quiz_custom_instruction_hint">e.g. Focus on point 2, moderate difficulty…</string>
+    <string name="ai_quiz_btn_generate_now">🎯 Generate Quiz</string>
+    <string name="ai_quiz_btn_reselect_material">Scope</string>
+    <string name="ai_quiz_btn_re_study">Re-analyze</string>
+    <string name="ai_quiz_interactive_refresh_batch">🔄 Another Batch</string>
+    <string name="ai_quiz_interactive_adjust_req">💬 Adjust Requirements</string>
+    <string name="ai_quiz_interactive_tag">💬 Guided Quiz</string>
+    <string name="ai_quiz_generating_hint">Generating customized questions based on agreed insights…</string>
+
 
     <!-- Reader Typography & Spread Layout (Aa) -->
     <string name="reader_typography_title">Typography &amp; Layout</string>
@@ -990,4 +1025,34 @@ Drag the slider to adjust reading speed
     <string name="dict_online_badge">Global Bilingual Dict</string>
     <string name="dict_local_badge">Local Offline Dict</string>
     <string name="dict_switch_target_lang">Switch Target Language</string>
+
+    <!-- Native PDF Reader -->
+    <string name="pdf_badge">PDF</string>
+    <string name="pdf_ai_quiz_action">AI Quiz</string>
+    <string name="pdf_ai_quiz_dialog_title">Quiz on This Story (AI)</string>
+    <string name="pdf_ai_quiz_scope_hint">Select page range for this story (AI will read and generate questions):</string>
+    <string name="pdf_ai_quiz_start_page">From page</string>
+    <string name="pdf_ai_quiz_end_page">To page</string>
+    <string name="pdf_ai_quiz_total_pages">Selected %1$d pages (1–8 pages recommended for best accuracy)</string>
+    <string name="pdf_ai_quiz_count_label">Questions</string>
+    <string name="pdf_ai_quiz_count_format">%1$d Qs</string>
+    <string name="pdf_ai_quiz_diff_label">Difficulty</string>
+    <string name="pdf_ai_quiz_diff_easy">Recall (Easy)</string>
+    <string name="pdf_ai_quiz_diff_medium">Comprehension</string>
+    <string name="pdf_ai_quiz_diff_hard">Inference (Hard)</string>
+    <string name="pdf_ai_quiz_custom_prompt_label">Special Instructions (Optional)</string>
+    <string name="pdf_ai_quiz_custom_prompt_hint">e.g. Focus on vocabulary, suitable for 2nd graders, emphasize moral lesson</string>
+    <string name="pdf_ai_quiz_generating">AI is reading the pages and crafting quiz questions…</string>
+    <string name="pdf_ai_quiz_start_btn">Generate Quiz</string>
+    <string name="pdf_ai_quiz_recreate_action">New Range / Recreate</string>
+    <string name="pdf_ai_quiz_need_config">Please configure AI model API Key in shelf settings first</string>
+    <string name="pdf_reader_page_indicator">Page %1$d / %2$d</string>
+    <string name="pdf_reader_prev_page">Previous</string>
+    <string name="pdf_reader_next_page">Next</string>
+    <string name="pdf_reader_jump_page">Jump to Page %1$d</string>
+    <string name="pdf_open_failed">Failed to open this PDF document. The file may be corrupt or moved.</string>
+    <string name="import_failed">Import failed. Please check if the file is intact.</string>
+    <string name="rename_book">Rename Book</string>
+    <string name="rename_book_hint">Enter new book title</string>
+    <string name="rename_success">Title updated</string>
 </resources>

@@ -27,7 +27,8 @@ class LlmClient(
         systemPrompt: String,
         userPrompt: String,
         temperature: Double = 0.5,
-        responseJson: Boolean = false
+        responseJson: Boolean = false,
+        imageBitmaps: List<android.graphics.Bitmap> = emptyList()
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             val url = "${config.cleanBaseUrl()}/chat/completions"
@@ -47,10 +48,37 @@ class LlmClient(
                             addProperty("content", systemPrompt)
                         })
                     }
-                    add(JsonObject().apply {
-                        addProperty("role", "user")
-                        addProperty("content", userPrompt)
-                    })
+                    val userMsg = JsonObject()
+                    userMsg.addProperty("role", "user")
+
+                    if (imageBitmaps.isEmpty()) {
+                        userMsg.addProperty("content", userPrompt)
+                    } else {
+                        // 带有图片的多模态视觉消息 (OpenAI Vision standard)
+                        val contentArray = JsonArray()
+                        val textPart = JsonObject().apply {
+                            addProperty("type", "text")
+                            addProperty("text", userPrompt)
+                        }
+                        contentArray.add(textPart)
+
+                        for (bmp in imageBitmaps) {
+                            if (bmp.isRecycled) continue
+                            val baos = java.io.ByteArrayOutputStream()
+                            bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, baos)
+                            val b64 = android.util.Base64.encodeToString(baos.toByteArray(), android.util.Base64.NO_WRAP)
+                            val imgPart = JsonObject().apply {
+                                addProperty("type", "image_url")
+                                val urlObj = JsonObject().apply {
+                                    addProperty("url", "data:image/jpeg;base64,$b64")
+                                }
+                                add("image_url", urlObj)
+                            }
+                            contentArray.add(imgPart)
+                        }
+                        userMsg.add("content", contentArray)
+                    }
+                    add(userMsg)
                 }
                 add("messages", messages)
             }

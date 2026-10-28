@@ -35,6 +35,7 @@ fun TypographySheet(
     lineHeightMode: String = "standard", // "compact", "standard", "relaxed"
     pageAnimationMode: String,
     isLargeScreen: Boolean,
+    landscapeLimitWidth: Boolean = false,
     isEinkMode: Boolean,
     currentTheme: com.moyue.app.data.models.ReaderTheme = com.moyue.app.data.models.ReaderTheme.LIGHT,
     onFontSizeChange: (Int) -> Unit,
@@ -76,6 +77,7 @@ fun TypographySheet(
 
     ModalBottomSheet(
         onDismissRequest = onClose,
+        modifier = if (landscapeLimitWidth) Modifier.widthIn(max = 560.dp) else Modifier,
         containerColor = sheetBgColor,
         contentColor = sheetTextColor,
         dragHandle = { BottomSheetDefaults.DragHandle(color = sheetSecondaryTextColor.copy(alpha = 0.4f)) }

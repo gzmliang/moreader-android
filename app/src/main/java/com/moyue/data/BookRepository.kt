@@ -1,7 +1,11 @@
 package com.moyue.app.data
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.moyue.app.data.models.Book
 import com.moyue.app.data.models.Bookmark
@@ -120,6 +124,109 @@ class BookRepository(private val context: Context) {
         )
         dao.upsert(book)
         book
+    }
+
+    private val KNOWN_ISBN_MAP = mapOf(
+        "9787547718728" to "西游记（注音彩图版）",
+        "9787547718704" to "三国演义（注音彩图版）",
+        "9787547718711" to "水浒传（注音彩图版）",
+        "9787547718698" to "红楼梦（注音彩图版）",
+    )
+
+    private fun cleanPdfTitle(rawName: String): String {
+        var base = rawName.removeSuffix(".pdf").removeSuffix(".PDF").trim()
+
+        // 1. 检查是否匹配已知 ISBN 字典
+        val isbnMatch = Regex("""(?:isbn[_\\-\\s]*)?([0-9]{13}|[0-9]{10})""", RegexOption.IGNORE_CASE).find(base)
+        val isbn = isbnMatch?.groupValues?.get(1)
+        if (isbn != null && KNOWN_ISBN_MAP.containsKey(isbn)) {
+            return KNOWN_ISBN_MAP[isbn]!!
+        }
+
+        // 2. 剥离 (z-library.*)、(Author Unknown) 等括号块
+        base = base.replace(Regex("""\((?:Author\s+Unknown|Unknown\s+Author|z-library[^)]*|1lib[^)]*|z-lib[^)]*|oceanofpdf[^)]*)\)""", RegexOption.IGNORE_CASE), "")
+        base = base.replace(Regex("""(?:Author\s+Unknown|Unknown\s+Author)""", RegexOption.IGNORE_CASE), "")
+
+        // 3. 去掉尾部的 _22, _1 这类版本号
+        base = base.replace(Regex("""_\d{1,3}$"""), "")
+
+        // 4. 清理残余垃圾词
+        val tokens = base.split(Regex("[_\\-\\s,]+")).filter { tk ->
+            val low = tk.lowercase().trim()
+            low.isNotBlank() &&
+            !low.contains("z-library") &&
+            !low.contains("1lib") &&
+            !low.contains("z-lib") &&
+            !low.contains("oceanofpdf") &&
+            !low.contains("watermark") &&
+            low != "isbn" &&
+            !Regex("^\\d{9,13}$").matches(low)
+        }
+        val joined = tokens.joinToString(" ").trim().trim(',', '_', '-').trim()
+
+        if (joined.length >= 2) return joined
+        if (isbn != null) return "ISBN $isbn"
+        return rawName.removeSuffix(".pdf").removeSuffix(".PDF").trim()
+    }
+
+    suspend fun updateBookTitle(id: String, newTitle: String) = withContext(Dispatchers.IO) {
+        val clean = newTitle.trim()
+        if (clean.isNotBlank()) {
+            dao.updateTitle(id, clean)
+        }
+    }
+
+    /** 从已下载或选择的 PDF 文件直接导入本地书库 */
+    suspend fun importPdfFile(pdfFile: File, rawTitle: String? = null): Book = withContext(Dispatchers.IO) {
+        val title = cleanPdfTitle(rawTitle ?: pdfFile.name)
+
+        val existing = dao.getBookByTitle(title)
+        if (existing != null && File(existing.filePath).exists()) {
+            Log.i(TAG, "Skip duplicate importPdf: '$title' already exists (id=${existing.id}), touch lastReadAt")
+            isRecentDuplicate = true
+            pdfFile.delete()
+            dao.updateLastReadAt(existing.id, System.currentTimeMillis())
+            return@withContext dao.getBook(existing.id) ?: existing
+        }
+
+        isRecentDuplicate = false
+
+        val id = UUID.randomUUID().toString()
+        val fileName = "book_$id.pdf"
+        val destFile = File(bookDir, fileName)
+        if (!pdfFile.renameTo(destFile)) {
+            pdfFile.copyTo(destFile, overwrite = true)
+            pdfFile.delete()
+        }
+        Log.d(TAG, "PDF imported: ${destFile.absolutePath} (${destFile.length()} bytes)")
+        val now = System.currentTimeMillis()
+        val book = Book(
+            id = id,
+            title = title,
+            author = "PDF",
+            filePath = destFile.absolutePath,
+            addedAt = now,
+            lastReadAt = now,
+        )
+        dao.upsert(book)
+        extractCover(book.id)?.let { updateBookCover(book.id, it) }
+        book
+    }
+
+    /** 更新 PDF 阅读进度（页码与百分比） */
+    suspend fun updatePdfProgress(bookId: String, pageIndex: Int, progress: Float) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        dao.updateProgress(
+            id = bookId,
+            timestamp = now,
+            href = "page_$pageIndex",
+            index = pageIndex,
+            progress = progress,
+            cfi = null,
+            paraIdx = 0,
+            theme = "default",
+            fSize = 18
+        )
     }
 
     /** Parse EPUB metadata from package.opf — handles namespaced XML */
@@ -279,11 +386,15 @@ class BookRepository(private val context: Context) {
         }
     }
 
-    /** Extract cover image from EPUB */
+    /** Extract cover image from EPUB / PDF */
     suspend fun extractCover(bookId: String): String? = withContext(Dispatchers.IO) {
         val book = dao.getBook(bookId) ?: return@withContext null
         val file = File(book.filePath)
         if (!file.exists()) return@withContext null
+
+        if (file.name.endsWith(".pdf", ignoreCase = true)) {
+            return@withContext extractPdfCover(bookId, file)
+        }
 
         try {
             val zip = ZipFile(file)
@@ -405,6 +516,37 @@ class BookRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "extractCover error", e)
             return@withContext null
+        }
+    }
+
+    private fun extractPdfCover(bookId: String, file: File): String? {
+        var pfd: ParcelFileDescriptor? = null
+        var renderer: PdfRenderer? = null
+        return try {
+            pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            renderer = PdfRenderer(pfd)
+            if (renderer.pageCount <= 0) return null
+            val page = renderer.openPage(0)
+            val targetWidth = 480
+            val targetHeight = (targetWidth.toFloat() * page.height / page.width).toInt().coerceAtLeast(100)
+            val bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            canvas.drawColor(android.graphics.Color.WHITE)
+            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+
+            val coverFile = File(bookDir, "cover_$bookId.jpg")
+            FileOutputStream(coverFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            }
+            bitmap.recycle()
+            coverFile.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "extractPdfCover error", e)
+            null
+        } finally {
+            try { renderer?.close() } catch (_: Exception) {}
+            try { pfd?.close() } catch (_: Exception) {}
         }
     }
 

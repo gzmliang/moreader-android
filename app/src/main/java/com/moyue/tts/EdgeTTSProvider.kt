@@ -54,14 +54,8 @@ class EdgeTTSProvider(
     }
 
     private fun getCandidateEndpoints(): List<String> {
-        val clean = endpoint.removeSuffix("/")
-        val defaultServer = "http://p-plus.duckdns.org:5001"
-        val fallbackServer = "http://powerplus.blogsyte.com:5001"
-        return if (clean == defaultServer || clean == fallbackServer) {
-            listOf(clean, if (clean == defaultServer) fallbackServer else defaultServer)
-        } else {
-            listOf(clean)
-        }
+        val clean = com.moyue.util.SecureUrlHelper.secureEdgeEndpoint(endpoint).removeSuffix("/")
+        return listOf(clean)
     }
 
     private fun executeWithFallback(path: String, body: RequestBody): Response? {

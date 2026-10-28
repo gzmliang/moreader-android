@@ -87,6 +87,8 @@ fun EpubWebView(
     pageScrollTrigger: Long = 0L, // Positive: pageDown, Negative: pageUp
     onPageTurned: (() -> Unit)? = null,
     onLayoutReady: (() -> Unit)? = null,
+    landOnLastSpread: Boolean = false,
+    onLandedOnLastSpread: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     onWebViewCreated: ((WebView) -> Unit)? = null,
 ) {
@@ -104,6 +106,39 @@ fun EpubWebView(
 
     LaunchedEffect(onPageTurned) { pageTurnedCallbackRef.value = { onPageTurned?.invoke() } }
     LaunchedEffect(onLayoutReady) { layoutReadyCallbackRef.value = { onLayoutReady?.invoke() } }
+    val landedRef = remember { mutableStateOf<() -> Unit>({}) }
+    LaunchedEffect(onLandedOnLastSpread) { landedRef.value = { onLandedOnLastSpread?.invoke() } }
+    // 当从下一章倒回上一章时：等渲染稳定后落到本章最后一屏（双页时）
+    LaunchedEffect(landOnLastSpread, htmlContent) {
+        if (landOnLastSpread && htmlContent != null) {
+            // 等待新章节真正排版完成后再落到最后一屏：轮询直到 scrollWidth 稳定（最多约 3 秒）。
+            // 只有确认落点成功才清除标记，避免「标记先被清掉、落点还没生效」导致回到章首。
+            var tries = 0
+            while (tries < 30) {
+                kotlinx.coroutines.delay(100)
+                tries++
+                val ready = kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { cont ->
+                    val wv = webView
+                    if (wv == null) { cont.resume(false) { _, _, _ -> } ; return@suspendCancellableCoroutine }
+                    wv.evaluateJavascript(
+                        "(function(){ var w=window.innerWidth; var fw=Math.max(document.body.scrollWidth,document.documentElement.scrollWidth); if(!window._recalcSpread||!window.isDualPage) return 'no'; return (w>0&&fw>w+10)?'ok':'wait'; })()"
+                    ) { r -> cont.resume(r?.contains("ok") == true) { _, _, _ -> } }
+                }
+                if (ready) {
+                    // 章节加载末尾会执行一次「滚到段首」(scrollToPara(0) -> _applySpread(0))，会盖掉落点。
+                    // 因此等它完成后再落到最后一屏，并验证一次。
+                    kotlinx.coroutines.delay(700)
+                    webView?.evaluateJavascript("if(window._recalcSpread){ window._recalcSpread('last'); }", null)
+                    kotlinx.coroutines.delay(150)
+                    webView?.evaluateJavascript("if(window._recalcSpread){ window._recalcSpread('last'); }", null)
+                    landedRef.value()
+                    break
+                }
+                // 单页模式或无分栏内容：无需落点，直接清除标记
+                if (tries >= 30) landedRef.value()
+            }
+        }
+    }
 
     var slideBitmap by remember { mutableStateOf<Bitmap?>(null) }
     val slideOffset = remember { Animatable(0f) }
@@ -119,13 +154,12 @@ fun EpubWebView(
 
         val w = wv.width
         val h = wv.height
-        val scrollJs = if (isDualPage) {
-            val deltaSpread = if (direction > 0) 1 else -1
-            "window._applySpread(window._spreadIndex + ($deltaSpread));"
-        } else {
-            val scrollAmount = if (direction > 0) scrollYDelta else -scrollYDelta
-            "window.scrollBy({top: $scrollAmount, left: 0, behavior: 'instant'});"
-        }
+        // A 方案：以页面 JS 的真实双页状态为准（Kotlin 的 isDualPage 在转屏后可能滞后）
+        val deltaSpread = if (direction > 0) 1 else -1
+        val scrollAmount = if (direction > 0) scrollYDelta else -scrollYDelta
+        val scrollJs = "if (window.isDualPage) { window._applySpread(window._spreadIndex + ($deltaSpread)); } " +
+            "else { window.scrollBy({top: $scrollAmount, left: 0, behavior: 'instant'}); }"
+
 
         if (w <= 0 || h <= 0) {
             wv.evaluateJavascript(
@@ -143,25 +177,34 @@ fun EpubWebView(
             slideBitmap = bmp
             slideDirection = direction
 
+            // 关键修复：立即将偏移量强制固定在 0f（浮层完美静止覆盖在底层上方），然后再通知底层 JS 滚动。
+            // 这样底层在浮层下方怎么跳变、渲染，用户眼睛完全看不到，彻底消灭“闪两下”！
+            coroutineScope.launch {
+                slideOffset.snapTo(0f)
+            }
+
             wv.evaluateJavascript(scrollJs, null)
 
+            var animationTriggered = false
             val triggerAnimation = {
-                coroutineScope.launch {
-                    slideOffset.snapTo(0f)
-                    val density = wv.resources.displayMetrics.density
-                    val shadowPx = 20f * density
-                    val targetX = if (direction > 0) -(w.toFloat() + shadowPx) else (w.toFloat() + shadowPx)
-                    slideOffset.animateTo(
-                        targetValue = targetX,
-                        animationSpec = tween(
-                            durationMillis = 240,
-                            easing = FastOutSlowInEasing
+                if (!animationTriggered) {
+                    animationTriggered = true
+                    coroutineScope.launch {
+                        val density = wv.resources.displayMetrics.density
+                        val shadowPx = 20f * density
+                        val targetX = if (direction > 0) -(w.toFloat() + shadowPx) else (w.toFloat() + shadowPx)
+                        slideOffset.animateTo(
+                            targetValue = targetX,
+                            animationSpec = tween(
+                                durationMillis = 240,
+                                easing = FastOutSlowInEasing
+                            )
                         )
-                    )
-                    slideBitmap?.recycle()
-                    slideBitmap = null
-                    isPageAnimating = false
-                    wv.evaluateJavascript("window._isPageAnimating=false; if(window.getVisiblePara){ var idx=window.getVisiblePara(); if(idx>=0){ window._currentVisiblePara=idx; MoreaderBridge.onScrollToParagraph(idx); } }", null)
+                        slideBitmap?.recycle()
+                        slideBitmap = null
+                        isPageAnimating = false
+                        wv.evaluateJavascript("window._isPageAnimating=false; if(window.getVisiblePara){ var idx=window.getVisiblePara(); if(idx>=0){ window._currentVisiblePara=idx; MoreaderBridge.onScrollToParagraph(idx); } }", null)
+                    }
                 }
             }
 
@@ -171,7 +214,6 @@ fun EpubWebView(
                         triggerAnimation()
                     }
                 })
-                // 防丢帧卡死保护：若 150ms 内未收到 visual state callback，强制启动动画释放锁
                 wv.postDelayed({
                     if (isPageAnimating && slideBitmap != null) {
                         triggerAnimation()
@@ -226,6 +268,7 @@ fun EpubWebView(
     LaunchedEffect(pageScrollTrigger) {
         if (pageScrollTrigger > 0L) {
             webView?.evaluateJavascript("window.pageDown();", null)
+
         } else if (pageScrollTrigger < 0L) {
             webView?.evaluateJavascript("window.pageUp();", null)
         }
@@ -361,7 +404,7 @@ fun EpubWebView(
                 // Construct HTML with initial CSS. 
                 // Note: This uses the *current* values of initCss variables at the moment of loading.
                 val dualCss = if (isDualPage) {
-                    """:root{--edge-pad:28px;--spine-gap:calc(var(--edge-pad)*2);--col-width:calc(50vw - var(--spine-gap));}html{height:100vh!important;overflow:hidden!important}body{height:100vh!important;margin:0!important;padding:24px var(--edge-pad)!important;box-sizing:border-box!important;overflow:hidden!important;column-width:var(--col-width)!important;column-gap:var(--spine-gap)!important;column-fill:auto!important;column-rule:1px solid rgba(128,128,128,0.18)!important;max-width:none!important}h1,h2,h3,h4,div,p{margin-top:0.4em!important;margin-bottom:0.4em!important}img{max-height:calc(100vh - 64px)!important;max-width:100%!important;width:auto!important;height:auto!important;object-fit:contain!important;display:block!important;margin:0 auto!important}"""
+                    """:root{--edge-pad:28px;--spine-gap:calc(var(--edge-pad)*2);--col-width:calc(50vw - var(--spine-gap));}html{height:100vh!important;overflow:hidden!important}body{height:100vh!important;margin:0!important;padding:24px var(--edge-pad)!important;box-sizing:border-box!important;overflow-x:auto!important;overflow-y:hidden!important;touch-action:pan-y!important;column-width:var(--col-width)!important;column-gap:var(--spine-gap)!important;column-fill:auto!important;column-rule:1px solid rgba(128,128,128,0.18)!important;max-width:none!important}h1,h2,h3,h4,div,p{margin-top:0.4em!important;margin-bottom:0.4em!important}img{max-height:calc(100vh - 64px)!important;max-width:100%!important;width:auto!important;height:auto!important;object-fit:contain!important;display:block!important;margin:0 auto!important}"""
                 } else {
                     "body{margin:16px!important}"
                 }
@@ -414,7 +457,7 @@ fun EpubWebView(
             lastDualPage = isDualPage
 
             val dualJs = if (isDualPage) {
-                "':root{--edge-pad:28px;--spine-gap:calc(var(--edge-pad)*2);--col-width:calc(50vw - var(--spine-gap));}html{height:100vh!important;overflow:hidden!important}body{height:100vh!important;margin:0!important;padding:24px var(--edge-pad)!important;box-sizing:border-box!important;overflow:hidden!important;column-width:var(--col-width)!important;column-gap:var(--spine-gap)!important;column-fill:auto!important;column-rule:1px solid rgba(128,128,128,0.18)!important;max-width:none!important}h1,h2,h3,h4,div,p{margin-top:0.4em!important;margin-bottom:0.4em!important}img{max-height:calc(100vh - 64px)!important;max-width:100%!important;width:auto!important;height:auto!important;object-fit:contain!important;display:block!important;margin:0 auto!important}'+ "
+                "':root{--edge-pad:28px;--spine-gap:calc(var(--edge-pad)*2);--col-width:calc(50vw - var(--spine-gap));}html{height:100vh!important;overflow:hidden!important}body{height:100vh!important;margin:0!important;padding:24px var(--edge-pad)!important;box-sizing:border-box!important;overflow-x:auto!important;overflow-y:hidden!important;touch-action:pan-y!important;column-width:var(--col-width)!important;column-gap:var(--spine-gap)!important;column-fill:auto!important;column-rule:1px solid rgba(128,128,128,0.18)!important;max-width:none!important}h1,h2,h3,h4,div,p{margin-top:0.4em!important;margin-bottom:0.4em!important}img{max-height:calc(100vh - 64px)!important;max-width:100%!important;width:auto!important;height:auto!important;object-fit:contain!important;display:block!important;margin:0 auto!important}'+ "
             } else {
                 "'html{height:auto!important;overflow-x:hidden!important;overflow-y:visible!important}body{height:auto!important;column-count:auto!important;column-width:auto!important;column-gap:normal!important;column-rule:none!important;margin:16px!important;padding:0!important;overflow:visible!important;max-width:100%!important}'+ "
             }
@@ -566,7 +609,9 @@ fun EpubWebView(
                                         document.documentElement.style.setProperty('height', H + 'px', 'important');
                                         document.body.style.setProperty('height', H + 'px', 'important');
                                         document.documentElement.style.setProperty('overflow', 'hidden', 'important');
-                                        document.body.style.setProperty('overflow', 'hidden', 'important');
+                                        document.body.style.setProperty('overflow-x', 'auto', 'important');
+                                        document.body.style.setProperty('overflow-y', 'hidden', 'important');
+                                        document.body.style.setProperty('touch-action', 'pan-y', 'important');
                                         var P = 28;
                                         var gap = P * 2;
                                         var colW = Math.floor((W / 2) - gap);
@@ -651,9 +696,12 @@ fun EpubWebView(
                                     var all=document.querySelectorAll('p,h1,h2,h3,h4,h5,h6');
                                     if(idx>=0&&idx<all.length){
                                         all[idx].classList.add('tts-hl');
-                                        if(!window.isDualPage){
-                                            all[idx].scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
-                                        }
+                                    if(!window.isDualPage){
+                                        var rect = all[idx].getBoundingClientRect();
+                                        var absoluteTop = window.scrollY + rect.top;
+                                        var targetY = absoluteTop - (window.innerHeight * 0.28);
+                                        window.scrollTo({top: Math.max(0, targetY), behavior: window.getScrollBehavior()});
+                                    }
                                     }
                                 };
                                 window.ttsClear=function(){document.querySelectorAll('.tts-hl').forEach(function(e){e.classList.remove('tts-hl')});};
@@ -716,7 +764,10 @@ fun EpubWebView(
                                     var el=all[paraIdx];
                                     el.classList.add('tts-hl');
                                     if(!window.isDualPage){
-                                        el.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
+                                        var rect = el.getBoundingClientRect();
+                                        var absoluteTop = window.scrollY + rect.top;
+                                        var targetY = absoluteTop - (window.innerHeight * 0.28);
+                                        window.scrollTo({top: Math.max(0, targetY), behavior: window.getScrollBehavior()});
                                     }
                                     window._ttsSentencePara=el;
                                     // 使用 Kotlin 传来的句子边界
@@ -848,19 +899,61 @@ fun EpubWebView(
                                     // 绝对严禁位移！文字纹丝不动，先读左边，再读右边；
                                     // 只有当句子完全超出当前屏幕右侧或左侧时，才触发整屏对开翻页！
                                     if(window.isDualPage){
-                                        var rect=span.getBoundingClientRect();
-                                        var vw=window.innerWidth;
-                                        // 检查当前高亮句是否在当前对开屏内 (留出左右 20px 安全边距)
-                                        if (rect.right > vw - 15) {
-                                            // 朗读走到右边末尾、句子跨入下一屏：触发向后翻一页，画面自动切到下一屏左侧
-                                            window.pageDown();
-                                        } else if (rect.left < 15) {
-                                            // 处于当前屏左侧之外：向前翻一页
-                                            window.pageUp();
+                                        // 段首（第一句）时先把屏数校准到该句真实所在的屏，杜绝「倒着翻」
+                                        if(idx===0 && window._spreadTurnLock===false && window._pendingTurn===0){
+                                            var r0 = span.getClientRects();
+                                            if(r0 && r0.length){
+                                                var vw0 = window.innerWidth;
+                                                var absL = (window._spreadIndex||0)*vw0 + r0[0].left;
+                                                var want = Math.max(0, Math.min(window._getMaxSpreadIndex(), Math.floor(absL / vw0)));
+                                                if(want !== window._spreadIndex){ window._applySpread(want); }
+                                                // 对齐后重新测量再决定
+                                            }
                                         }
+                                        window._syncSpreadToSentence(span, idx);
                                     }else{
-                                        // 单页模式：居中平滑跟随
-                                        span.scrollIntoView({behavior: window.getScrollBehavior(), block:'center'});
+                                        // 单页模式：黄金分割平滑跟随（位于屏幕上方约 28% 处，让高亮行更高）
+                                        var rect = span.getBoundingClientRect();
+                                        var absoluteTop = window.scrollY + rect.top;
+                                        var targetY = absoluteTop - (window.innerHeight * 0.28);
+                                        var behavior = window.getScrollBehavior();
+                                        window.scrollTo({top: Math.max(0, targetY), behavior: behavior});
+                                    }
+                                };
+                                // ===== 统一分屏判断（双页）=====
+                                // 以句子「终点」为准决定是否翻页；朗读到跨栏句时，先不翻，
+                                // 等下一句开始（说明这句已读完）再翻，保证「读完最后一个字再翻」。
+                                window._spreadTurnLock = false;
+                                window._pendingTurn = 0;   // -1 向前、+1 向后、0 无
+                                window._syncSpreadToSentence = function(span, sentIdx){
+                                    if(!window.isDualPage || !span) return;
+                                    var vw = window.innerWidth;
+                                    var rects = span.getClientRects();
+                                    if(!rects || rects.length===0) return;
+                                    // 句子可能被换行/ruby 拆成多段矩形：取所有矩形的最左/最右，避免 end<start 的误判
+                                    var startL = Infinity, endR = -Infinity;
+                                    for(var ri=0; ri<rects.length; ri++){
+                                        if(rects[ri].width<=0) continue;
+                                        if(rects[ri].left < startL) startL = rects[ri].left;
+                                        if(rects[ri].right > endR) endR = rects[ri].right;
+                                    }
+                                    if(startL===Infinity) return;
+                                    // 1) 先处理上一句遗留的待翻页（上一句已读完）
+                                    if(window._pendingTurn !== 0 && !window._spreadTurnLock){
+                                        var dir = window._pendingTurn; window._pendingTurn = 0;
+                                        window._spreadTurnLock = true;
+                                        if(dir > 0) window.pageDown(); else window.pageUp();
+                                        setTimeout(function(){ window._spreadTurnLock = false; }, 300);
+                                        return;
+                                    }
+                                    // 2) 当前句：仅当句子「整体」都在当前屏外才需要翻页，且只登记、不立即翻
+                                    var nextNeed = endR > vw - 15;     // 终点越过右边界 -> 下一屏
+                                    var prevNeed = startL < 15 && endR < 15; // 整句都在左边界外 -> 上一屏
+                                    if(nextNeed && !prevNeed){
+                                        // 跨栏句：先高亮读完；登记到下一句开始时再翻
+                                        window._pendingTurn = 1;
+                                    } else if(prevNeed){
+                                        window._pendingTurn = -1;
                                     }
                                 };
                                 window.ttsSentenceClear=function(){
@@ -1148,6 +1241,14 @@ fun EpubWebView(
                                     // 只要内容总宽超过屏幕宽度（容差 10px），就支持翻页
                                     if (fullW <= w + 10) return 0;
                                     return Math.max(0, Math.ceil((fullW - 10) / w) - 1);
+                                };
+                                // 统一的“重算总屏数 + 校准当前屏”入口：旋屏/布局完成/跨章后都调用它，
+                                // 保证 _spreadIndex 与真实的分栏位置始终一致（解决“翻不过去”“跳回章首”）
+                                window._recalcSpread = function(target) {
+                                    if (!window.isDualPage) return;
+                                    var maxIdx = window._getMaxSpreadIndex();
+                                    var idx = (target === 'last') ? maxIdx : Math.min(Math.max(0, window._spreadIndex || 0), maxIdx);
+                                    window._applySpread(idx);
                                 };
 
                                 window.pageUp = function() {

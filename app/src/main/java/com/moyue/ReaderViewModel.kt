@@ -96,7 +96,7 @@ data class ReaderUiState(
     // Fullscreen mode
     val isFullscreen: Boolean = false,
     val llmConfig: LLMConfig = LLMConfig(),
-    val edgeTtsEndpoint: String = "http://p-plus.duckdns.org:5001",
+    val edgeTtsEndpoint: String = com.moyue.util.SecureUrlHelper.OFFICIAL_EDGE_TTS,
     val edgeTtsVoice: String = "zh-CN-XiaoxiaoNeural",
     val aiVoiceEndpoint: String = "",
     val aiVoiceApiKey: String = "",
@@ -127,6 +127,7 @@ data class ReaderUiState(
     val showHighlightPanel: Boolean = false,
     val ttsLocked: Boolean = false,  // TTS 防误触锁定模式
     val currentParagraphIndex: Int = 0,       // 当前阅读/朗读的段落
+    val landOnLastSpread: Boolean = false,      // 从下一章倒回上一章时，双页落到本章最后一屏
     val scrollToParagraph: Int = -1,           // 需要滚动到的段落索引（-1 表示无）
     val scrollToAnchor: String? = null,          // 需要滚动到的 HTML 锚点（如 filepos0000154187）
     val scrollToPixel: Int = -1,                 // 需要精确滚动到的像素位置（-1 表示无）
@@ -198,13 +199,30 @@ class ReaderViewModel(
     private val localAiEngine = LocalAiEngine
 
     init {
+        // Debug 专用：把 adb 广播指令接到本 ViewModel（正式包中 DebugReaderHook 不存在，此处为空操作）
+        try {
+            val hookCls = Class.forName("com.moyue.debugtools.DebugReaderHook")
+            val inst = hookCls.getField("INSTANCE").get(null)
+            val setter = hookCls.getMethod("setHandler", kotlin.jvm.functions.Function2::class.java)
+            android.util.Log.d("DEBUG-HOOK", "vm bound")
+            setter.invoke(inst, { cmd: String, _: String? ->
+                when (cmd) {
+                    "play" -> togglePlayPause()
+                    "prev" -> prevChapter()
+                    "next" -> nextChapter()
+                    "stop" -> ttsStop()
+
+                    "settings" -> toggleTtsSettingsPanel()
+                }
+            })
+        } catch (t: Throwable) { android.util.Log.e("DEBUG-HOOK", "vm bind failed", t) }
         // Try to restore local AI model from previous session
         localAiEngine.init(application)
     }
 
     private val _uiState = MutableStateFlow(
         ReaderUiState(
-            edgeTtsEndpoint = prefs.getString("edge_endpoint", "http://p-plus.duckdns.org:5001") ?: "http://p-plus.duckdns.org:5001",
+            edgeTtsEndpoint = com.moyue.util.SecureUrlHelper.secureEdgeEndpoint(prefs.getString("edge_endpoint", null)),
             edgeTtsVoice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural") ?: "zh-CN-XiaoxiaoNeural",
             aiVoiceEndpoint = prefs.getString("ai_endpoint", "") ?: "",
             aiVoiceApiKey = prefs.getString("ai_apikey", "") ?: "",
@@ -499,7 +517,7 @@ class ReaderViewModel(
         }
     }
     fun nextChapter() { val s = _uiState.value; if (s.currentChapterIndex < s.chapters.size - 1) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex + 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false, currentParagraphIndex = 0, isChapterSwitching = true) }; viewModelScope.launch { loadChapterContent(forceStart = true); _uiState.update { it.copy(isChapterSwitching = false) }; saveProgress() } } }
-    fun prevChapter() { val s = _uiState.value; if (s.currentChapterIndex > 0) { killPlayChain(); _uiState.update { it.copy(currentChapterIndex = it.currentChapterIndex - 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false, currentParagraphIndex = 0, isChapterSwitching = true) }; viewModelScope.launch { loadChapterContent(forceStart = true); _uiState.update { it.copy(isChapterSwitching = false) }; saveProgress() } } }
+    fun prevChapter() { val s = _uiState.value; if (s.currentChapterIndex > 0) { killPlayChain(); _uiState.update { it.copy(landOnLastSpread = true, currentChapterIndex = it.currentChapterIndex - 1, isLoading = true, currentHtml = null, ttsParagraphs = emptyList(), ttsCurrentIdx = -1, isTtsPaused = false, currentParagraphIndex = 0, isChapterSwitching = true) }; viewModelScope.launch { loadChapterContent(forceStart = true); _uiState.update { it.copy(isChapterSwitching = false) }; saveProgress() } } }
     fun navigateToChapter(href: String) { 
         pushToHistory()
         val s = _uiState.value
@@ -2559,6 +2577,7 @@ class ReaderViewModel(
         }
     }
 
+    fun clearLandOnLastSpread() { _uiState.update { it.copy(landOnLastSpread = false) } }
     fun clearScrollToParagraph() { _uiState.update { it.copy(scrollToParagraph = -1, scrollToAnchor = null, scrollToNavEntry = null) } }
 
     // ===== Highlight =====
@@ -2624,7 +2643,7 @@ class ReaderViewModel(
      * 只执行一次（修复后 offset≠0 不会被重复处理）。
      */
     private fun repairAllCrossPlatformHighlights(bookId: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Default) {
             val all = repository.getHighlightsForBook(bookId).first()
             val needsRepair = all.filter {
                 it.startOffset == 0 && it.endOffset == 0 && it.text.isNotBlank()
@@ -2637,6 +2656,7 @@ class ReaderViewModel(
 
             var repaired = 0
             for (hl in needsRepair) {
+                kotlinx.coroutines.yield()
                 // 在全部章节中搜索
                 val found = findTextPosition(hl.text)
                 if (found != null) {

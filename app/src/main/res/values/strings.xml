@@ -753,6 +753,12 @@ AI Voice（云端 TTS）：
     <string name="ai_quiz_correct_choice">标准答案: %1$s</string>
     <string name="ai_quiz_unanswered_warning">还有未作答题目，请完成所有题目后再提交。</string>
     <string name="ai_quiz_redo_btn">🔄 重做本卷</string>
+    <string name="ai_quiz_retest_wrong_btn">🎯 补测 %1$d 道新题（错题强化）</string>
+    <string name="ai_quiz_retest_perfect_btn">🏆 满分！再来 %1$d 道进阶新题挑战</string>
+    <string name="ai_quiz_retest_count_chip">%1$d 题 (错题)</string>
+    <string name="ai_quiz_retest_count_label">补测题数（可自由调整）：</string>
+    <string name="ai_quiz_count_stepper_unit">道题</string>
+    <string name="ai_quiz_retest_generating">正在生成新一轮强化测试题…</string>
     <string name="ai_quiz_locked_hint">本题已作答，答案已锁定，做完最后一题后整体提交。</string>
     <string name="ai_tts_read_question">朗读题目</string>
     <string name="ai_tts_read_option">朗读该选项</string>
@@ -767,6 +773,35 @@ AI Voice（云端 TTS）：
     <string name="ai_quiz_export_solutions_pdf">📑 导出完整答案解析卷 (PDF)</string>
     <string name="ai_quiz_export_success">已成功导出至: %1$s</string>
     <string name="ai_quiz_export_failed">导出失败: %1$s</string>
+
+    <!-- Interactive Quiz Dialog (研讨定制出题) -->
+    <string name="ai_quiz_interactive_entry">💬 研讨定制</string>
+    <string name="ai_quiz_interactive_title">研讨出题向导</string>
+    <string name="ai_quiz_interactive_desc">先由 AI 提炼理解本段要点，再由您对齐确认并按需定制出题。</string>
+    <string name="ai_quiz_scope_selected_text">划选重点片段 (共 %1$d 字)</string>
+    <string name="ai_quiz_scope_page_current">当前阅读页 (共 1 页 · 约 %1$d 字)</string>
+    <string name="ai_quiz_scope_page_expanded">当前页 + 后续 %1$d 页 (共 %2$d 页 · 约 %3$d 字)</string>
+    <string name="ai_quiz_page_count_single">1 页</string>
+    <string name="ai_quiz_page_count_format">%1$d 页</string>
+    <string name="ai_quiz_scope_btn_add_page">➕ 往后延 1 页</string>
+    <string name="ai_quiz_scope_btn_minus_page">➖ 减少 1 页</string>
+    <string name="ai_quiz_scope_btn_reset">恢复单页</string>
+    <string name="ai_quiz_preview_header">所选范围首尾对齐预览</string>
+    <string name="ai_quiz_preview_start">开头：%1$s</string>
+    <string name="ai_quiz_preview_end">结尾：%1$s</string>
+    <string name="ai_quiz_btn_start_study">📖 研读要点</string>
+    <string name="ai_quiz_studying_hint">AI 助教正在研读本段内容并提炼要点…</string>
+    <string name="ai_quiz_studied_badge">✅ AI 助教已理解本段要点：</string>
+    <string name="ai_quiz_custom_instruction_label">出题特别嘱咐（选填）</string>
+    <string name="ai_quiz_custom_instruction_hint">例如：多考第2个知识点，别太难…</string>
+    <string name="ai_quiz_btn_generate_now">🎯 立即出题</string>
+    <string name="ai_quiz_btn_reselect_material">返回范围</string>
+    <string name="ai_quiz_btn_re_study">重新研读</string>
+    <string name="ai_quiz_interactive_refresh_batch">🔄 换一批题目</string>
+    <string name="ai_quiz_interactive_adjust_req">💬 调要求重出</string>
+    <string name="ai_quiz_interactive_tag">💬 研讨定制卷</string>
+    <string name="ai_quiz_generating_hint">正在根据研讨成果定制出题中…</string>
+
 
     <!-- Reader Typography & Spread Layout (Aa) -->
     <string name="reader_typography_title">排版与字体设置</string>
@@ -1046,4 +1081,34 @@ AI Voice（云端 TTS）：
     <string name="dict_online_badge">全球双语词典</string>
     <string name="dict_local_badge">本地离线词典</string>
     <string name="dict_switch_target_lang">切换目标语言</string>
+
+    <!-- Native PDF Reader -->
+    <string name="pdf_badge">PDF</string>
+    <string name="pdf_ai_quiz_action">AI 测验</string>
+    <string name="pdf_ai_quiz_dialog_title">针对当前故事出题 (AI 测验)</string>
+    <string name="pdf_ai_quiz_scope_hint">请选定故事或章节所在的页码范围（大模型将智能解析并出题）：</string>
+    <string name="pdf_ai_quiz_start_page">起始页</string>
+    <string name="pdf_ai_quiz_end_page">结束页</string>
+    <string name="pdf_ai_quiz_total_pages">共选中 %1$d 页（推荐 1~8 页，出题极快且精准）</string>
+    <string name="pdf_ai_quiz_count_label">出题数量</string>
+    <string name="pdf_ai_quiz_count_format">%1$d 题</string>
+    <string name="pdf_ai_quiz_diff_label">难度级别</string>
+    <string name="pdf_ai_quiz_diff_easy">基础识记</string>
+    <string name="pdf_ai_quiz_diff_medium">理解关联</string>
+    <string name="pdf_ai_quiz_diff_hard">深度思考</string>
+    <string name="pdf_ai_quiz_custom_prompt_label">出题要求 / 意向（选填）</string>
+    <string name="pdf_ai_quiz_custom_prompt_hint">例如：多考查李白心理描写的词汇、适合小学二年级学生、着重考查成语寓意</string>
+    <string name="pdf_ai_quiz_generating">AI 大模型正在阅读这几页并精心出题中…</string>
+    <string name="pdf_ai_quiz_start_btn">开始 AI 出题</string>
+    <string name="pdf_ai_quiz_recreate_action">换页 / 重新出题</string>
+    <string name="pdf_ai_quiz_need_config">请先在书架菜单配置 AI 大模型 API Key</string>
+    <string name="pdf_reader_page_indicator">%1$d / %2$d 页</string>
+    <string name="pdf_reader_prev_page">上一页</string>
+    <string name="pdf_reader_next_page">下一页</string>
+    <string name="pdf_reader_jump_page">跳至第 %1$d 页</string>
+    <string name="pdf_open_failed">无法打开该 PDF 文档，文件可能损坏或已被移动</string>
+    <string name="import_failed">导入失败，请检查文件是否完整</string>
+    <string name="rename_book">修改书名</string>
+    <string name="rename_book_hint">请输入新的书籍名称</string>
+    <string name="rename_success">书名已更新</string>
 </resources>

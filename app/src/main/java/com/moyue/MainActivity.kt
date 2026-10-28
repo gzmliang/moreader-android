@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        com.moyue.DebugHookBridge.onCreate(this)
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -126,6 +127,7 @@ sealed class Screen {
     data object Library : Screen()
     data class Reader(
         val bookId: String,
+        val isPdf: Boolean? = null,
         val initialChapterIndex: Int = -1,
         val initialParagraphIndex: Int = -1,
     ) : Screen()
@@ -161,7 +163,7 @@ fun MoreaderApp(
     when (currentScreen) {
         is Screen.Library -> {
             LibraryScreen(
-                onOpenBook = { bookId -> navigateTo(Screen.Reader(bookId)) },
+                onOpenBook = { bookId, isPdf -> navigateTo(Screen.Reader(bookId, isPdf = isPdf)) },
                 onOpenBookmarks = { navigateTo(Screen.Bookmarks) },
                 onOpenVocabulary = { navigateTo(Screen.Vocabulary) },
                 onOpenFlashcards = { navigateTo(Screen.Flashcards) },
@@ -175,13 +177,31 @@ fun MoreaderApp(
             )
         }
         is Screen.Reader -> {
-            ReaderScreen(
-                bookId = currentScreen.bookId,
-                repository = repository,
-                onBack = { navStack = navStack.dropLast(1) },
-                initialChapterIndex = currentScreen.initialChapterIndex,
-                initialParagraphIndex = currentScreen.initialParagraphIndex,
-            )
+            val bookState by produceState<com.moyue.app.data.models.Book?>(initialValue = null, currentScreen.bookId) {
+                value = repository.getBook(currentScreen.bookId)
+            }
+            val currentBook = bookState
+            val isPdf = currentScreen.isPdf ?: (currentBook?.filePath?.endsWith(".pdf", ignoreCase = true) == true)
+
+            if (currentBook == null && currentScreen.isPdf == null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else if (isPdf) {
+                com.moyue.app.ui.PdfReaderScreen(
+                    bookId = currentScreen.bookId,
+                    repository = repository,
+                    onBack = { navStack = navStack.dropLast(1) }
+                )
+            } else {
+                ReaderScreen(
+                    bookId = currentScreen.bookId,
+                    repository = repository,
+                    onBack = { navStack = navStack.dropLast(1) },
+                    initialChapterIndex = currentScreen.initialChapterIndex,
+                    initialParagraphIndex = currentScreen.initialParagraphIndex,
+                )
+            }
         }
         is Screen.Bookmarks -> {
             BookmarksScreen(

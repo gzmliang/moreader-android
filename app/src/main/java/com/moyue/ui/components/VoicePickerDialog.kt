@@ -152,14 +152,8 @@ fun VoicePickerDialog(
                 }
                 val body = json.toString().toRequestBody("application/json".toMediaType())
 
-                val clean = endpoint.removeSuffix("/")
-                val defaultServer = "http://p-plus.duckdns.org:5001"
-                val fallbackServer = "http://powerplus.blogsyte.com:5001"
-                val endpoints = if (clean == defaultServer || clean == fallbackServer) {
-                    listOf(clean, if (clean == defaultServer) fallbackServer else defaultServer)
-                } else {
-                    listOf(clean)
-                }
+                val clean = com.moyue.util.SecureUrlHelper.secureEdgeEndpoint(endpoint).removeSuffix("/")
+                val endpoints = listOf(clean)
 
                 var audioBytes: ByteArray? = null
                 withContext(Dispatchers.IO) {

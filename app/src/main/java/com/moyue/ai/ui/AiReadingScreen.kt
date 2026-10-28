@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
@@ -50,6 +51,15 @@ fun AiReadingScreen(
     bookRepository: BookRepository? = null,
     edgeEndpoint: String = "",
     edgeVoice: String = "zh-CN-XiaoxiaoNeural",
+    paragraphs: List<String> = emptyList(),
+    currentParagraphIndex: Int = 0,
+    selectedText: String? = null,
+    initialTab: Int? = null,
+    initialQuizScope: String? = null,
+    initialQuizCount: Int? = null,
+    initialQuizDifficulty: String? = null,
+    isPdfMode: Boolean = false,
+    onRecreateQuiz: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -65,7 +75,7 @@ fun AiReadingScreen(
         repository.setLanguageDisplayMode(mode)
     }
 
-    var selectedTab by remember { mutableIntStateOf(repository.getLastAiTab().coerceIn(0, 3)) } // 0: Summary, 1: Plot, 2: Quiz, 3: Reports
+    var selectedTab by remember { mutableIntStateOf(initialTab?.coerceIn(0, 3) ?: repository.getLastAiTab().coerceIn(0, 3)) } // 0: Summary, 1: Plot, 2: Quiz, 3: Reports
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(!aiConfig.isConfigured) }
 
@@ -270,6 +280,17 @@ fun AiReadingScreen(
                                 )
                             }
 
+                            // 换页出题 / 重新出题按钮（由外层 PDF 阅读器注入）
+                            if (onRecreateQuiz != null) {
+                                IconButton(onClick = onRecreateQuiz) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = stringResource(R.string.pdf_ai_quiz_recreate_action),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+
                             // Settings
                             IconButton(onClick = { showSettingsDialog = true }) {
                                 Icon(
@@ -369,6 +390,14 @@ fun AiReadingScreen(
                             bookRepository = bookRepository,
                             edgeEndpoint = edgeEndpoint,
                             edgeVoice = edgeVoice,
+                            paragraphs = paragraphs,
+                            currentParagraphIndex = currentParagraphIndex,
+                            selectedText = selectedText,
+                            initialScope = initialQuizScope,
+                            initialCount = initialQuizCount,
+                            initialDifficulty = initialQuizDifficulty,
+                            isPdfMode = isPdfMode,
+                            onTriggerPdfRecreate = onRecreateQuiz,
                             onDisplayModeChange = onDisplayModeChange,
                             onQuizCompleted = {
                                 // switch to reports or stay

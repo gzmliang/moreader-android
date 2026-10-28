@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -133,6 +134,7 @@ fun TtsSettingsSheet(
     localAiGpuLayers: Int = 0,
     currentTheme: ReaderTheme = ReaderTheme.LIGHT,
     currentTextBrightness: Int = 100,
+    landscapeDrawer: Boolean = false,
     onProviderChange: (TTSProviderType) -> Unit,
     onSpeedChange: (Float) -> Unit,
     onEdgeConfigChange: (endpoint: String, voice: String) -> Unit,
@@ -157,10 +159,15 @@ fun TtsSettingsSheet(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(540.dp),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        modifier = if (landscapeDrawer) {
+            Modifier.width(420.dp).fillMaxHeight().imePadding()
+        } else {
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 560.dp)
+                .imePadding()
+        },
+        shape = if (landscapeDrawer) RoundedCornerShape(0.dp) else RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         shadowElevation = 8.dp,
         color = MaterialTheme.colorScheme.surface,
     ) {
@@ -798,48 +805,60 @@ private fun LlmSettingsTab(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        // 常用预设快捷填充
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // 常用预设快捷填充：2×2 网格，确保文字不换行
+        Text("Presets:", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(4.dp))
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text("Presets:", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
-            SuggestionChip(
-                onClick = {
-                    llmEp.value = "https://api.deepseek.com/v1"
-                    llmModel.value = "deepseek-chat"
-                    saveFeedback = false
-                },
-                label = { Text("DeepSeek", fontSize = 11.sp) }
-            )
-            SuggestionChip(
-                onClick = {
-                    llmEp.value = "https://api.siliconflow.cn/v1"
-                    llmModel.value = "deepseek-ai/DeepSeek-V3"
-                    saveFeedback = false
-                },
-                label = { Text("SiliconFlow", fontSize = 11.sp) }
-            )
-            SuggestionChip(
-                onClick = {
-                    llmEp.value = "https://api.openai.com/v1"
-                    llmModel.value = "gpt-4o-mini"
-                    saveFeedback = false
-                },
-                label = { Text("OpenAI", fontSize = 11.sp) }
-            )
-            SuggestionChip(
-                onClick = {
-                    llmEp.value = "https://openrouter.ai/api/v1"
-                    llmModel.value = "anthropic/claude-3.5-haiku"
-                    saveFeedback = false
-                },
-                label = { Text("OpenRouter", fontSize = 11.sp) }
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                SuggestionChip(
+                    onClick = {
+                        llmEp.value = "https://api.openai.com/v1"
+                        llmModel.value = "gpt-4o-mini"
+                        saveFeedback = false
+                    },
+                    label = { Text("OpenAI", fontSize = 12.sp, maxLines = 1) },
+                    modifier = Modifier.weight(1f)
+                )
+                SuggestionChip(
+                    onClick = {
+                        llmEp.value = "https://generativelanguage.googleapis.com/v1beta/openai"
+                        llmModel.value = "gemini-2.0-flash"
+                        saveFeedback = false
+                    },
+                    label = { Text("Google", fontSize = 12.sp, maxLines = 1) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                SuggestionChip(
+                    onClick = {
+                        llmEp.value = "https://api.deepseek.com/v1"
+                        llmModel.value = "deepseek-chat"
+                        saveFeedback = false
+                    },
+                    label = { Text("DeepSeek", fontSize = 12.sp, maxLines = 1) },
+                    modifier = Modifier.weight(1f)
+                )
+                SuggestionChip(
+                    onClick = {
+                        llmEp.value = ""
+                        llmModel.value = ""
+                        llmKey.value = ""
+                        saveFeedback = false
+                    },
+                    label = { Text("Custom", fontSize = 12.sp, maxLines = 1) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
 
         // Endpoint
@@ -961,8 +980,6 @@ private fun DisplaySettingsTab(
     onTextBrightnessChange: (Int) -> Unit,
     onEinkModeChange: (Boolean) -> Unit,
 ) {
-    var isThemeExpanded by remember { mutableStateOf(false) }
-
     Column(
         Modifier
             .fillMaxWidth()
@@ -995,167 +1012,102 @@ private fun DisplaySettingsTab(
 
         HorizontalDivider(Modifier.padding(vertical = 10.dp))
 
-        // === 2. 主题选择 (可折叠/展开的主题胶囊，解决英文换行变形问题) ===
+        // === 2. 主题选择：直接展示所有主题卡片，无折叠 ===
         Text(
             stringResource(R.string.theme),
             fontWeight = FontWeight.SemiBold,
             fontSize = 13.sp,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
 
-        val curThemeBg = Color(android.graphics.Color.parseColor(currentTheme.bgColor))
-        val curThemeText = Color(android.graphics.Color.parseColor(currentTheme.textColor))
-
-        // 主胶囊条（显示当前选中的主题，精致典雅）
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = curThemeBg,
-            border = BorderStroke(
-                1.5.dp,
-                if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-            ),
-            shadowElevation = 2.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .clickable { isThemeExpanded = !isThemeExpanded }
+        val themes = ReaderTheme.entries
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(CircleShape)
-                            .background(curThemeBg)
-                            .border(1.2.dp, curThemeText.copy(alpha = 0.4f), CircleShape)
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            stringResource(R.string.theme_current_label),
-                            fontSize = 11.sp,
-                            color = curThemeText.copy(alpha = 0.6f)
-                        )
-                        Text(
-                            stringResource(themeNameRes(currentTheme)),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = curThemeText
-                        )
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        stringResource(
-                            if (isThemeExpanded) R.string.theme_capsule_collapse
-                            else R.string.theme_capsule_expand
-                        ),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = curThemeText.copy(alpha = 0.8f)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        imageVector = if (isThemeExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = curThemeText,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-        }
+            for (i in 0 until themes.size step 2) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    for (j in i until minOf(i + 2, themes.size)) {
+                        val theme = themes[j]
+                        val isSelected = currentTheme == theme
+                        val themeBg = Color(android.graphics.Color.parseColor(theme.bgColor))
+                        val themeText = Color(android.graphics.Color.parseColor(theme.textColor))
 
-        // 展开的主题卡片列表 (两列宽敞卡片，单词绝不截断折行)
-        AnimatedVisibility(
-            visible = isThemeExpanded,
-            enter = expandVertically(),
-            exit = shrinkVertically()
-        ) {
-            val themes = ReaderTheme.entries
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                for (i in 0 until themes.size step 2) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        for (j in i until minOf(i + 2, themes.size)) {
-                            val theme = themes[j]
-                            val isSelected = currentTheme == theme
-                            val themeBg = Color(android.graphics.Color.parseColor(theme.bgColor))
-                            val themeText = Color(android.graphics.Color.parseColor(theme.textColor))
-
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = themeBg,
-                                border = BorderStroke(
-                                    if (isSelected) 2.dp else 1.dp,
-                                    if (isSelected) {
-                                        if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary
-                                    } else {
-                                        themeText.copy(alpha = 0.25f)
-                                    }
-                                ),
-                                shadowElevation = if (isSelected) 3.dp else 1.dp,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable {
-                                        onThemeChange(theme)
-                                        isThemeExpanded = false
-                                    }
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = themeBg,
+                            border = BorderStroke(
+                                if (isSelected) 2.dp else 1.dp,
+                                if (isSelected) {
+                                    if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary
+                                } else {
+                                    themeText.copy(alpha = 0.18f)
+                                }
+                            ),
+                            shadowElevation = if (isSelected) 4.dp else 1.dp,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { onThemeChange(theme) }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                // 精致色板：左半背景色 + 右半文字色
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 28.dp, height = 22.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .border(0.8.dp, themeText.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.weight(1f, fill = false)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(14.dp)
-                                                .clip(CircleShape)
-                                                .background(themeBg)
-                                                .border(1.dp, themeText.copy(alpha = 0.4f), CircleShape)
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            text = stringResource(themeNameRes(theme)),
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = themeText,
-                                            maxLines = 1
-                                        )
-                                    }
-                                    if (isSelected) {
-                                        Text(
-                                            "✓",
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary
-                                        )
-                                    }
+                                    Box(Modifier.fillMaxSize().background(themeBg))
+                                    Box(
+                                        Modifier
+                                            .fillMaxHeight()
+                                            .fillMaxWidth(0.45f)
+                                            .align(Alignment.CenterEnd)
+                                            .background(themeText.copy(alpha = 0.85f))
+                                    )
+                                    Box(
+                                        Modifier
+                                            .width(14.dp)
+                                            .height(2.dp)
+                                            .align(Alignment.Center)
+                                            .background(themeText.copy(alpha = 0.45f))
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(themeNameRes(theme)),
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = themeText,
+                                    maxLines = 1,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (isSelected) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Palette,
+                                        contentDescription = null,
+                                        tint = if (isEinkMode) Color.Black else MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
                                 }
                             }
                         }
-                        if (i + 1 >= themes.size) {
-                            Spacer(Modifier.weight(1f))
-                        }
+                    }
+                    if (i + 1 >= themes.size) {
+                        Spacer(Modifier.weight(1f))
                     }
                 }
             }
         }
-
         // === 3. Text Brightness (深色主题下调节文字亮度) ===
         if (currentTheme.isDark) {
             Spacer(Modifier.height(10.dp))
