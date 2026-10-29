@@ -28,6 +28,7 @@ import com.moyue.app.data.BookRepository
 import com.moyue.app.sync.PdfImportManager
 import com.moyue.app.sync.SyncClient
 import com.moyue.app.sync.WebDavClient
+import kotlinx.coroutines.Dispatchers
 import com.moyue.app.util.DAV_HANDLED_EXTS
 import com.moyue.app.util.extOf
 import com.moyue.app.util.extractBooksFromZip
@@ -258,6 +259,20 @@ fun WebDavBrowserDialog(
             "epub" -> importEpubFromFile(file, remotePath, BookRepository(context))
             "txt" -> importTxtFile(file)
             "pdf" -> submitPdfFile(file)
+            "mobi", "azw", "prc" -> {
+                val epub = File(context.cacheDir, "webdav_mobi_${System.currentTimeMillis()}.epub")
+                try {
+                    kotlinx.coroutines.withContext(Dispatchers.IO) {
+                        com.moyue.util.MobiConverter.convertMobiToEpub(file, epub)
+                    }
+                    importEpubFromFile(epub, remotePath, BookRepository(context))
+                } catch (e: Exception) {
+                    toast(context.getString(com.moyue.app.R.string.import_failed), long = true)
+                } finally {
+                    file.delete()
+                    epub.delete()
+                }
+            }
         }
     }
 
@@ -268,7 +283,7 @@ fun WebDavBrowserDialog(
         webDavClient.downloadFile(item.path, tmp).fold(
             onSuccess = { file ->
                 when (ext) {
-                    "epub", "txt", "pdf" -> importLocalBook(file, item.path)
+                    "epub", "txt", "pdf", "mobi", "azw", "prc" -> importLocalBook(file, item.path)
                     "zip" -> {
                         busyLabel = context.getString(com.moyue.app.R.string.webdav_zip_extracting)
                         val (dir, books) = extractBooksFromZip(context, file)

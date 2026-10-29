@@ -138,10 +138,11 @@ fun LibraryScreen(
             "epub" -> viewModel.importLocalEpubFile(context, file)
             "txt" -> viewModel.importTxtFile(context, file)
             "pdf" -> viewModel.importLocalPdfFile(context, file)
+            "mobi", "azw", "prc" -> viewModel.importLocalMobiFile(context, file)
         }
     }
 
-    /** 统一导入入口：epub / txt / pdf / zip 各走各的通道 */
+    /** 统一导入入口：epub / txt / pdf / mobi / zip 各走各的通道 */
     fun dispatchImport(uris: List<Uri>) {
         if (uris.isEmpty()) return
         uris.forEach { uri ->
@@ -168,6 +169,7 @@ fun LibraryScreen(
                     }
                 }
                 "pdf" -> viewModel.importPdfUri(context, uri)
+                "mobi", "azw", "prc" -> viewModel.importMobiUri(context, uri)
                 else -> {
                     if (viewModel.isPdfUri(context, uri)) {
                         viewModel.importPdfUri(context, uri)

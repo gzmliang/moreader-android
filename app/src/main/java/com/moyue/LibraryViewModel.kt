@@ -241,6 +241,49 @@ class LibraryViewModel(
         }
     }
 
+    /** 本地 MOBI / AZW / PRC 文件（纯本地解析转 EPUB）直接入库 */
+    fun importLocalMobiFile(context: Context, mobiFile: File) {
+        viewModelScope.launch {
+            try {
+                val epubFile = File(context.cacheDir, "mobi_${System.currentTimeMillis()}.epub")
+                kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    com.moyue.util.MobiConverter.convertMobiToEpub(mobiFile, epubFile)
+                }
+                mobiFile.delete()
+                val book = repository.importEpubFile(epubFile)
+                repository.extractCover(book.id)?.let { repository.updateBookCover(book.id, it) }
+                if (repository.isRecentDuplicate) {
+                    toastShort(context, context.getString(com.moyue.app.R.string.import_duplicate_skip, book.title))
+                } else {
+                    toastShort(context, context.getString(com.moyue.app.R.string.webdav_imported_success, book.title, ""))
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Import", "本地 MOBI 导入失败", e)
+                mobiFile.delete()
+                toastLong(context, context.getString(com.moyue.app.R.string.import_failed))
+            }
+        }
+    }
+
+    /** 从系统 Uri 导入 MOBI / AZW / PRC：纯本地秒级复制与转换入库 */
+    fun importMobiUri(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val displayName = queryDisplayName(context, uri) ?: "book.mobi"
+                val tmp = copyUriToCache(context, uri, displayName)
+                if (tmp == null || !tmp.exists()) {
+                    android.util.Log.e("Import", "copyUriToCache 失败: uri=$uri, displayName=$displayName")
+                    toastLong(context, context.getString(com.moyue.app.R.string.import_failed))
+                    return@launch
+                }
+                importLocalMobiFile(context, tmp)
+            } catch (e: Exception) {
+                android.util.Log.e("Import", "MOBI Uri 导入失败: uri=$uri", e)
+                toastLong(context, context.getString(com.moyue.app.R.string.import_failed))
+            }
+        }
+    }
+
     /** 本地 PDF 文件（例如外部传入或已下载好的）直接入库 */
     fun importLocalPdfFile(context: Context, pdfFile: File) {
         viewModelScope.launch {
