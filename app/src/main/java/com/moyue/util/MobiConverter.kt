@@ -442,7 +442,7 @@ object MobiConverter {
                 writeZipEntry(zip, path, img.data)
             }
 
-            // 4. 清洗 HTML 并作为 OEBPS/text/book.xhtml 写入
+            // 4. 清洗 HTML 并智能切分为章节（优先按 mbp:pagebreak 切片）
             val cleanBody = if (parsed.html.contains("<body", ignoreCase = true)) {
                 val bStart = parsed.html.indexOf("<body", ignoreCase = true)
                 val bodyOpenEnd = parsed.html.indexOf(">", bStart)
@@ -454,12 +454,77 @@ object MobiConverter {
                 parsed.html
             }
 
-            val xhtml = """<?xml version="1.0" encoding="utf-8"?>
+            // 提取所有 filepos 标题候选（常用于 MOBI 内置目录反向解析）
+            val posLinks = Pattern.compile("""<a\s+[^>]*filepos=['"]?(\d+)['"]?[^>]*>(.*?)</a>""", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
+            val posMatcher = posLinks.matcher(cleanBody)
+            val fileposTitles = LinkedHashSet<String>()
+            while (posMatcher.find()) {
+                val tHtml = posMatcher.group(2) ?: ""
+                val t = tHtml.replace(Regex("<[^>]+>"), "").trim()
+                if (t.isNotBlank() && t.length in 2..35) {
+                    fileposTitles.add(t)
+                }
+            }
+
+            // 优先检查是否有 mbp:pagebreak 进行分页
+            val pageBreakPattern = Pattern.compile("""<mbp:pagebreak/?>""", Pattern.CASE_INSENSITIVE)
+            val rawSections = cleanBody.split(pageBreakPattern).map { it.trim() }.filter { it.isNotEmpty() }
+
+            val sections = if (rawSections.size >= 2) {
+                rawSections
+            } else {
+                listOf(cleanBody)
+            }
+
+            data class ConvertedChapter(
+                val id: String,
+                val filename: String,
+                val title: String,
+                val html: String
+            )
+
+            val chapterList = mutableListOf<ConvertedChapter>()
+            for ((index, sectionHtml) in sections.withIndex()) {
+                val chapIdx = index + 1
+                val fname = "chapter_${String.format("%03d", chapIdx)}.xhtml"
+                val chapId = "chap_$chapIdx"
+
+                // 提取章节标题
+                var chapTitle = ""
+                for (ft in fileposTitles) {
+                    val searchSpan = sectionHtml.take(400)
+                    if (searchSpan.contains(ft)) {
+                        chapTitle = ft
+                        break
+                    }
+                }
+                if (chapTitle.isBlank()) {
+                    val hPattern = Pattern.compile("""<(?:h[1-6]|b|strong)[^>]*>(?:<font[^>]*>)?([^<]+)(?:</font>)?</(?:h[1-6]|b|strong)>""", Pattern.CASE_INSENSITIVE)
+                    val hMatcher = hPattern.matcher(sectionHtml.take(400))
+                    if (hMatcher.find()) {
+                        val cand = (hMatcher.group(1) ?: "").trim()
+                        if (cand.length in 2..30 && !cand.startsWith("http")) {
+                            chapTitle = cand
+                        }
+                    }
+                }
+                if (chapTitle.isBlank()) {
+                    val plain = sectionHtml.take(300).replace(Regex("<[^>]+>"), " ").trim()
+                    val fl = plain.lines().firstOrNull()?.trim() ?: ""
+                    if (fl.length in 2..25 && !fl.startsWith("http")) {
+                        chapTitle = fl
+                    }
+                }
+                if (chapTitle.isBlank()) {
+                    chapTitle = if (sections.size == 1) parsed.title else "第 $chapIdx 节"
+                }
+
+                val xhtml = """<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN">
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-  <title>${escapeXml(parsed.title)}</title>
+  <title>${escapeXml(chapTitle)}</title>
   <style type="text/css">
     body { font-family: sans-serif; line-height: 1.6; margin: 5%; }
     p { text-indent: 2em; margin-bottom: 0.8em; }
@@ -467,12 +532,28 @@ object MobiConverter {
   </style>
 </head>
 <body>
-$cleanBody
+$sectionHtml
 </body>
 </html>"""
-            writeZipEntry(zip, "OEBPS/text/book.xhtml", xhtml.toByteArray(Charsets.UTF_8))
+                writeZipEntry(zip, "OEBPS/text/$fname", xhtml.toByteArray(Charsets.UTF_8))
+                chapterList.add(ConvertedChapter(chapId, fname, chapTitle, xhtml))
+            }
 
             // 5. OEBPS/toc.ncx
+            val navMapSb = StringBuilder()
+            var playOrder = 1
+            for ((idx, chap) in chapterList.withIndex()) {
+                // 仅对有效标题或首章创建 NCX 节点
+                val isPlaceholder = chap.title.startsWith("第 ") && chap.title.endsWith(" 节")
+                if (!isPlaceholder || idx == 0) {
+                    navMapSb.append("""    <navPoint id="np_$playOrder" playOrder="$playOrder">
+      <navLabel><text>${escapeXml(chap.title)}</text></navLabel>
+      <content src="text/${chap.filename}"/>
+    </navPoint>""" + "\n")
+                    playOrder++
+                }
+            }
+
             val ncx = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
@@ -485,18 +566,19 @@ $cleanBody
   <docTitle><text>${escapeXml(parsed.title)}</text></docTitle>
   <docAuthor><text>${escapeXml(parsed.author)}</text></docAuthor>
   <navMap>
-    <navPoint id="navPoint-1" playOrder="1">
-      <navLabel><text>${escapeXml(parsed.title)}</text></navLabel>
-      <content src="text/book.xhtml"/>
-    </navPoint>
-  </navMap>
+$navMapSb  </navMap>
 </ncx>"""
             writeZipEntry(zip, "OEBPS/toc.ncx", ncx.toByteArray(Charsets.UTF_8))
 
             // 6. OEBPS/content.opf
             val opfManifest = StringBuilder()
             opfManifest.append("""    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>""" + "\n")
-            opfManifest.append("""    <item id="chapter1" href="text/book.xhtml" media-type="application/xhtml+xml"/>""" + "\n")
+            val opfSpine = StringBuilder()
+
+            for (chap in chapterList) {
+                opfManifest.append("""    <item id="${chap.id}" href="text/${chap.filename}" media-type="application/xhtml+xml"/>""" + "\n")
+                opfSpine.append("""    <itemref idref="${chap.id}"/>""" + "\n")
+            }
 
             for (img in parsed.images) {
                 val imgId = "img_${img.index}"
@@ -521,8 +603,7 @@ $cleanBody
   <manifest>
 $opfManifest  </manifest>
   <spine toc="ncx">
-    <itemref idref="chapter1"/>
-  </spine>
+$opfSpine  </spine>
 </package>"""
             writeZipEntry(zip, "OEBPS/content.opf", opf.toByteArray(Charsets.UTF_8))
         }

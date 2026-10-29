@@ -186,6 +186,7 @@ fun LibraryScreen(
 
     // Handle shared files from other apps
     LaunchedEffect(sharedUris) {
+        android.util.Log.i("LibraryScreen", "LaunchedEffect sharedUris=${sharedUris.size}")
         if (sharedUris.isNotEmpty()) {
             dispatchImport(sharedUris)
             onSharedUrisConsumed()

@@ -345,8 +345,14 @@ class LibraryViewModel(
                 val openedStream = runCatching { context.contentResolver.openInputStream(uri) }.getOrNull()
                     ?: runCatching {
                         // 兜底方案：如果是 file:// 协议或绝对路径
-                        if (uri.scheme == "file" || uri.path?.startsWith("/") == true) {
-                            java.io.FileInputStream(File(uri.path!!))
+                        val filePath = when {
+                            uri.scheme == "file" -> uri.path
+                            uri.path?.startsWith("/") == true -> uri.path
+                            else -> null
+                        }
+                        if (filePath != null) {
+                            val f = File(filePath)
+                            if (f.exists()) java.io.FileInputStream(f) else null
                         } else null
                     }.getOrNull()
 
@@ -380,8 +386,13 @@ class LibraryViewModel(
         // 1. 优先尝试 OpenableColumns 查询
         val fromProvider = try {
             context.contentResolver.query(uri, null, null, null, null)?.use { c ->
-                val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (idx >= 0 && c.moveToFirst()) c.getString(idx) else null
+                var idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx < 0) idx = c.getColumnIndex("_display_name")
+                if (idx < 0) idx = c.getColumnIndex("_data")
+                if (idx >= 0 && c.moveToFirst()) {
+                    val raw = c.getString(idx)
+                    if (!raw.isNullOrBlank()) raw.substringAfterLast("/") else null
+                } else null
             }
         } catch (_: Exception) {
             null

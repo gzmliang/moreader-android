@@ -42,7 +42,7 @@ import java.io.StringWriter
 class MainActivity : ComponentActivity() {
 
     private lateinit var repository: BookRepository
-    private var sharedUris: List<Uri> = emptyList()
+    private var sharedUris by mutableStateOf<List<Uri>>(emptyList())
 
     companion object {
         private const val TAG = "CrashHandler"
@@ -100,22 +100,26 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent) {
+        Log.i("MainActivity", "handleIntent action=${intent.action}, data=${intent.data}")
         when (intent.action) {
             Intent.ACTION_SEND -> {
                 // Single file shared
                 intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { uri ->
+                    Log.i("MainActivity", "ACTION_SEND uri=$uri")
                     sharedUris = listOf(uri)
                 }
             }
             Intent.ACTION_SEND_MULTIPLE -> {
                 // Multiple files shared
                 intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris ->
+                    Log.i("MainActivity", "ACTION_SEND_MULTIPLE uris=$uris")
                     sharedUris = uris
                 }
             }
             Intent.ACTION_VIEW -> {
                 // File opened from file manager
                 intent.data?.let { uri ->
+                    Log.i("MainActivity", "ACTION_VIEW uri=$uri")
                     sharedUris = listOf(uri)
                 }
             }

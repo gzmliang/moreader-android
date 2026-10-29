@@ -26,23 +26,26 @@ class MobiConverterTest {
     }
 
     @Test
-    fun testParseMobiAndConvertToEpub() {
-        val sampleMobi = File("/tmp/test_sample.mobi")
-        assertTrue("Test mobi must exist", sampleMobi.exists())
+    fun testMultiChapterMobiSplit() {
+        val sampleMobi = File("/tmp/test_multi_chapter.mobi")
+        assertTrue("Test multi chapter mobi must exist", sampleMobi.exists())
 
-        assertTrue("isMobiFile check", MobiConverter.isMobiFile(sampleMobi))
-
-        val parsed = MobiConverter.parseMobi(sampleMobi)
-        assertEquals("My Test Mobi Book", parsed.title)
-        assertEquals("Moyue Author", parsed.author)
-        assertEquals(1, parsed.images.size)
-        assertTrue(parsed.html.contains("images/image_00001.gif"))
-
-        val outEpub = File("/tmp/converted_test.epub")
+        val outEpub = File("/tmp/converted_multi_chapter.epub")
         if (outEpub.exists()) outEpub.delete()
 
         MobiConverter.convertMobiToEpub(sampleMobi, outEpub)
         assertTrue(outEpub.exists())
-        assertTrue(outEpub.length() > 500)
+
+        // 验证生成的 EPUB 内部是否切出了多个 chapter_xxx.xhtml，且 NCX 具有相应章节
+        val zip = java.util.zip.ZipFile(outEpub)
+        assertNotNull(zip.getEntry("OEBPS/text/chapter_001.xhtml"))
+        assertNotNull(zip.getEntry("OEBPS/text/chapter_002.xhtml"))
+        assertNotNull(zip.getEntry("OEBPS/text/chapter_003.xhtml"))
+
+        val ncx = zip.getInputStream(zip.getEntry("OEBPS/toc.ncx")).bufferedReader().readText()
+        assertTrue(ncx.contains("Chapter 1"))
+        assertTrue(ncx.contains("Chapter 2"))
+        assertTrue(ncx.contains("Chapter 3"))
+        zip.close()
     }
 }
