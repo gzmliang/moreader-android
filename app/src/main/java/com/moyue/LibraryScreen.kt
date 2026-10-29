@@ -169,10 +169,12 @@ fun LibraryScreen(
                     }
                 }
                 "pdf" -> viewModel.importPdfUri(context, uri)
-                "mobi", "azw", "prc" -> viewModel.importMobiUri(context, uri)
+                "mobi", "azw", "azw3", "prc" -> viewModel.importMobiUri(context, uri)
                 else -> {
                     if (viewModel.isPdfUri(context, uri)) {
                         viewModel.importPdfUri(context, uri)
+                    } else if (viewModel.isMobiUri(context, uri)) {
+                        viewModel.importMobiUri(context, uri)
                     } else {
                         viewModel.importBook(context, uri)
                     }
@@ -279,14 +281,7 @@ fun LibraryScreen(
                             // 2. 添加图书
                             IconButton(onClick = {
                                 importLauncher.launch(
-                                    arrayOf(
-                                        "application/epub+zip",
-                                        "text/plain",
-                                        "application/pdf",
-                                        "application/zip",
-                                        "application/x-zip-compressed",
-                                        "application/octet-stream",
-                                    )
+                                    arrayOf("*/*")
                                 )
                             }, modifier = Modifier.size(36.dp)) {
                                 Icon(Icons.Default.Add, contentDescription = androidx.compose.ui.res.stringResource(com.moyue.app.R.string.import_book), modifier = Modifier.size(22.dp))
@@ -1009,14 +1004,7 @@ fun LibraryScreen(
                     Button(
                         onClick = {
                             importLauncher.launch(
-                                arrayOf(
-                                    "application/epub+zip",
-                                    "text/plain",
-                                    "application/pdf",
-                                    "application/zip",
-                                    "application/x-zip-compressed",
-                                    "application/octet-stream",
-                                )
+                                arrayOf("*/*")
                             )
                         },
                         shape = RoundedCornerShape(12.dp),

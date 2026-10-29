@@ -6,7 +6,7 @@ import java.nio.charset.Charset
 import java.util.zip.ZipFile
 
 /** 墨阅能直接入库的图书格式 */
-val BOOK_EXTS = setOf("epub", "txt", "pdf", "mobi", "azw", "prc")
+val BOOK_EXTS = setOf("epub", "txt", "pdf", "mobi", "azw", "azw3", "prc")
 
 /** 网盘书库里可点击处理的条目（zip 会在本地解开再挑书） */
 val DAV_HANDLED_EXTS = BOOK_EXTS + "zip"

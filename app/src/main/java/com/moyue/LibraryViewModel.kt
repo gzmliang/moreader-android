@@ -417,6 +417,18 @@ class LibraryViewModel(
         return false
     }
 
+    /** 判断一个 Uri 是不是 MOBI / AZW / PRC */
+    fun isMobiUri(context: Context, uri: Uri): Boolean {
+        val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull() ?: ""
+        if (mime.contains("mobi", ignoreCase = true) || mime.contains("amazon", ignoreCase = true)) return true
+        val name = queryDisplayName(context, uri) ?: uri.lastPathSegment ?: ""
+        val lower = name.lowercase()
+        if (lower.endsWith(".mobi") || lower.endsWith(".azw") || lower.endsWith(".azw3") || lower.endsWith(".prc")) return true
+        val pathLower = (uri.path ?: "").lowercase()
+        if (pathLower.endsWith(".mobi") || pathLower.endsWith(".azw") || pathLower.endsWith(".azw3") || pathLower.endsWith(".prc")) return true
+        return false
+    }
+
 
     fun deleteBook(context: Context, book: Book) {
         viewModelScope.launch {
