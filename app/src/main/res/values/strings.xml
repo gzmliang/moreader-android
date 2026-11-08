@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Moreader</string>
+    <string name="app_name">InkRead</string>
 
     <!-- General -->
     <string name="loading">正在加载...</string>
@@ -21,7 +21,7 @@
     <string name="lang_en">English</string>
 
     <!-- Library -->
-    <string name="library_title">Moreader</string>
+    <string name="library_title">InkRead</string>
     <string name="search_hint">搜索书名…</string>
     <string name="search_no_results">没有找到匹配的书</string>
     <string name="import_book">导入书籍</string>
@@ -909,6 +909,7 @@ AI Voice（云端 TTS）：
     <!-- 网盘书库：TXT / PDF / ZIP 导入 -->
     <string name="webdav_txt_converting">正在识别编码并转换 TXT…</string>
     <string name="webdav_txt_need_login">导入 TXT 需要登录墨阅云（用于在线转换），请先在「云同步设置」中登录</string>
+    <!-- 已废弃：TXT 自 2026-11-09 起改为手机本地转换，不再需要登录；保留字符串仅为兼容旧版本 -->
     <string name="webdav_txt_not_text">这不是文本文件（可能是二进制/加密文件，或已损坏）</string>
     <string name="webdav_txt_empty">TXT 内容为空或无法识别</string>
     <string name="webdav_txt_too_large">TXT 文件过大，建议拆分后再试</string>

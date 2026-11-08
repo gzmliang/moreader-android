@@ -2,7 +2,7 @@
     <string name="ai_translate">🤖 Translate</string>
     <string name="ai_translate_settings">🤖 AI Translation Settings</string>
     <string name="ai_translate_title">AI Translation</string>
-    <string name="app_name">Moreader</string>
+    <string name="app_name">InkRead</string>
     <string name="back">Back</string>
     <string name="bookmark_added">Bookmark added</string>
     <string name="bookmark_added_at">Added at %1$s</string>
@@ -220,7 +220,7 @@ Just change the Base URL and API Key</string>
     <string name="help_tts_edge_bullet2">Requires internet, no API key needed</string>
     <string name="help_tts_edge_bullet3">Supports multiple languages and voices</string>
     <string name="help_tts_edge_title">☁️ Edge TTS (Recommended, Free)</string>
-    <string name="help_tts_intro">MoYue offers multiple TTS engines for different scenarios.</string>
+    <string name="help_tts_intro">InkRead offers multiple TTS engines for different scenarios.</string>
     <string name="help_tts_speed_bullet1">Drag the slider to adjust reading speed</string>
     <string name="help_tts_speed_bullet2">0.5x = Slow  ·  1.0x = Normal  ·  2.0x = Fast</string>
     <string name="help_tts_speed_title">⚙️ Speed Adjustment</string>
@@ -234,7 +234,7 @@ Just change the Base URL and API Key</string>
     <string name="lang_en">English</string>
     <string name="lang_zh">Chinese</string>
     <string name="large_book_hint">Large books may take a while to load</string>
-    <string name="library_title">Moreader</string>
+    <string name="library_title">InkRead</string>
     <string name="search_hint">Search books…</string>
     <string name="search_no_results">No matching books found</string>
     <string name="load_book">Loading book...</string>
@@ -375,8 +375,8 @@ Just change the Base URL and API Key</string>
     <string name="vocab_export_md_pos">**Part of Speech**: %1$s</string>
     <string name="vocab_export_md_pronunciation">**Phonetic**: %1$s</string>
     <string name="vocab_export_md_time">Export time: %1$s</string>
-    <string name="vocab_export_md_title"># MoYue Vocabulary</string>
-    <string name="vocab_export_subject">MoYue Vocabulary Export</string>
+    <string name="vocab_export_md_title"># InkRead Vocabulary</string>
+    <string name="vocab_export_subject">InkRead Vocabulary Export</string>
     <string name="vocab_export_success">Successfully exported %1$d words</string>
     <string name="vocab_import_selected">Import to Flashcards</string>
     <string name="vocab_select_all">Select All</string>
@@ -773,7 +773,7 @@ Just change the Base URL and API Key</string>
     <string name="webdav_disconnect_btn">Disconnect WebDAV</string>
     <string name="sync_settings_title">Cloud Sync &amp; Upload Settings</string>
     <string name="sync_default_upload_target">Default Book Upload Target</string>
-    <string name="sync_target_moyue">MoYue Cloud (Sync Progress)</string>
+    <string name="sync_target_moyue">InkRead Cloud (Sync Progress)</string>
     <string name="sync_target_webdav">WebDAV Cloud (Full Books &amp; Bookmarks)</string>
     <string name="sync_webdav_dir_root">Current Dir: Root (Change in WebDAV browser)</string>
     <string name="sync_webdav_dir_custom">Current Dir: %1$s</string>
@@ -785,12 +785,12 @@ Just change the Base URL and API Key</string>
     <string name="sync_webdav_uploading">Uploading to WebDAV…</string>
     <!-- WebDAV library: TXT / PDF / ZIP import -->
     <string name="webdav_txt_converting">Detecting encoding and converting TXT…</string>
-    <string name="webdav_txt_need_login">Sign in to Moreader Cloud first (needed for TXT conversion). Open Sync Settings to sign in.</string>
+    <string name="webdav_txt_need_login">Sign in to InkRead Cloud first (needed for TXT conversion). Open Sync Settings to sign in.</string>
     <string name="webdav_txt_not_text">This is not a text file (binary, encrypted, or corrupted)</string>
     <string name="webdav_txt_empty">The TXT file is empty or unreadable</string>
     <string name="webdav_txt_too_large">The TXT file is too large; please split it and try again</string>
     <string name="webdav_txt_failed_fmt">TXT conversion failed: %1$s</string>
-    <string name="webdav_pdf_need_login">Sign in to Moreader Cloud first (needed for cloud conversion). Open Sync Settings to sign in.</string>
+    <string name="webdav_pdf_need_login">Sign in to InkRead Cloud first (needed for cloud conversion). Open Sync Settings to sign in.</string>
     <string name="webdav_pdf_prepare_failed">Could not prepare this PDF file</string>
     <string name="webdav_pdf_queued">Added to the PDF conversion queue; check the notification for progress</string>
     <string name="webdav_zip_extracting">Extracting archive…</string>
@@ -800,13 +800,13 @@ Just change the Base URL and API Key</string>
     <string name="sync_webdav_upload_fail">WebDAV upload failed: %1$s</string>
     <string name="sync_upload_single_cloud_default">Upload to Cloud (Default Target)</string>
     <string name="sync_upload_single_webdav">Upload to WebDAV (With Bookmarks)</string>
-    <string name="sync_help_guide_title">MoYue Cloud &amp; WebDAV Guide</string>
+    <string name="sync_help_guide_title">InkRead Cloud &amp; WebDAV Guide</string>
     <string name="sync_help_section1_title">1. Roles of Two Cloud Targets</string>
-    <string name="sync_help_section1_body">1. MoYue Cloud (Default): Used for real-time syncing of reading progress, bookmarks, and highlights across devices.\n2. WebDAV Cloud: Ideal as a large ebook repository, supporting Baidu Netdisk, Quark, Aliyun Drive, Nutstore, Synology NAS, etc.</string>
+    <string name="sync_help_section1_body">1. InkRead Cloud (Default): Used for real-time syncing of reading progress, bookmarks, and highlights across devices.\n2. WebDAV Cloud: Ideal as a large ebook repository, supporting Baidu Netdisk, Quark, Aliyun Drive, Nutstore, Synology NAS, etc.</string>
     <string name="sync_help_section2_title">2. What is AList? How to connect?</string>
     <string name="sync_help_section2_body">AList is a powerful open-source file list program supporting multiple storage providers (alist.nn.ci).\n\nIt mounts your Baidu Netdisk, Aliyun Drive, Quark, etc. and provides a standard WebDAV endpoint.\n\n• Format: enter \"http://server_ip:port/dav\" (with /dav) with your credentials.\n• Documentation: https://alist.nn.ci</string>
     <string name="sync_help_section3_title">3. Bookmarks &amp; Highlights Guarantee</string>
-    <string name="sync_help_section3_body">When uploading books to WebDAV, MoYue uploads the EPUB and automatically creates a companion metadata file (.moreader.json).\n\nWhen downloading from WebDAV on any device, reading progress, bookmarks, and highlights are fully restored!</string>
+    <string name="sync_help_section3_body">When uploading books to WebDAV, InkRead uploads the EPUB and automatically creates a companion metadata file (.moreader.json).\n\nWhen downloading from WebDAV on any device, reading progress, bookmarks, and highlights are fully restored!</string>
     <string name="sync_cloud_books_found_fmt">🔍 Found %1$d/%2$d books</string>
     <string name="sync_cloud_books_total_fmt">📚 %1$d books total (tap to download):</string>
     <string name="sync_download_restored_summary">%1$s (%2$d BMs, %3$d HLs)</string>
@@ -825,7 +825,7 @@ Just change the Base URL and API Key</string>
     <!-- Support & Donation -->
     <string name="donate_menu_title">☕ Buy Me a Coffee</string>
     <string name="donate_dialog_title">☕ Support Developer Liang</string>
-    <string name="donate_dialog_desc">Thank you for using Moreader! Your support keeps this tool actively maintained and continuously improved worldwide.</string>
+    <string name="donate_dialog_desc">Thank you for using InkRead! Your support keeps this tool actively maintained and continuously improved worldwide.</string>
     <string name="donate_domestic_title">🇨🇳 WeChat / Alipay</string>
     <string name="donate_domestic_hint">Scan QR code via WeChat or Alipay to support.</string>
     <string name="donate_save_qr_btn">💾 Save QR Code to Gallery</string>
@@ -936,7 +936,7 @@ Other OpenAI-compatible APIs also work:
 • Moonshot: api.moonshot.cn
 • SiliconFlow: api.siliconflow.cn
 Just change the Base URL and API Key.</string>
-    <string name="help_local_ai_content">Moreader supports on-device AI translation — look up and translate words without an internet connection.
+    <string name="help_local_ai_content">InkRead supports on-device AI translation — look up and translate words without an internet connection.
 
 How to use:
 1. Switch to "Local model"
@@ -956,7 +956,7 @@ Speed reference (OnePlus 12, Snapdragon 8 Gen 3):
 • 0.5B: first token 0.7-1.3s, translation 4-8s
 • 1.5B: first token 1.3-2.1s, translation 6-15s
 • Bigger models are more accurate; 1.5B is the safe choice.</string>
-    <string name="help_tts_content">Moreader offers several TTS reading engines.
+    <string name="help_tts_content">InkRead offers several TTS reading engines.
 
 Edge TTS (free, recommended):
 • Microsoft\'s free speech synthesis, great quality
