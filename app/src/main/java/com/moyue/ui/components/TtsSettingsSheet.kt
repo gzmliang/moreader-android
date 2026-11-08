@@ -529,6 +529,12 @@ private fun VoiceSettingsTab(
                     singleLine = true, modifier = Modifier.weight(1f), textStyle = TextStyle(fontSize = 12.sp),
                 )
             }
+            if (com.moyue.app.tts.AIVoiceTTSProvider.normalizeBaseUrl(localEp.value) == null) {
+                Text(
+                    stringResource(R.string.tts_ai_voice_url_missing),
+                    fontSize = 10.sp, color = MaterialTheme.colorScheme.error,
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 horizontalArrangement = Arrangement.End,

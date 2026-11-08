@@ -2,6 +2,23 @@
 
 ---
 
+## 🌟 v1.1.71 (Build 20223) — 修复 AI 音色 Base URL 为空导致 App 直接崩溃
+
+> **拍板背景**：梁老师点朗读时 App 闪退，堆栈为 `IllegalArgumentException: Expected URL scheme 'http' or 'https' but no scheme was found for /audio...`，崩在 `AIVoiceTTSProvider.speak`。根因：AI 音色的 Base URL 默认为空，旧代码直接拿空串拼 `/audio/speech`，OkHttp 在 UI 线程同步抛异常，整个进程崩溃。
+
+### 1. 彻底不再崩
+- 新增 `AIVoiceTTSProvider.normalizeBaseUrl()`：空地址、纯路径（`/audio`）、缺 scheme（自动补 `https://`）、非法主机一律识别并转成友好错误，绝不把异常抛到主线程；
+- `speak()` / `fetchAudio()` 全链路 try-catch，请求构造失败只回调 `onError`；
+- `CustomTTSProvider` 同步收敛到同一套地址规范化，避免同类崩溃。
+
+### 2. 设置页提前提示
+- AI 音色面板在 Base URL 为空/非法时直接显示红色提示（中英双语），用户不必等到点播放才发现没声音。
+
+### 3. 回归测试
+- 新增 `AIVoiceBaseUrlTest`：空串、纯路径、`http://`、漏写 scheme、正常地址 5 类用例，与 `TocLabelFormatTest` 共 10 组全部通过。
+
+---
+
 ## 🌟 v1.1.70 (Build 20222) — AI 出题章节列表：杜绝双序号，只显示真正的正文章节
 
 > **拍板背景**：梁老师在 AI 自测「自定义章节范围」弹窗里又看到 `14. 8. Night Riders` 这种两个数字的标题，且下拉里混着封面、版权页、目录页等无关条目。根因是旧代码无条件在 NCX 目录标题前拼了一层序号，而这本书的目录标题本身就带编号（`8. Night Riders`），于是变成双数字。

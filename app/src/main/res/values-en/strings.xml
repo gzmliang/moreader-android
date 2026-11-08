@@ -317,6 +317,7 @@ Just change the Base URL and API Key</string>
     <string name="tts_api_key">API Key</string>
     <string name="tts_api_key_only_hint">API Key (only this field needed)</string>
     <string name="tts_base_url">Base URL</string>
+    <string name="tts_ai_voice_url_missing">⚠️ Please fill in the Base URL (e.g. https://api.siliconflow.cn/v1) first, otherwise AI voice cannot play.</string>
     <string name="tts_custom_tts_hint">For MOSS-TTSD-Nano, CosyVoice and other local deployments</string>
     <string name="tts_system_settings">System Voice Settings</string>
     <string name="tts_system_settings_desc">Choose engine, voice, speed, etc. Changes take effect immediately</string>

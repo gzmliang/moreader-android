@@ -42,8 +42,7 @@ class CustomTTSProvider(
      * Fetch audio bytes for preloading
      */
     suspend fun fetchAudio(text: String, rate: Float = 1.0f): ByteArray? {
-        val baseUrl = endpoint.removeSuffix("/")
-        if (baseUrl.isEmpty() || (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://"))) return null
+        val baseUrl = AIVoiceTTSProvider.normalizeBaseUrl(endpoint) ?: return null
         return try {
             val json = buildRequestBody(text)
             val body = json.toString().toRequestBody("application/json".toMediaType())
@@ -74,8 +73,7 @@ class CustomTTSProvider(
         val myGen = ++generation   // ★ 本次播放的令牌
 
         // endpoint 为空或缺少 scheme 时，直接报错，不让 OkHttp 崩溃
-        val baseUrl = endpoint.removeSuffix("/")
-        if (baseUrl.isEmpty() || (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://"))) {
+        val baseUrl = AIVoiceTTSProvider.normalizeBaseUrl(endpoint) ?: run {
             listener.onError("Custom TTS: invalid endpoint URL \"$endpoint\", please set a valid http(s) address in Settings.")
             return
         }

@@ -4,6 +4,7 @@ import com.moyue.app.data.models.TTSProviderType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -11,11 +12,44 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class AIVoiceTTSProvider(
-    private val endpoint: String = "https://api.siliconflow.cn/v1",
+    endpoint: String = DEFAULT_ENDPOINT,
     private val apiKey: String = "",
     private val model: String = "fnlp/MOSS-TTSD-v0.5",
     private val voice: String = "fnlp/MOSS-TTSD-v0.5:anna",
 ) : TTSProvider {
+
+    companion object {
+        const val DEFAULT_ENDPOINT = "https://api.siliconflow.cn/v1"
+
+        /**
+         * 规范化 Base URL：空/无 scheme/非法地址一律返回 null，由调用方转成友好错误。
+         * ★ 历史坑：此处若直接拿空串拼 "/audio/speech"，Request.Builder 会抛
+         *   IllegalArgumentException: Expected URL scheme... 直接崩掉整个 App。
+         */
+        fun normalizeBaseUrl(raw: String): String? {
+            val t = raw.trim().trimEnd('/')
+            if (t.isEmpty()) return null
+            // 只有路径（如 "/audio/speech"）不是可用服务地址
+            if (t.startsWith("/")) return null
+            val withScheme = when {
+                t.startsWith("http://", true) || t.startsWith("https://", true) -> t
+                t.startsWith("//") -> "https:$t"
+                else -> "https://$t"
+            }
+            return try {
+                val u = withScheme.toHttpUrlOrNull()
+                val validHost = u != null && (u.host.contains(".") ||
+                        u.host.equals("localhost", true) || u.host.contains(":"))
+                if (u == null || u.host.isBlank() || !validHost) null else withScheme
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
+    /** 已规范化的服务根地址；null 表示用户没填或填错 */
+    private val baseUrl: String? = normalizeBaseUrl(endpoint)
+    private val missingUrlMsg = "AI Voice Base URL is not set. Please fill it in TTS settings."
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -35,6 +69,7 @@ class AIVoiceTTSProvider(
      * Fetch audio bytes for preloading
      */
     suspend fun fetchAudio(text: String, rate: Float = 1.0f): ByteArray? {
+        val base = baseUrl ?: return null
         return try {
             val json = JSONObject().apply {
                 put("model", model)
@@ -44,7 +79,7 @@ class AIVoiceTTSProvider(
             }
             val body = json.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
-                .url("${endpoint.removeSuffix("/")}/audio/speech")
+                .url("$base/audio/speech")
                 .post(body)
                 .addHeader("Authorization", "Bearer $apiKey")
                 .addHeader("Content-Type", "application/json")
@@ -59,6 +94,10 @@ class AIVoiceTTSProvider(
     override fun speak(text: String, rate: Float, listener: TTSListener) {
         stop()
         val myGen = ++generation   // ★ 本次播放的令牌
+        val base = baseUrl ?: run {
+            listener.onError(missingUrlMsg)
+            return
+        }
 
         val json = JSONObject().apply {
             put("model", model)
@@ -68,14 +107,22 @@ class AIVoiceTTSProvider(
         }
 
         val body = json.toString().toRequestBody("application/json".toMediaType())
-        val request = Request.Builder()
-            .url("${endpoint.removeSuffix("/")}/audio/speech")
-            .post(body)
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
-            .build()
+        val request = try {
+            Request.Builder()
+                .url("$base/audio/speech")
+                .post(body)
+                .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Content-Type", "application/json")
+                .build()
+        } catch (e: Exception) {
+            listener.onError("AI Voice bad Base URL: ${e.message}")
+            return
+        }
 
-        val call = client.newCall(request)
+        val call = try { client.newCall(request) } catch (e: Exception) {
+            listener.onError("AI Voice request failed: ${e.message}")
+            return
+        }
         pendingCalls.add(call)
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
