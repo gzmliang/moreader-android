@@ -584,11 +584,17 @@ object AiPromptBuilder {
             3. NEVER include obviously absurd, off-topic, or implausible distractors — all options must be grounded in the text's world.
             4. NEVER generate Easy-level recall questions when difficulty is Medium or Hard.
             5. NEVER ask questions whose answers are not supported by the provided text.
-            6. SCOPE LOCK (MOST CRITICAL RULE): You MUST generate ALL questions EXCLUSIVELY from the text provided below in the user message. This is the ONLY source of truth.
-               - NEVER reference events, characters, chapters, or facts from outside the provided text — even if you have prior knowledge of this book.
-               - NEVER mention chapter numbers or events that do not appear in the provided text.
-               - Every question, every option, and every analysis explanation MUST be directly traceable to specific content within the provided text.
+            6. ANTI-HALLUCINATION & SCOPE LOCK (CRITICAL SUPREME RULE):
+               - You MUST generate ALL questions, options, and explanations EXCLUSIVELY from the text provided below. This is the ONLY source of truth.
+               - STRICTLY FORBIDDEN from using external background knowledge, folklore, popular adaptations, operas, or historical common sense to fabricate unmentioned actions, dialogue, or events!
+               - STRICTLY FORBIDDEN from inventing arbitrary "Chapter X" numbers! Many digital books do not have mechanical chapter numbers. Formulate questions focusing on characters, events, dialogues, or use the explicit chapter titles given in the text (e.g. "When Jack arrived...", NOT "In Chapter 17...").
+               - CONCRETE EXAMPLE OF PROHIBITED HALLUCINATION: If the text merely mentions a character's name (e.g. "虞姬"), but DOES NOT explicitly describe her singing, dancing, or performing, you are ABSOLUTELY FORBIDDEN from inventing questions or options asking "What did her singing and dancing express?" or mentioning dancing/singing in any option! Every action, behavior, statement, and detail in questions and options MUST have direct textual grounds in the provided excerpt.
+               - If an action or plot detail does not occur in the provided text, IT DOES NOT EXIST. Do not guess, do not embellish, do not imagine!
+               - In the "analysisOriginal" explanation, you MUST explicitly cite the original phrase or sentence from the text that proves the answer.
                - If the provided text covers Chapters 6–8, you MUST NOT reference Chapter 12, Chapter 13, or any content beyond what is given.
+            7. MULTI-CHAPTER COVERAGE DIRECTIVE (WHEN APPLICABLE):
+               - When the provided text contains multiple chapters (e.g., Chapter Range or Book Overview), you MUST read through ALL provided chapters.
+               - Distribute your $count questions BALANCED across different chapters from beginning to end. DO NOT lazily pick only from the first chapter!
 
             QUESTION DIVERSITY — distribute questions across these types (do not cluster on one type):
             - For narrative/fiction: story events, character motivation, cause & effect, relationship dynamics, theme, consequence
@@ -965,7 +971,7 @@ object AiPromptBuilder {
             $avoidSection
 
             STRICT RULES:
-            1. SCOPE LOCK: Questions MUST be strictly derived from the provided text. No outside facts or imaginary details.
+            1. ANTI-HALLUCINATION & SCOPE LOCK: Questions, options, and explanations MUST be strictly derived from the provided text. No outside facts, historical folklore, or imaginary actions/details (e.g. if the text mentions a person but no dancing/singing, do NOT invent questions about dancing/singing).
             2. Multiple Choice Format: Exactly 4 options (A, B, C, D) per question, with only ONE correct answer.
             3. Meaningful Distractors: Distractors must be grounded in the context, not absurd or trivial.
             4. Detailed Explanation: Provide an accurate analysis ("analysisOriginal") justifying the correct answer by pointing to text evidence.

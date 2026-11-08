@@ -764,6 +764,10 @@ AI Voice（云端 TTS）：
     <string name="ai_tts_read_option">朗读该选项</string>
     <string name="ai_tts_read_analysis">朗读解析</string>
     <string name="ai_tts_unavailable">朗读服务暂时不可用，请稍后再试。</string>
+    <string name="ai_quiz_clear_cache_btn">清空题目缓存</string>
+    <string name="ai_quiz_clear_cache_dialog_title">清空题目缓存</string>
+    <string name="ai_quiz_clear_cache_dialog_msg">确定要清空当前范围已缓存的测试题目吗？清空后将恢复为未生成状态，可以重新出题。</string>
+    <string name="ai_quiz_clear_cache_success">已清空题目缓存</string>
     <string name="ai_quiz_tts_on">题目朗读已开启（点击关闭）</string>
     <string name="ai_quiz_tts_off">题目朗读已关闭（点击开启）</string>
     <string name="ai_quiz_export_title">导出测验卷</string>

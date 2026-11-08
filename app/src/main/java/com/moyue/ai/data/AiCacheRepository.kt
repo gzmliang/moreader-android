@@ -290,6 +290,13 @@ class AiCacheRepository(private val context: Context) {
         prefs.edit().putString(key, gson.toJson(quiz)).apply()
     }
 
+    fun clearQuiz(bookId: String, chapterIndex: Int, scope: String, count: Int, difficulty: String) {
+        val primaryKey = quizCacheKey("quiz", bookId, chapterIndex, scope, count, difficulty)
+        val legacyKey = "quiz_${bookId}_${chapterIndex}_${scope}_${count}_${difficulty}"
+        clearQuizDraft(bookId, chapterIndex, scope, count, difficulty)
+        prefs.edit().remove(primaryKey).remove(legacyKey).apply()
+    }
+
     // Last Active AI Tab (0: Summary, 1: Plot, 2: Quiz, 3: Reports)
     fun getLastAiTab(): Int = prefs.getInt("last_ai_tab", 0)
     fun setLastAiTab(tab: Int) = prefs.edit().putInt("last_ai_tab", tab).apply()

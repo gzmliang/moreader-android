@@ -1126,6 +1126,7 @@ fun ReaderScreen(
                     bookDao = repository.dao,
                     edgeTTS = currentEdgeTTS,
                     isEinkMode = state.isEinkMode,
+                    readerTheme = state.theme,
                     bookRepository = repository,
                     edgeEndpoint = state.edgeTtsEndpoint,
                     edgeVoice = state.edgeTtsVoice,
@@ -1414,12 +1415,14 @@ fun ReaderScreen(
                         actions = {
                             IconButton(onClick = { showAiCompanion = true }) {
                                 val textColor = Color(android.graphics.Color.parseColor(state.theme.textColor))
+                                // 暗色主题下墨水屏的黑字不可用（黑压黑），改用主题前景色
+                                val einkBtn = state.isEinkMode && !state.theme.isDark
                                 Surface(
                                     shape = RoundedCornerShape(5.dp),
-                                    color = if (state.isEinkMode) Color.Transparent else textColor.copy(alpha = 0.08f),
+                                    color = if (einkBtn) Color.Transparent else textColor.copy(alpha = 0.08f),
                                     border = BorderStroke(
                                         width = 1.2.dp,
-                                        color = if (state.isEinkMode) Color.Black else textColor.copy(alpha = 0.65f)
+                                        color = if (einkBtn) Color.Black else textColor.copy(alpha = 0.65f)
                                     ),
                                     modifier = Modifier.padding(horizontal = 2.dp)
                                 ) {
@@ -1429,7 +1432,7 @@ fun ReaderScreen(
                                         fontWeight = FontWeight.Black,
                                         fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
                                         letterSpacing = 0.8.sp,
-                                        color = if (state.isEinkMode) Color.Black else textColor,
+                                        color = if (einkBtn) Color.Black else textColor,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }

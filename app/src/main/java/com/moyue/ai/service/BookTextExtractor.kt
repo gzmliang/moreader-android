@@ -37,7 +37,9 @@ object BookTextExtractor {
             val chapters = repository.parseSpine(bookId)
 
             val chapterTitles = if (toc.isNotEmpty()) {
-                toc.mapIndexed { idx, entry -> "${idx + 1}. ${entry.label.trim()}" }
+                TocLabelFormat.bodyIndices(toc.map { it.label }).mapIndexed { pos, origIdx ->
+                    TocLabelFormat.format(pos + 1, toc[origIdx].label)
+                }
             } else if (chapters.isNotEmpty()) {
                 chapters.mapIndexed { idx, _ -> "${idx + 1}. Chapter ${idx + 1}" }
             } else {
@@ -133,19 +135,20 @@ object BookTextExtractor {
             // 方案 A：范围内全部章节正文按顺序送入，不做采样、不附目录大纲（避免模型借目录越界出题）
             // 总量超限时保留前面章节，并明确告知模型范围不完整
             val maxTotalChars = 60000
-            val chapterBlocks = mutableListOf<Pair<Int, String>>() // (章节号, 正文块)
+            val chapterBlocks = mutableListOf<Triple<Int, String, String>>() // (章节序号, 标题, 正文)
             for (i in (safeStart - 1) until safeEnd) {
                 val href = when {
                     i < chapters.size -> chapters[i].href
                     i < toc.size -> toc[i].href
                     else -> null
                 } ?: continue
-                val title = if (i < toc.size) toc[i].label.trim() else "Chapter ${i + 1}"
+                val rawTitle = if (i < toc.size) toc[i].label.trim() else ""
                 val cleanHref = href.substringBefore('#')
                 val html = repository.getChapterContent(bookId, cleanHref) ?: continue
                 val plain = extractChapterText(html)
                 if (plain.isNotBlank()) {
-                    chapterBlocks.add(Pair(i + 1, "--- Chapter ${i + 1}: $title ---\n$plain\n\n"))
+                    val displayHeading = if (rawTitle.isNotBlank()) "--- Section: $rawTitle ---" else "--- Section ${i + 1} ---"
+                    chapterBlocks.add(Triple(i + 1, rawTitle, "$displayHeading\n$plain\n\n"))
                 }
             }
 
@@ -154,24 +157,29 @@ object BookTextExtractor {
             }
 
             val sb = StringBuilder()
-            val total = chapterBlocks.sumOf { it.second.length }
+            sb.append("=== CUSTOM CHAPTER RANGE EXCERPTS ===\n")
+            sb.append("Selected Range: Item $safeStart to Item $safeEnd (Total ${chapterBlocks.size} Sections Included)\n")
+            sb.append("Instruction: Read ALL provided sections carefully. Questions must test across different sections, not just the first one.\n\n")
+
+            val total = chapterBlocks.sumOf { it.third.length }
             if (total <= maxTotalChars) {
-                chapterBlocks.forEach { sb.append(it.second) }
+                chapterBlocks.forEach { sb.append(it.third) }
             } else {
                 var used = 0
-                val kept = mutableListOf<Pair<Int, String>>()
+                val kept = mutableListOf<Triple<Int, String, String>>()
                 for (block in chapterBlocks) {
-                    if (used + block.second.length > maxTotalChars) break
-                    used += block.second.length
+                    if (used + block.third.length > maxTotalChars) break
+                    used += block.third.length
                     kept.add(block)
                 }
                 if (kept.isEmpty()) {
-                    kept.add(Pair(chapterBlocks[0].first, chapterBlocks[0].second.take(maxTotalChars)))
+                    val first = chapterBlocks[0]
+                    kept.add(Triple(first.first, first.second, first.third.take(maxTotalChars)))
                 }
                 val lastKept = kept.last().first
-                sb.append("[NOTICE: Only Chapter ${kept.first().first} to Chapter $lastKept of the selected range is provided due to length limits. ")
-                sb.append("Generate questions ONLY from the provided chapters. Do NOT infer or mention any other chapter.]\n\n")
-                kept.forEach { sb.append(it.second) }
+                sb.append("[NOTICE: Only Section ${kept.first().first} to Section $lastKept of the selected range is provided due to length limits. ")
+                sb.append("Generate questions ONLY from the provided sections. Do NOT infer or mention any other section.]\n\n")
+                kept.forEach { sb.append(it.third) }
             }
 
             val result = sb.toString().trim()
@@ -191,5 +199,37 @@ object BookTextExtractor {
         Key Excerpt / Representative Content:
         $preview
         """.trimIndent()
+    }
+
+    /**
+     * 异步提取指定章节的简要片段（开头或结尾约 150 字），供范围选择对话框实时对齐预览
+     */
+    suspend fun extractChapterPreviewSnippet(
+        repository: BookRepository?,
+        bookId: String,
+        chapterIndex0Based: Int,
+        takeEnd: Boolean = false
+    ): String = withContext(Dispatchers.IO) {
+        if (repository == null) return@withContext ""
+        try {
+            val chapters = repository.parseSpine(bookId)
+            val toc = repository.parseToc(bookId)
+            val href = when {
+                chapterIndex0Based in chapters.indices -> chapters[chapterIndex0Based].href
+                chapterIndex0Based in toc.indices -> toc[chapterIndex0Based].href
+                else -> null
+            } ?: return@withContext ""
+            val cleanHref = href.substringBefore('#')
+            val html = repository.getChapterContent(bookId, cleanHref) ?: return@withContext ""
+            val plain = extractChapterText(html).trim()
+            if (plain.isBlank()) return@withContext ""
+            if (takeEnd) {
+                if (plain.length <= 160) plain else "..." + plain.takeLast(160).trim()
+            } else {
+                if (plain.length <= 160) plain else plain.take(160).trim() + "..."
+            }
+        } catch (_: Exception) {
+            ""
+        }
     }
 }

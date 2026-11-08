@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Quiz
@@ -48,6 +49,7 @@ import com.moyue.ai.model.StudyInsightResult
 import com.moyue.ai.service.AiPromptBuilder
 import com.moyue.ai.service.BookTextExtractor
 import com.moyue.ai.service.LlmClient
+import com.moyue.ai.service.TocLabelFormat
 import com.moyue.ai.ui.components.InteractiveQuizDialog
 import com.moyue.ai.util.QuizExporter
 import com.moyue.app.R
@@ -105,9 +107,15 @@ fun QuizTabContent(
         }
     }
 
+    // 真实正文章节索引（过滤封面/版权页/目录页等附属页，避免下拉里出现无关章节）
+    val chapterIndices = remember(tocEntries) {
+        TocLabelFormat.bodyIndices(tocEntries.map { it.label })
+    }
+
     // 自定义章节范围与自定义题数弹窗状态
     var showRangeDialog by remember { mutableStateOf(false) }
     var showCountDialog by remember { mutableStateOf(false) }
+    var showClearCacheConfirmDialog by remember { mutableStateOf(false) }
     var selectedStartIndex by remember { mutableIntStateOf(0) } // 0-based
     var selectedEndIndex by remember { mutableIntStateOf(0) }   // 0-based
     var customCountText by remember { mutableStateOf("") }
@@ -504,16 +512,23 @@ fun QuizTabContent(
                             text = { Text(stringResource(R.string.ai_scope_custom), fontSize = 13.sp) },
                             onClick = {
                                 scopeMenuExpanded = false
-                                val total = tocEntries.size.coerceAtLeast(1)
+                                val total = chapterIndices.size.coerceAtLeast(1)
                                 if (selectedScope.startsWith("range:")) {
                                     val parts = selectedScope.split(":")
                                     val s = (parts.getOrNull(1)?.toIntOrNull() ?: 1).coerceIn(1, total)
                                     val e = (parts.getOrNull(2)?.toIntOrNull() ?: s).coerceIn(s, total)
-                                    selectedStartIndex = s - 1
-                                    selectedEndIndex = e - 1
+                                    // range 存的是原目录 1-based 序号，需映射回过滤后列表位置
+                                    val sPos = chapterIndices.indexOfFirst { it + 1 >= s }.coerceAtLeast(0)
+                                    val ePos = chapterIndices.indexOfLast { it + 1 <= e }.let {
+                                        if (it < 0) chapterIndices.lastIndex else it
+                                    }
+                                    selectedStartIndex = sPos.coerceIn(0, chapterIndices.lastIndex.coerceAtLeast(0))
+                                    selectedEndIndex = ePos.coerceAtLeast(selectedStartIndex)
                                 } else {
-                                    val cur = chapterIndex.coerceIn(0, total - 1)
-                                    selectedStartIndex = cur
+                                    val cur = chapterIndices.indexOfFirst { it >= chapterIndex }.let {
+                                        if (it < 0) 0 else it
+                                    }
+                                    selectedStartIndex = cur.coerceIn(0, total - 1)
                                     selectedEndIndex = (cur + 4).coerceAtMost(total - 1)
                                 }
                                 showRangeDialog = true
@@ -865,6 +880,18 @@ fun QuizTabContent(
                                 quizTtsEnabled -> MaterialTheme.colorScheme.primary
                                 else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                             },
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { showClearCacheConfirmDialog = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = stringResource(R.string.ai_quiz_clear_cache_btn),
+                            tint = if (isEink) Color.Black else MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -1406,17 +1433,47 @@ fun QuizTabContent(
         }
     }
 
-    // 自定义章节范围弹窗（方案 A：真实章节目录下拉选择器）
+    // 自定义章节范围弹窗（方案 A：真实章节目录下拉选择器 + 首尾对齐实时文字预览卡片）
     if (showRangeDialog) {
-        val total = tocEntries.size.coerceAtLeast(1)
+        val total = chapterIndices.size.coerceAtLeast(1)
         var startMenuOpen by remember { mutableStateOf(false) }
         var endMenuOpen by remember { mutableStateOf(false) }
 
-        val startChapterTitle = tocEntries.getOrNull(selectedStartIndex)?.label?.trim()
-            ?: "Chapter ${selectedStartIndex + 1}"
-        val endChapterTitle = tocEntries.getOrNull(selectedEndIndex)?.label?.trim()
-            ?: "Chapter ${selectedEndIndex + 1}"
-        val selectedCount = (selectedEndIndex - selectedStartIndex + 1).coerceAtLeast(1)
+        val safeStartPos = selectedStartIndex.coerceIn(0, chapterIndices.lastIndex.coerceAtLeast(0))
+        val safeEndPos = selectedEndIndex.coerceIn(safeStartPos, chapterIndices.lastIndex.coerceAtLeast(0))
+        // 原目录 0-based 索引（range 与正文抽取仍按原目录顺序，保持旧逻辑不变）
+        val startTocIndex = chapterIndices.getOrNull(safeStartPos) ?: safeStartPos
+        val endTocIndex = chapterIndices.getOrNull(safeEndPos) ?: safeEndPos
+        val startDisplay = TocLabelFormat.format(
+            safeStartPos + 1,
+            tocEntries.getOrNull(startTocIndex)?.label ?: "Chapter ${startTocIndex + 1}"
+        )
+        val endDisplay = TocLabelFormat.format(
+            safeEndPos + 1,
+            tocEntries.getOrNull(endTocIndex)?.label ?: "Chapter ${endTocIndex + 1}"
+        )
+        val selectedCount = (safeEndPos - safeStartPos + 1).coerceAtLeast(1)
+
+        var previewStartSnippet by remember { mutableStateOf("") }
+        var previewEndSnippet by remember { mutableStateOf("") }
+
+        LaunchedEffect(startTocIndex, bookId) {
+            previewStartSnippet = BookTextExtractor.extractChapterPreviewSnippet(
+                repository = bookRepository,
+                bookId = bookId,
+                chapterIndex0Based = startTocIndex,
+                takeEnd = false
+            )
+        }
+
+        LaunchedEffect(endTocIndex, bookId) {
+            previewEndSnippet = BookTextExtractor.extractChapterPreviewSnippet(
+                repository = bookRepository,
+                bookId = bookId,
+                chapterIndex0Based = endTocIndex,
+                takeEnd = true
+            )
+        }
 
         AlertDialog(
             onDismissRequest = { showRangeDialog = false },
@@ -1466,7 +1523,7 @@ fun QuizTabContent(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text(
-                                        text = "${selectedStartIndex + 1}. $startChapterTitle",
+                                        text = startDisplay,
                                         fontSize = 13.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -1486,20 +1543,21 @@ fun QuizTabContent(
                                     .fillMaxWidth(0.85f)
                                     .heightIn(max = 280.dp)
                             ) {
-                                tocEntries.forEachIndexed { idx, entry ->
+                                chapterIndices.forEachIndexed { pos, origIdx ->
+                                    val entry = tocEntries.getOrNull(origIdx) ?: return@forEachIndexed
                                     DropdownMenuItem(
                                         text = {
                                             Text(
-                                                text = "${idx + 1}. ${entry.label.trim()}",
+                                                text = TocLabelFormat.format(pos + 1, entry.label),
                                                 fontSize = 13.sp,
-                                                fontWeight = if (idx == selectedStartIndex) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (idx == selectedStartIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                                fontWeight = if (pos == safeStartPos) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (pos == safeStartPos) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                             )
                                         },
                                         onClick = {
-                                            selectedStartIndex = idx
-                                            if (selectedEndIndex < idx) {
-                                                selectedEndIndex = idx
+                                            selectedStartIndex = pos
+                                            if (selectedEndIndex < pos) {
+                                                selectedEndIndex = pos
                                             }
                                             startMenuOpen = false
                                         }
@@ -1535,7 +1593,7 @@ fun QuizTabContent(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text(
-                                        text = "${selectedEndIndex + 1}. $endChapterTitle",
+                                        text = endDisplay,
                                         fontSize = 13.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -1555,25 +1613,26 @@ fun QuizTabContent(
                                     .fillMaxWidth(0.85f)
                                     .heightIn(max = 280.dp)
                             ) {
-                                tocEntries.forEachIndexed { idx, entry ->
-                                    val isAvailable = idx >= selectedStartIndex
+                                chapterIndices.forEachIndexed { pos, origIdx ->
+                                    val entry = tocEntries.getOrNull(origIdx) ?: return@forEachIndexed
+                                    val isAvailable = pos >= safeStartPos
                                     DropdownMenuItem(
                                         text = {
                                             Text(
-                                                text = "${idx + 1}. ${entry.label.trim()}",
+                                                text = TocLabelFormat.format(pos + 1, entry.label),
                                                 fontSize = 13.sp,
-                                                fontWeight = if (idx == selectedEndIndex) FontWeight.Bold else FontWeight.Normal,
+                                                fontWeight = if (pos == safeEndPos) FontWeight.Bold else FontWeight.Normal,
                                                 color = when {
-                                                    idx == selectedEndIndex -> MaterialTheme.colorScheme.primary
+                                                    pos == safeEndPos -> MaterialTheme.colorScheme.primary
                                                     !isAvailable -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                                     else -> MaterialTheme.colorScheme.onSurface
                                                 }
                                             )
                                         },
                                         onClick = {
-                                            selectedEndIndex = idx
-                                            if (selectedStartIndex > idx) {
-                                                selectedStartIndex = idx
+                                            selectedEndIndex = pos
+                                            if (selectedStartIndex > pos) {
+                                                selectedStartIndex = pos
                                             }
                                             endMenuOpen = false
                                         }
@@ -1593,8 +1652,8 @@ fun QuizTabContent(
                             text = stringResource(
                                 R.string.ai_quiz_range_scope_summary,
                                 selectedCount,
-                                startChapterTitle.take(10),
-                                endChapterTitle.take(10)
+                                startDisplay.take(10),
+                                endDisplay.take(10)
                             ),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
@@ -1602,14 +1661,55 @@ fun QuizTabContent(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                         )
                     }
+
+                    // ── 所选范围首尾对齐实时文字预览卡片（恢复经典反馈）──
+                    if (previewStartSnippet.isNotBlank() || previewEndSnippet.isNotBlank()) {
+                        Surface(
+                            color = if (isEink) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = if (isEink) androidx.compose.foundation.BorderStroke(1.dp, Color.Black) else androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = stringResource(R.string.ai_quiz_preview_header),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isEink) Color.Black else MaterialTheme.colorScheme.primary
+                                )
+                                if (previewStartSnippet.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = stringResource(R.string.ai_quiz_preview_start, previewStartSnippet),
+                                        fontSize = 11.sp,
+                                        lineHeight = 15.sp,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                if (previewEndSnippet.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = stringResource(R.string.ai_quiz_preview_end, previewEndSnippet),
+                                        fontSize = 11.sp,
+                                        lineHeight = 15.sp,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (isEink) Color.Black else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         if (selectedStartIndex <= selectedEndIndex) {
-                            val s = selectedStartIndex + 1
-                            val e = selectedEndIndex + 1
+                            val s = (chapterIndices.getOrNull(selectedStartIndex) ?: selectedStartIndex) + 1
+                            val e = (chapterIndices.getOrNull(selectedEndIndex) ?: selectedEndIndex) + 1
                             val newScope = "range:$s:$e"
                             selectedScope = newScope
                             repository.setLastQuizScope(bookId, newScope)
@@ -1709,6 +1809,50 @@ fun QuizTabContent(
                 userAnswers.clear()
                 isSubmitted = false
                 showInteractiveDialog = false
+            }
+        )
+    }
+
+    // 清空缓存确认弹窗
+    if (showClearCacheConfirmDialog) {
+        val clearSuccessMsg = stringResource(R.string.ai_quiz_clear_cache_success)
+        AlertDialog(
+            onDismissRequest = { showClearCacheConfirmDialog = false },
+            title = {
+                Text(
+                    text = stringResource(R.string.ai_quiz_clear_cache_dialog_title),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.ai_quiz_clear_cache_dialog_msg),
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        stopSpeaking()
+                        repository.clearQuiz(bookId, chapterIndex, selectedScope, questionCount, difficulty)
+                        quizResult = null
+                        userAnswers.clear()
+                        isSubmitted = false
+                        showClearCacheConfirmDialog = false
+                        Toast.makeText(context, clearSuccessMsg, Toast.LENGTH_SHORT).show()
+                    },
+                    colors = if (isEink) ButtonDefaults.buttonColors(containerColor = Color.Black, contentColor = Color.White)
+                    else ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearCacheConfirmDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
             }
         )
     }
