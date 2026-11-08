@@ -188,35 +188,30 @@ fun WebDavBrowserDialog(
         onBookImported()
     }
 
-    /** TXT：交给服务端做编码识别 + 智能分章，转成 EPUB 再入库 */
+    /** TXT：离线本地转换（编码识别 + 智能分章），无需登录也不再上传服务器 */
     suspend fun importTxtFile(txtFile: File) {
-        val client = SyncClient(context)
-        if (!client.isLoggedIn()) {
-            toast(context.getString(com.moyue.app.R.string.webdav_txt_need_login), long = true)
-            txtFile.delete()
-            return
-        }
         busyLabel = context.getString(com.moyue.app.R.string.webdav_txt_converting)
-        val result = client.convertTxtToEpub(
-            txtFile,
-            title = txtFile.name.substringBeforeLast('.'),
-        )
+        val result = runCatching {
+            kotlinx.coroutines.withContext(Dispatchers.IO) {
+                val tmpEpub = File(context.cacheDir, "webdav_txt_${System.currentTimeMillis()}.epub")
+                com.moyue.util.TxtConverter.convertTxtToEpub(
+                    txtFile, tmpEpub,
+                    title = com.moyue.util.TxtConverter.titleFromFileName(txtFile.name)
+                )
+                tmpEpub
+            }
+        }
         busyLabel = null
         txtFile.delete()
 
         result.fold(
-            onSuccess = { r ->
-                val tmpEpub = File(context.cacheDir, "webdav_txt_${System.currentTimeMillis()}.epub")
-                tmpEpub.writeBytes(r.epub)
+            onSuccess = { tmpEpub ->
                 importEpubFromFile(tmpEpub, "", BookRepository(context))
             },
             onFailure = { e ->
-                val code = (e as? SyncClient.PdfConvertException)?.code
-                val msg = when (code) {
-                    "not_text" -> context.getString(com.moyue.app.R.string.webdav_txt_not_text)
-                    "empty" -> context.getString(com.moyue.app.R.string.webdav_txt_empty)
-                    "too_large" -> context.getString(com.moyue.app.R.string.webdav_txt_too_large)
-                    "login_required" -> context.getString(com.moyue.app.R.string.webdav_txt_need_login)
+                val msg = when (e) {
+                    is com.moyue.util.TxtConverter.TxtNotTextException ->
+                        context.getString(com.moyue.app.R.string.webdav_txt_not_text)
                     else -> context.getString(
                         com.moyue.app.R.string.webdav_txt_failed_fmt,
                         e.message ?: e.javaClass.simpleName

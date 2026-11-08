@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.moyue.app.data.BookRepository
 import com.moyue.app.data.models.Book
 import com.moyue.app.sync.SyncClient
+import com.moyue.util.TxtConverter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -204,32 +205,49 @@ class LibraryViewModel(
         }
     }
 
-    /** TXT：上传服务端做编码识别 + 智能分章，转成 EPUB 再入库 */
+    /** TXT：离线本地转换（编码识别 + 智能分章），无需登录也不再上传服务器 */
     fun importTxtFile(context: Context, txtFile: File) {
         viewModelScope.launch {
-            val syncClient = SyncClient(context)
-            if (!syncClient.isLoggedIn()) {
-                txtFile.delete()
-                toastLong(context, context.getString(com.moyue.app.R.string.webdav_txt_need_login))
-                return@launch
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val epubFile = File(context.cacheDir, "import_txt_${System.currentTimeMillis()}.epub")
+                    TxtConverter.convertTxtToEpub(
+                        txtFile, epubFile,
+                        title = TxtConverter.titleFromFileName(txtFile.name)
+                    )
+                    epubFile
+                }
             }
-            val result = syncClient.convertTxtToEpub(txtFile, title = txtFile.name.substringBeforeLast('.'))
             txtFile.delete()
             result.fold(
-                onSuccess = { r ->
-                    val epubFile = File(context.cacheDir, "import_txt_${System.currentTimeMillis()}.epub")
-                    epubFile.writeBytes(r.epub)
-                    val book = repository.importEpubFile(epubFile)
-                    repository.extractCover(book.id)?.let { repository.updateBookCover(book.id, it) }
-                    toastShort(context, context.getString(com.moyue.app.R.string.webdav_imported_success, book.title, ""))
+                onSuccess = { epubFile ->
+                    try {
+                        val book = repository.importEpubFile(epubFile)
+                        repository.extractCover(book.id)?.let { repository.updateBookCover(book.id, it) }
+                        toastShort(
+                            context,
+                            context.getString(com.moyue.app.R.string.webdav_imported_success, book.title, "")
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("Import", "TXT 转换后入库失败", e)
+                        toastLong(
+                            context,
+                            context.getString(
+                                com.moyue.app.R.string.webdav_txt_failed_fmt,
+                                e.message ?: e.javaClass.simpleName
+                            )
+                        )
+                    }
                 },
                 onFailure = { e ->
-                    val code = (e as? SyncClient.PdfConvertException)?.code
-                    val msg = when (code) {
-                        "not_text" -> context.getString(com.moyue.app.R.string.webdav_txt_not_text)
-                        "empty" -> context.getString(com.moyue.app.R.string.webdav_txt_empty)
-                        "too_large" -> context.getString(com.moyue.app.R.string.webdav_txt_too_large)
-                        "login_required" -> context.getString(com.moyue.app.R.string.webdav_txt_need_login)
+                    val msg = when (e) {
+                        is TxtConverter.TxtNotTextException ->
+                            context.getString(com.moyue.app.R.string.webdav_txt_not_text)
+                        is TxtConverter.TxtEmptyException ->
+                            context.getString(
+                                com.moyue.app.R.string.webdav_txt_failed_fmt,
+                                e.message ?: e.javaClass.simpleName
+                            )
                         else -> context.getString(
                             com.moyue.app.R.string.webdav_txt_failed_fmt,
                             e.message ?: e.javaClass.simpleName
