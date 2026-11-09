@@ -149,6 +149,10 @@ fun PdfReaderScreen(
     var loadError by remember { mutableStateOf<String?>(null) }
     var showControls by remember { mutableStateOf(true) }
 
+    // PDF「点哪读哪」：后台提取文字层 → 命中点击位置所在句子 → 弹翻译/朗读卡片
+    var lookupHit by remember { mutableStateOf<com.moyue.reader.PdfTextLayer.Hit?>(null) }
+    var lookupLoading by remember { mutableStateOf(false) }
+
     // AI 测验状态
     var showQuizScopeDialog by remember { mutableStateOf(false) }
     var showAiQuizScreen by remember { mutableStateOf(false) }
@@ -580,6 +584,7 @@ fun PdfReaderScreen(
 
     val currentPageDisplay = (listState.firstVisibleItemIndex + 1).coerceAtMost(pageCount)
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
@@ -754,9 +759,58 @@ fun PdfReaderScreen(
                         holder = currentHolder,
                         pageIndex = pageIndex,
                         targetRenderWidth = targetRenderWidth,
-                        screenWidthDp = screenWidth
+                        screenWidthDp = screenWidth,
+                        onLongPressAt = { idx, fx, fy ->
+                            lookupLoading = true
+                            coroutineScope.launch {
+                                val pdfFile = currentHolder.file
+                                val page = withContext(Dispatchers.IO) {
+                                    com.moyue.reader.PdfTextLayer.extract(pdfFile, idx, context)
+                                }
+                                lookupLoading = false
+                                if (page == null || page.isEmpty) {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "这一页没有文字层（扫描版 PDF 不支持选词）",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    val hit = com.moyue.reader.PdfTextLayer.sentenceAt(
+                                        page, fx * page.widthPt, fy * page.heightPt, idx
+                                    )
+                                    if (hit == null) {
+                                        android.widget.Toast.makeText(
+                                            context, "这里没有识别到文字", android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        lookupHit = hit
+                                    }
+                                }
+                            }
+                        }
                     )
                 }
+            }
+        }
+    }
+
+        // 「点哪读哪」结果卡片：浮在最上层，不跟随缩放/位移
+        lookupHit?.let { hit ->
+            com.moyue.ui.components.PdfLookupCard(
+                hit = hit,
+                onDismiss = { lookupHit = null },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 12.dp, vertical = 16.dp),
+            )
+        }
+        if (lookupLoading) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(32.dp)
+            ) {
+                CircularProgressIndicator(modifier = Modifier.fillMaxSize(), strokeWidth = 3.dp)
             }
         }
     }
@@ -768,6 +822,7 @@ private fun PdfPageItem(
     pageIndex: Int,
     targetRenderWidth: Int,
     screenWidthDp: Int,
+    onLongPressAt: ((Int, Float, Float) -> Unit)? = null,
 ) {
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
     var aspectRatio by remember { mutableFloatStateOf(1f / 1.414f) }
@@ -794,6 +849,21 @@ private fun PdfPageItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(aspectRatio)
+                .pointerInput(pageIndex) {
+                    detectTapGestures(
+                        onLongPress = { off ->
+                            val w = size.width.toFloat()
+                            val h = size.height.toFloat()
+                            if (onLongPressAt != null && w > 0f && h > 0f) {
+                                onLongPressAt(
+                                    pageIndex,
+                                    (off.x / w).coerceIn(0f, 1f),
+                                    (off.y / h).coerceIn(0f, 1f),
+                                )
+                            }
+                        }
+                    )
+                }
         ) {
             if (bitmap != null && !bitmap!!.isRecycled) {
                 Image(

@@ -13,8 +13,8 @@ android {
         applicationId = "com.moyue.app.tingshu"
         minSdk = 26
         targetSdk = 36
-        versionCode = 20224
-        versionName = "1.1.72"
+        versionCode = 20225
+        versionName = "1.1.73"
 
         // Local AI NDK config (disabled — no NDK in test env)
         /*externalNativeBuild {
@@ -61,6 +61,12 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    // PdfBox-Android 的类初始化会触到 android.* 桩代码；本地 JVM 单测需要让桩返回默认值。
+    // 仅影响 unit test 运行时，不改变 App 行为。
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 
     lint {
@@ -130,6 +136,9 @@ dependencies {
 
     // JSON
     implementation("com.google.code.gson:gson:2.12.1")
+
+    // PDF 文字层提取（原版阅读的「点哪读哪」选词翻译/朗读）
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
