@@ -875,6 +875,24 @@ class ReaderViewModel(
             return
         }
 
+        // === 免费翻译通道（Google gtx + MyMemory，无需任何 Key）===
+        // 划词工具栏与 PDF 卡片共用；失败时提示用户改用 AI 翻译
+        if (mode == "free") {
+            viewModelScope.launch {
+                val targetLang = _uiState.value.llmConfig.targetLang.ifBlank { "Chinese" }
+                val r = com.moyue.app.translate.OnlineBilingualDictionary.translateFree(t, targetLang)
+                _uiState.update {
+                    it.copy(
+                        isTranslating = false,
+                        translationResult = r.getOrNull()
+                            ?: "${getApplication<android.app.Application>().getString(com.moyue.app.R.string.translation_failed_fmt, r.exceptionOrNull()?.message ?: "")}",
+                        isDictionaryResult = false,
+                    )
+                }
+            }
+            return
+        }
+
         if (_uiState.value.translateEngine == TranslateEngine.LOCAL) {
             // === Local AI route ===
             if (!localAiEngine.isReady()) {

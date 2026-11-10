@@ -1,5 +1,20 @@
 <resources>
     <string name="ai_translate">🤖 Translate</string>
+    <string name="translate_free">🌐 Translate</string>
+    <string name="translate_ai">🤖 AI Translate</string>
+    <string name="pdf_lookup_title">Tap to read</string>
+    <string name="pdf_lookup_page">Page %1$d</string>
+    <string name="pdf_lookup_read_source">Source</string>
+    <string name="pdf_lookup_read_translation">Translation</string>
+    <string name="pdf_lookup_translating">Translating…</string>
+    <string name="pdf_lookup_expand">More</string>
+    <string name="pdf_lookup_collapse">Less</string>
+    <string name="pdf_lookup_copy_source">Copy source text</string>
+    <string name="pdf_lookup_dictionary">Dict</string>
+    <string name="pdf_read_page">Read this page aloud (continues)</string>
+    <string name="pdf_lookup_hint">Pick an action: Translate / AI Translate / Dictionary / Read aloud</string>
+    <string name="pdf_lookup_no_text_page">This page has no text layer (scanned PDF cannot be selected)</string>
+    <string name="pdf_lookup_no_text_here">No text found here</string>
     <string name="ai_translate_settings">🤖 AI Translation Settings</string>
     <string name="ai_translate_title">AI Translation</string>
     <string name="app_name">InkRead</string>

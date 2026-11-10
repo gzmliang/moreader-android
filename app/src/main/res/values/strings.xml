@@ -51,6 +51,21 @@
 
     <!-- Selection menu -->
     <string name="ai_translate">🤖 翻译</string>
+    <string name="translate_free">🌐 翻译</string>
+    <string name="translate_ai">🤖 AI 翻译</string>
+    <string name="pdf_lookup_title">点哪读哪</string>
+    <string name="pdf_lookup_page">第 %1$d 页</string>
+    <string name="pdf_lookup_read_source">原文</string>
+    <string name="pdf_lookup_read_translation">译文</string>
+    <string name="pdf_lookup_translating">翻译中…</string>
+    <string name="pdf_lookup_expand">全文</string>
+    <string name="pdf_lookup_collapse">收起</string>
+    <string name="pdf_lookup_copy_source">复制原文</string>
+    <string name="pdf_lookup_dictionary">词典</string>
+    <string name="pdf_read_page">朗读本页（连续朗读）</string>
+    <string name="pdf_lookup_hint">选择上面的操作：翻译 / AI 翻译 / 词典 / 朗读</string>
+    <string name="pdf_lookup_no_text_page">这一页没有文字层（扫描版 PDF 不支持选词）</string>
+    <string name="pdf_lookup_no_text_here">这里没有识别到文字</string>
     <string name="dictionary">📖 词典</string>
     <string name="transcribe">🎙️ 转录</string>
     <string name="read_aloud">🔊 朗读</string>

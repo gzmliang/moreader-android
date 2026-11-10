@@ -144,7 +144,11 @@ object PdfTextLayer {
         val stripper = object : PDFTextStripper() {
             override fun writeString(text: String, textPositions: List<TextPosition>) {
                 for (tp in textPositions) {
-                    val raw = tp.unicode ?: continue
+                    val rawIn = tp.unicode ?: continue
+                    if (rawIn.isEmpty()) continue
+                    // PDF 文字层常带零宽字符 / 软连字符 / 控制符，直接送 TTS 会让微软
+                    // 返回空音频（服务端 500: No audio was received），必须在这里清掉。
+                    val raw = rawIn.replace(INVISIBLE_RE, "")
                     if (raw.isEmpty()) continue
                     // 空格字符必须保留：英文词间空白主要靠它表达，丢掉会粘连成 Thisparagraphexists
                     val t = if (raw.isBlank()) " " else raw
@@ -214,8 +218,13 @@ object PdfTextLayer {
                 val gap = c.x - prevEnd
                 val last = sb.last()
                 val first = c.text.first()
-                // 仅在「没有空格字符、间距又明显偏大」时补空格（部分 PDF 不产出空格字符）
-                if (gap > (c.w * 0.6f).coerceAtLeast(1.5f) && !last.isWhitespace() &&
+                // 部分 PDF 不产出空格字符，只能靠间距补空格。
+                // 拉丁字母之间用 0.35 字号（否则会出现 rewardsmay / humanusercould），
+                // 其他情况保持保守的 0.6，避免中文被插出多余空格。
+                val latinPair = last.isLetterOrDigit() && first.isLetterOrDigit() &&
+                    !isCjkChar(last) && !isCjkChar(first)
+                val factor = if (latinPair) 0.35f else 0.6f
+                if (gap > (c.w * factor).coerceAtLeast(1.0f) && !last.isWhitespace() &&
                     !first.isWhitespace()
                 ) {
                     sb.append(' ')
@@ -269,7 +278,183 @@ object PdfTextLayer {
         )
     }
 
+    // ── 整页朗读用的句子切分 ───────────────────────────────────
+
+    /** 一句话：text + 在展平字符列表中的区间（用于高亮） */
+    data class Sentence(val text: String, val start: Int, val end: Int)
+
+    /**
+     * 把整页文字切成句子（按句末标点），跨行的句子会合并成一句。
+     * 用于「朗读本页」逐句播报 + 跟随高亮。
+     */
+    fun sentences(page: PageText): List<Sentence> {
+        if (page.isEmpty) return emptyList()
+        val out = mutableListOf<Sentence>()
+        var curStart = -1
+        var curEnd = -1
+        var base = 0
+
+        fun emit() {
+            if (curStart < 0 || curEnd < 0) return
+            val sel = resolveRange(page, curStart, curEnd)
+            val text = sel?.text?.trim().orEmpty()
+            if (text.isNotEmpty() && text.any { it.isLetterOrDigit() || isCjkChar(it) }) {
+                out.add(Sentence(text, curStart, curEnd))
+            }
+            curStart = -1
+            curEnd = -1
+        }
+
+        for (line in page.lines) {
+            for (i in line.chars.indices) {
+                if (curStart < 0) curStart = base + i
+                curEnd = base + i
+                val ch = line.chars[i].text
+                if (ch.any { it in SENT_BREAK }) emit()
+            }
+            base += line.chars.size
+        }
+        emit()
+        return out
+    }
+
+    // ── 划线选区（长按选词 / 拖动扩选） ─────────────────────────
+
+    /** 页内一个高亮矩形（pt 坐标，原点页面左上） */
+    data class Rect(val left: Float, val top: Float, val right: Float, val bottom: Float)
+
+    /** 一次划线选区：文本 + 每行一个高亮矩形 */
+    data class Selection(
+        val pageIndex: Int,
+        val text: String,
+        val rects: List<Rect>,
+        val pageWidthPt: Float,
+        val pageHeightPt: Float,
+    )
+
+    /** 按阅读顺序（行优先、行内按 x）展平的字符列表，索引即选区位次 */
+    fun flattened(page: PageText): List<CharBox> = page.lines.flatMap { it.chars }
+
+    /** 点击/长按点 → 最近的字符在展平列表中的索引 */
+    fun charIndexAt(page: PageText, xPt: Float, yPt: Float): Int? {
+        if (page.isEmpty) return null
+        var base = 0
+        var bestLine = -1
+        var bestDist = Float.MAX_VALUE
+        for ((li, line) in page.lines.withIndex()) {
+            val cy = (line.yTop + line.yBottom) / 2f
+            val dy = kotlin.math.abs(cy - yPt)
+            if (dy < bestDist) {
+                bestDist = dy
+                bestLine = li
+            }
+        }
+        if (bestLine < 0) return null
+        for (i in 0 until bestLine) base += page.lines[i].chars.size
+        val line = page.lines[bestLine]
+        var best = 0
+        var d = Float.MAX_VALUE
+        for ((i, c) in line.chars.withIndex()) {
+            val dist = when {
+                xPt < c.x -> c.x - xPt
+                xPt > c.x + c.w -> xPt - (c.x + c.w)
+                else -> 0f
+            }
+            if (dist < d) {
+                d = dist
+                best = i
+            }
+        }
+        return base + best
+    }
+
+    private fun isWordChar(c: Char): Boolean =
+        c.isLetterOrDigit() || c == '\'' || c == '-' || c == '_'
+
+    /** 两个相邻字符之间是否是「词间空白」（很多 PDF 不产出空格字符，只能靠间距判断） */
+    private fun isWordGap(prev: CharBox, next: CharBox): Boolean {
+        val gap = next.x - (prev.x + prev.w)
+        return gap > (maxOf(prev.w, next.w) * 0.35f).coerceAtLeast(1.0f)
+    }
+
+    private fun isCjkChar(c: Char): Boolean =
+        c in '\u4e00'..'\u9fff' || c in '\u3400'..'\u4dbf'
+
+    /**
+     * 长按选中的最小单位：
+     * · 拉丁文 → 整个单词
+     * · 中文 → 该字所在的分句（按标点切，避免只选一个字没意义）
+     */
+    fun wordRange(page: PageText, idx: Int): Pair<Int, Int> {
+        val chars = flattened(page)
+        if (chars.isEmpty()) return 0 to 0
+        val i = idx.coerceIn(0, chars.size - 1)
+        val cur = chars[i].text.firstOrNull() ?: return i to i
+
+        if (isCjkChar(cur)) {
+            // 中文没有天然词边界：长按先给「一个分句」（逗号/顿号也算断点），再用拖动扩选
+            var s = i
+            while (s > 0 && !chars[s - 1].text.any { it in CJK_BREAK } && i - s < 40) s--
+            var e = i
+            while (e < chars.size - 1 && !chars[e].text.any { it in CJK_BREAK } && e - i < 40) e++
+            return s to e
+        }
+
+        if (!isWordChar(cur)) return i to i
+        var s = i
+        while (
+            s > 0 &&
+            isWordChar(chars[s - 1].text.first()) &&
+            !isWordGap(chars[s - 1], chars[s])
+        ) s--
+        var e = i
+        while (
+            e < chars.size - 1 &&
+            isWordChar(chars[e + 1].text.first()) &&
+            !isWordGap(chars[e], chars[e + 1])
+        ) e++
+        return s to e
+    }
+
+    /** 把展平索引区间 [a, b] 解析成文本 + 每行高亮矩形（跨行自动分段） */
+    fun resolveRange(page: PageText, a: Int, b: Int): Selection? {
+        val s = minOf(a, b)
+        val e = maxOf(a, b)
+        val rects = mutableListOf<Rect>()
+        val sb = StringBuilder()
+        var base = 0
+        for (line in page.lines) {
+            val lineStart = base
+            val lineEnd = base + line.chars.size - 1
+            base += line.chars.size
+            if (lineEnd < s || lineStart > e) continue
+            val cs = (maxOf(s, lineStart) - lineStart).coerceIn(0, line.chars.size - 1)
+            val ce = (minOf(e, lineEnd) - lineStart).coerceIn(0, line.chars.size - 1)
+            if (ce < cs) continue
+            val sel = line.chars.subList(cs, ce + 1)
+            if (sel.isEmpty()) continue
+            if (sb.isNotEmpty()) sb.append(' ')
+            sb.append(buildLineText(sel))
+            rects.add(
+                Rect(
+                    left = sel.minOf { it.x },
+                    top = line.yTop,
+                    right = sel.maxOf { it.x + it.w },
+                    bottom = line.yBottom,
+                )
+            )
+        }
+        val text = sb.toString().trim()
+        if (text.isBlank() || rects.isEmpty()) return null
+        return Selection(0, text, rects, page.widthPt, page.heightPt)
+    }
+
     private val SENT_BREAK = charArrayOf('。', '！', '？', '；', '…', '.', '!', '?', ';', '\n')
+
+    /** 零宽/软连字符/控制/方向控制等不可见字符（PDF 文字层的常见垃圾） */
+    private val INVISIBLE_RE = Regex("[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F\\u00AD\\u200B-\\u200F\\u202A-\\u202E\\u2060\\uFEFF]")
+    /** 中文分句断点：句读之外，逗号/顿号/冒号也算（长按先选一小句更实用） */
+    private val CJK_BREAK = charArrayOf('。', '，', '、', '：', '；', '！', '？', '…', '\n')
 
     private fun expandSentence(chars: List<CharBox>, idx: Int): String {
         if (idx !in chars.indices) return ""

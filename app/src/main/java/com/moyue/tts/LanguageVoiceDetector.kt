@@ -49,6 +49,17 @@ object LanguageVoiceDetector {
     /**
      * 根据语言选择最合适的 Edge-TTS 音色
      */
+    /**
+     * 给一段文本挑 Edge 音色（纯函数，可单测）。
+     * 关键：不管当前有没有已创建的 provider，都必须按文本语言重新匹配 ——
+     * 否则用户设置了英文音色时，读中文会直接 500（服务端 No audio was received）。
+     */
+    fun pickEdgeVoiceForText(text: String, baseVoice: String): String {
+        if (text.isBlank()) return baseVoice
+        val detected = detectLanguage(text)
+        return getMatchingEdgeVoice(detected, baseVoice)
+    }
+
     fun getMatchingEdgeVoice(detectedLang: String, currentVoice: String): String {
         return when (detectedLang) {
             "en" -> {

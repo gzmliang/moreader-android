@@ -6,7 +6,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -27,6 +29,8 @@ object OnlineBilingualDictionary {
     private const val PREFS_CACHE = "online_dict_cache_v7"
     private const val GOOGLE_GTX_URL = "https://translate.googleapis.com/translate_a/single"
     private const val MYMEMORY_URL = "https://api.mymemory.translated.net/get"
+    /** 微软 Edge 翻译：免费、免 Key，**国内可直连**（与 ReadMate 扩展同一条通道） */
+    private const val MS_EDGE_TRANSLATE_URL = "https://edge.microsoft.com/translate/translatetext"
     private const val FREE_DICT_URL = "https://api.dictionaryapi.dev/api/v2/entries/en"
 
     private var isGoogleReachable: Boolean? = null
@@ -659,11 +663,97 @@ object OnlineBilingualDictionary {
     }
 
     /**
+     * 免费整句/整段翻译（Google gtx + MyMemory 兜底），**不需要任何 API Key**。
+     *
+     * 原本只服务于词典例句，现提升为公开能力供 EPUB 划词工具栏与 PDF「点哪读哪」卡片复用。
+     * @param text 待翻译文本（建议 ≤1500 字符，超长时免费接口容易被截断/拒绝）
+     * @param targetLang 目标语言，可传 "Chinese" / "zh-CN" 等，内部统一归一化
+     */
+    suspend fun translateFree(
+        text: String,
+        targetLang: String = getDefaultTargetLangCode(),
+    ): Result<String> = withContext(Dispatchers.IO) {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("待翻译文本为空"))
+        }
+        if (trimmed.length > 1500) {
+            return@withContext Result.failure(
+                IllegalArgumentException("文本较长（${trimmed.length} 字），免费翻译易被截断，建议改用 AI 翻译")
+            )
+        }
+        val code = normalizeLangCode(targetLang)
+        val out = try {
+            translateTextToTarget(trimmed, code)
+        } catch (e: Exception) {
+            return@withContext Result.failure(e)
+        }
+        when {
+            out.isBlank() ->
+                Result.failure(RuntimeException("免费翻译服务暂时不可用，请检查网络或改用 AI 翻译"))
+            // 源语言与目标语言相同（例如中文书 + 目标语言中文）时，各通道都会原样返回
+            out == trimmed ->
+                Result.failure(
+                    RuntimeException("这段文字已经是目标语言（${normalizeLangCode(targetLang)}），无需翻译；可在设置里更换目标语言")
+                )
+            else -> Result.success(out)
+        }
+    }
+
+    /** Moreader 内部语言码 → 微软 Edge 翻译语言码 */
+    fun toMicrosoftLangCode(code: String): String = when (code.lowercase()) {
+        "zh-cn", "zh", "zh-hans" -> "zh-Hans"
+        "zh-tw", "zh-hk", "zh-hant" -> "zh-Hant"
+        "pt", "pt-br" -> "pt"
+        "nb", "no" -> "nb"
+        else -> code
+    }
+
+    /**
+     * 微软 Edge 翻译（免费免 Key，国内可直连，与 ReadMate 扩展同一通道）
+     * POST https://edge.microsoft.com/translate/translatetext?to=xx&from=&isEnterpriseClient=false
+     * body: ["text"] → [{translations:[{text:"..."}]}]
+     */
+    private fun translateWithMicrosoftEdge(text: String, targetCode: String): String {
+        val to = toMicrosoftLangCode(targetCode)
+        val url = "$MS_EDGE_TRANSLATE_URL?to=${URLEncoder.encode(to, "UTF-8")}&from=&isEnterpriseClient=false"
+        val payload = JSONArray().put(text).toString()
+        val body = payload.toRequestBody("application/json".toMediaType())
+        val request = Request.Builder().url(url).post(body).build()
+        return try {
+            httpClient.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    Log.w(TAG, "Microsoft Edge translate HTTP ${resp.code}")
+                    return ""
+                }
+                val raw = resp.body?.string() ?: return ""
+                val arr = JSONArray(raw)
+                val first = arr.optJSONObject(0) ?: return ""
+                val translations = first.optJSONArray("translations") ?: return ""
+                val sb = StringBuilder()
+                for (i in 0 until translations.length()) {
+                    sb.append(translations.optJSONObject(i)?.optString("text", "") ?: "")
+                }
+                cleanTranslationText(sb.toString())
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Microsoft Edge translate failed: ${e.javaClass.simpleName}: ${e.message}")
+            ""
+        }
+    }
+
+    /**
      * Translate an example sentence into target language using Google / MyMemory
      */
     private fun translateTextToTarget(text: String, targetCode: String): String {
         val trimmed = text.trim()
-        if (trimmed.isBlank() || targetCode.equals("en", ignoreCase = true)) return trimmed
+        // 注意：不能因为「目标语言是英文」就直接返回原文 —— 中文书翻英文时那样会永远失败。
+        // 源语言由各通道自动检测（微软返回 detectedLanguage），这里不做猜测。
+        if (trimmed.isBlank()) return trimmed
+
+        // ① 微软 Edge 翻译：免费免 Key 且国内可直连，作为首选通道
+        val ms = translateWithMicrosoftEdge(trimmed, targetCode)
+        if (ms.isNotBlank()) return ms
 
         val encoded = URLEncoder.encode(trimmed, StandardCharsets.UTF_8.name())
         try {
@@ -695,8 +785,19 @@ object OnlineBilingualDictionary {
             if (response.isSuccessful) {
                 val body = response.body?.string() ?: ""
                 val json = JSONObject(body)
+                // MyMemory 出错时仍返回 HTTP 200，错误信息塞在 translatedText 里
+                // （例如 "PLEASE SELECT TWO DISTINCT LANGUAGES"、"MYMEMORY WARNING: ..."，
+                //  以及配额耗尽时的提示）—— 必须识别成失败，绝不能当成译文展示。
+                val status = json.optInt("responseStatus", 200)
                 val trans = json.optJSONObject("responseData")?.optString("translatedText", "") ?: ""
-                cleanTranslationText(trans)
+                val cleaned = cleanTranslationText(trans)
+                val looksLikeError = cleaned.isBlank() ||
+                    cleaned.contains("PLEASE SELECT", ignoreCase = true) ||
+                    cleaned.contains("MYMEMORY WARNING", ignoreCase = true) ||
+                    cleaned.contains("QUERY LENGTH LIMIT", ignoreCase = true) ||
+                    cleaned.contains("INVALID LANGUAGE", ignoreCase = true) ||
+                    cleaned.contains("NO QUERY SPECIFIED", ignoreCase = true)
+                if (status != 200 || looksLikeError) "" else cleaned
             } else {
                 ""
             }

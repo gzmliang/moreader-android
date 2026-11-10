@@ -12,7 +12,11 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
@@ -54,6 +58,7 @@ import com.moyue.app.data.models.Book
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -140,6 +145,7 @@ fun PdfReaderScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+
     val aiCacheRepo = remember { com.moyue.ai.data.AiCacheRepository(context) }
     val llmClient = remember { com.moyue.ai.service.LlmClient() }
 
@@ -152,6 +158,23 @@ fun PdfReaderScreen(
     // PDF「点哪读哪」：后台提取文字层 → 命中点击位置所在句子 → 弹翻译/朗读卡片
     var lookupHit by remember { mutableStateOf<com.moyue.reader.PdfTextLayer.Hit?>(null) }
     var lookupLoading by remember { mutableStateOf(false) }
+    // 整页 / 连续朗读
+    var ttsReading by remember { mutableStateOf(false) }
+    var ttsHighlight by remember { mutableStateOf<com.moyue.reader.PdfTextLayer.Selection?>(null) }
+    var ttsProvider by remember { mutableStateOf<com.moyue.app.tts.EdgeTTSProvider?>(null) }
+    var ttsJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            runCatching { ttsProvider?.stop() }
+            runCatching { ttsProvider?.destroy() }
+            ttsJob?.cancel()
+        }
+    }
+
+    // PDF 划线选区：长按选词 → 拖动扩选 → 松手弹卡片
+    var pdfSelection by remember { mutableStateOf<com.moyue.reader.PdfTextLayer.Selection?>(null) }
+    var selectionAnchor by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     // AI 测验状态
     var showQuizScopeDialog by remember { mutableStateOf(false) }
@@ -264,19 +287,21 @@ fun PdfReaderScreen(
     val currentBook = book!!
     val pageCount = currentHolder.pageCount
     val initialPage = currentBook.currentChapterIndex.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialPage)
+    // 单页渲染：不再用 LazyColumn（它与 graphicsLayer 缩放层组合会导致
+    // scrollToItem / 翻页 / 朗读自动跟随全部失效），改为「当前页 index」驱动。
+    var currentPage by remember { mutableIntStateOf(initialPage) }
 
     // 保存进度函数
     fun saveProgress() {
-        val page = listState.firstVisibleItemIndex
+        val page = currentPage
         val progress = if (pageCount > 0) (page + 1).toFloat() / pageCount else 0f
         coroutineScope.launch {
             repository.updatePdfProgress(bookId, page, progress)
         }
     }
 
-    // 页面滚动停顿防抖自动更新进度
-    LaunchedEffect(listState.firstVisibleItemIndex) {
+    // 翻页后停顿防抖自动更新进度
+    LaunchedEffect(currentPage) {
         delay(600)
         saveProgress()
     }
@@ -582,7 +607,7 @@ fun PdfReaderScreen(
         )
     }
 
-    val currentPageDisplay = (listState.firstVisibleItemIndex + 1).coerceAtMost(pageCount)
+    val currentPageDisplay = (currentPage + 1).coerceAtMost(pageCount)
 
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
@@ -612,13 +637,94 @@ fun PdfReaderScreen(
                         }
                     },
                     actions = {
+                        IconButton(
+                            onClick = {
+                                if (ttsReading) {
+                                    ttsReading = false
+                                    ttsJob?.cancel()
+                                    runCatching { ttsProvider?.stop() }
+                                    runCatching { ttsProvider?.destroy() }
+                                    ttsProvider = null
+                                    ttsHighlight = null
+                                    return@IconButton
+                                }
+                                ttsReading = true
+                                ttsJob = coroutineScope.launch {
+                                    val prefs = context.getSharedPreferences("moreader_config", android.content.Context.MODE_PRIVATE)
+                                    val baseVoice = prefs.getString("edge_voice", "zh-CN-XiaoxiaoNeural")
+                                        ?: "zh-CN-XiaoxiaoNeural"
+                                    val endpoint = com.moyue.util.SecureUrlHelper.secureEdgeEndpoint(
+                                        prefs.getString("edge_endpoint", null)
+                                    )
+                                    var page = currentPage
+                                    android.util.Log.d("PdfTtsPage", "reading start page=$page count=$pageCount")
+                                    while (ttsReading && page < pageCount) {
+                                        val pdfFile = holder?.file ?: break
+                                        val pageText = withContext(Dispatchers.IO) {
+                                            com.moyue.reader.PdfTextLayer.extract(pdfFile, page, context)
+                                        }
+                                        if (pageText == null || pageText.isEmpty) {
+                                            page++
+                                            continue
+                                        }
+                                        val sents = com.moyue.reader.PdfTextLayer.sentences(pageText)
+                                        android.util.Log.d("PdfTtsPage", "page=$page sents=${sents.size}")
+                                        if (sents.isEmpty()) {
+                                            page++
+                                            continue
+                                        }
+                                        // 朗读跨页：直接切当前页（单页渲染，天然同步）
+                                        currentPage = page
+                                        for (sent in sents) {
+                                            if (!ttsReading) break
+                                            ttsHighlight = com.moyue.reader.PdfTextLayer
+                                                .resolveRange(pageText, sent.start, sent.end)
+                                                ?.copy(pageIndex = page)
+                                            val voice = com.moyue.tts.LanguageVoiceDetector
+                                                .pickEdgeVoiceForText(sent.text, baseVoice)
+                                            val prov = ttsProvider?.takeIf { it.voice == voice } ?: run {
+                                                runCatching { ttsProvider?.stop() }
+                                                runCatching { ttsProvider?.destroy() }
+                                                com.moyue.app.tts.EdgeTTSProvider(endpoint, voice)
+                                                    .also { ttsProvider = it }
+                                            }
+                                            suspendCancellableCoroutine<Unit> { cont ->
+                                                prov.speak(sent.text, 1.0f, object : com.moyue.app.tts.TTSListener {
+                                                    override fun onStart() {}
+                                                    override fun onDone() {
+                                                        if (cont.isActive) cont.resumeWith(Result.success(Unit))
+                                                    }
+                                                    override fun onError(message: String) {
+                                                        android.util.Log.w(
+                                                            "PdfTtsPage",
+                                                            "speak failed: $message | voice=$voice | text=${sent.text.take(30)}"
+                                                        )
+                                                        if (cont.isActive) cont.resumeWith(Result.success(Unit))
+                                                    }
+                                                })
+                                            }
+                                        }
+                                        page++
+                                    }
+                                    ttsReading = false
+                                    ttsHighlight = null
+                                }
+                            }
+                        ) {
+                            Icon(
+                                if (ttsReading) Icons.Default.StopCircle else Icons.Default.VolumeUp,
+                                contentDescription = stringResource(com.moyue.app.R.string.pdf_read_page),
+                                tint = if (ttsReading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                         TextButton(onClick = {
                             // 优先判断：如果已经有题目缓存，直接秒开做题界面
                             val cachedQuiz = currentGeneratedQuiz ?: aiCacheRepo.getQuiz(bookId, quizScopeStart, "chapter", quizQuestionCount, quizDifficulty)
                             if (cachedQuiz != null && cachedQuiz.questions.isNotEmpty()) {
                                 showAiQuizScreen = true
                             } else {
-                                val cur = (listState.firstVisibleItemIndex + 1).coerceIn(1, pageCount)
+                                val cur = (currentPage + 1).coerceIn(1, pageCount)
                                 quizScopeStart = cur
                                 quizScopeEnd = (cur + 1).coerceAtMost(pageCount)
                                 showQuizScopeDialog = true
@@ -663,10 +769,9 @@ fun PdfReaderScreen(
                         ) {
                             TextButton(
                                 onClick = {
-                                    val prev = (listState.firstVisibleItemIndex - 1).coerceAtLeast(0)
-                                    coroutineScope.launch { listState.animateScrollToItem(prev) }
+                                    currentPage = (currentPage - 1).coerceAtLeast(0)
                                 },
-                                enabled = listState.firstVisibleItemIndex > 0
+                                enabled = currentPage > 0
                             ) {
                                 Icon(Icons.AutoMirrored.Filled.NavigateBefore, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Text(stringResource(R.string.pdf_reader_prev_page), fontSize = 13.sp)
@@ -681,10 +786,9 @@ fun PdfReaderScreen(
 
                             TextButton(
                                 onClick = {
-                                    val next = (listState.firstVisibleItemIndex + 1).coerceAtMost(pageCount - 1)
-                                    coroutineScope.launch { listState.animateScrollToItem(next) }
+                                    currentPage = (currentPage + 1).coerceAtMost(pageCount - 1)
                                 },
-                                enabled = listState.firstVisibleItemIndex < pageCount - 1
+                                enabled = currentPage < pageCount - 1
                             ) {
                                 Text(stringResource(R.string.pdf_reader_next_page), fontSize = 13.sp)
                                 Icon(Icons.AutoMirrored.Filled.NavigateNext, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -693,15 +797,15 @@ fun PdfReaderScreen(
 
                         // 下方：可拖动跳页滑块
                         if (pageCount > 1) {
-                            var sliderValue by remember(listState.firstVisibleItemIndex) {
-                                mutableFloatStateOf(listState.firstVisibleItemIndex.toFloat())
+                            var sliderValue by remember(currentPage) {
+                                mutableFloatStateOf(currentPage.toFloat())
                             }
                             Slider(
                                 value = sliderValue,
                                 onValueChange = { sliderValue = it },
                                 onValueChangeFinished = {
                                     coroutineScope.launch {
-                                        listState.scrollToItem(sliderValue.toInt().coerceIn(0, pageCount - 1))
+                                        currentPage = sliderValue.toInt().coerceIn(0, pageCount - 1)
                                     }
                                 },
                                 valueRange = 0f..(pageCount - 1).toFloat(),
@@ -725,11 +829,9 @@ fun PdfReaderScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .background(Color(0xFFEEEEEE))
-                .pointerInput(Unit) {
+                .pointerInput(currentPage, pageCount) {
                     detectTapGestures(
-                        onTap = {
-                            showControls = !showControls
-                        },
+                        onTap = { /* 单击统一由 PdfPageItem 处理（子元素会先消费点击） */ },
                         onDoubleTap = {
                             if (scale > 1f) {
                                 scale = 1f
@@ -740,7 +842,30 @@ fun PdfReaderScreen(
                         }
                     )
                 }
-                .transformable(state = transformState)
+                // 只在「双指」时缩放/平移；单指一律放给 LazyColumn 去滚动。
+                // 原来是 Modifier.transformable，它连单指拖动也当 pan 消费掉，
+                // 导致滑动翻页、animateScrollToItem、朗读自动翻页全部失效。
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        var event = awaitPointerEvent()
+                        while (event.changes.size < 2 && event.changes.any { it.pressed }) {
+                            event = awaitPointerEvent()
+                        }
+                        if (event.changes.size < 2) return@awaitEachGesture
+                        do {
+                            event = awaitPointerEvent()
+                            if (event.changes.size >= 2) {
+                                val zoom = event.calculateZoom()
+                                val pan = event.calculatePan()
+                                if (zoom != 1f) {
+                                    scale = (scale * zoom).coerceIn(1f, 3.5f)
+                                }
+                                if (scale > 1f) offset += pan else offset = Offset.Zero
+                                event.changes.forEach { it.consume() }
+                            }
+                        } while (event.changes.any { it.pressed })
+                    }
+                }
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
@@ -748,49 +873,85 @@ fun PdfReaderScreen(
                     translationY = offset.y
                 }
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(pageCount) { pageIndex ->
-                    PdfPageItem(
-                        holder = currentHolder,
-                        pageIndex = pageIndex,
-                        targetRenderWidth = targetRenderWidth,
-                        screenWidthDp = screenWidth,
-                        onLongPressAt = { idx, fx, fy ->
-                            lookupLoading = true
-                            coroutineScope.launch {
+            PdfPageItem(
+                holder = currentHolder,
+                pageIndex = currentPage,
+                targetRenderWidth = targetRenderWidth,
+                screenWidthDp = screenWidth,
+                selection = pdfSelection?.takeIf { it.pageIndex == currentPage },
+                ttsSelection = ttsHighlight?.takeIf { it.pageIndex == currentPage },
+                onPageTap = { fx ->
+                    when {
+                        fx < 0.25f && currentPage > 0 -> currentPage--
+                        fx > 0.75f && currentPage < pageCount - 1 -> currentPage++
+                        else -> showControls = !showControls
+                    }
+                },
+                onSelectionGesture = { idx, sfx, sfy, efx, efy, phase ->
+                            // phase 3 = 长按但没拖动就松手（多数是翻页后手指停住误触）
+                            // → 直接忽略，不弹菜单，不打扰阅读
+                            if (phase == 3) {
+                                pdfSelection = null
+                                selectionAnchor = null
+                            } else coroutineScope.launch {
                                 val pdfFile = currentHolder.file
                                 val page = withContext(Dispatchers.IO) {
                                     com.moyue.reader.PdfTextLayer.extract(pdfFile, idx, context)
                                 }
-                                lookupLoading = false
                                 if (page == null || page.isEmpty) {
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        "这一页没有文字层（扫描版 PDF 不支持选词）",
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                } else {
-                                    val hit = com.moyue.reader.PdfTextLayer.sentenceAt(
-                                        page, fx * page.widthPt, fy * page.heightPt, idx
-                                    )
-                                    if (hit == null) {
+                                    if (phase == 0) {
                                         android.widget.Toast.makeText(
-                                            context, "这里没有识别到文字", android.widget.Toast.LENGTH_SHORT
+                                            context,
+                                            "这一页没有文字层（扫描版 PDF 不支持选词）",
+                                            android.widget.Toast.LENGTH_SHORT
                                         ).show()
-                                    } else {
-                                        lookupHit = hit
                                     }
+                                    return@launch
                                 }
+                                val startIdx = com.moyue.reader.PdfTextLayer.charIndexAt(
+                                    page, sfx * page.widthPt, sfy * page.heightPt
+                                ) ?: return@launch
+
+                                // 长按起点锚定成「单词 / 中文分句」，之后拖动只调整另一端
+                                val anchor = if (phase == 0 || phase == 4) {
+                                    com.moyue.reader.PdfTextLayer.wordRange(page, startIdx)
+                                        .also { selectionAnchor = it }
+                                } else {
+                                    selectionAnchor ?: com.moyue.reader.PdfTextLayer.wordRange(page, startIdx)
+                                }
+
+                                // phase 0/3 = 长按（未拖动 / 未移动就松手）→ 终点取锚定词末尾
+                                // phase 1/2 = 拖动中/拖动松手 → 终点取手指位置
+                                val curIdx = if (phase == 0 || phase == 4) {
+                                    anchor.second
+                                } else {
+                                    com.moyue.reader.PdfTextLayer.charIndexAt(
+                                        page, efx * page.widthPt, efy * page.heightPt
+                                    ) ?: anchor.second
+                                }
+                                val sel = if (curIdx >= anchor.first) {
+                                    com.moyue.reader.PdfTextLayer.resolveRange(page, anchor.first, curIdx)
+                                } else {
+                                    com.moyue.reader.PdfTextLayer.resolveRange(page, curIdx, anchor.second)
+                                }
+                                if (sel != null) {
+                                    pdfSelection = sel.copy(pageIndex = idx)
+                                    if (phase == 2 || phase == 4) {
+                                        lookupHit = com.moyue.reader.PdfTextLayer.Hit(
+                                            sentence = sel.text,
+                                            lineText = sel.text,
+                                            pageIndex = idx,
+                                        )
+                                    }
+                                } else if (phase == 2) {
+                                    android.widget.Toast.makeText(
+                                        context, "这里没有识别到文字", android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                                if (phase == 2 || phase == 4) selectionAnchor = null
                             }
                         }
-                    )
-                }
-            }
+            )
         }
     }
 
@@ -822,7 +983,10 @@ private fun PdfPageItem(
     pageIndex: Int,
     targetRenderWidth: Int,
     screenWidthDp: Int,
-    onLongPressAt: ((Int, Float, Float) -> Unit)? = null,
+    selection: com.moyue.reader.PdfTextLayer.Selection? = null,
+    ttsSelection: com.moyue.reader.PdfTextLayer.Selection? = null,
+    onSelectionGesture: ((Int, Float, Float, Float, Float, Int) -> Unit)? = null,
+    onPageTap: ((Float) -> Unit)? = null,
 ) {
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
     var aspectRatio by remember { mutableFloatStateOf(1f / 1.414f) }
@@ -835,6 +999,12 @@ private fun PdfPageItem(
         val bmp = holder.renderPage(pageIndex, targetRenderWidth)
         bitmap = bmp
     }
+
+    var startFx by remember(pageIndex) { mutableFloatStateOf(0f) }
+    var startFy by remember(pageIndex) { mutableFloatStateOf(0f) }
+    var lastFx by remember(pageIndex) { mutableFloatStateOf(0f) }
+    var lastFy by remember(pageIndex) { mutableFloatStateOf(0f) }
+    var moved by remember(pageIndex) { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -850,38 +1020,119 @@ private fun PdfPageItem(
                 .fillMaxWidth()
                 .aspectRatio(aspectRatio)
                 .pointerInput(pageIndex) {
+                    // 双击 = 选中该位置的单词（浏览器 / Acrobat 同款手势），单击仍是切工具栏
                     detectTapGestures(
-                        onLongPress = { off ->
+                        onTap = { off ->
+                            val w = size.width.toFloat()
+                            if (w > 0f) onPageTap?.invoke((off.x / w).coerceIn(0f, 1f))
+                        },
+                        onDoubleTap = { off ->
                             val w = size.width.toFloat()
                             val h = size.height.toFloat()
-                            if (onLongPressAt != null && w > 0f && h > 0f) {
-                                onLongPressAt(
+                            if (w > 0f && h > 0f) {
+                                onSelectionGesture?.invoke(
                                     pageIndex,
                                     (off.x / w).coerceIn(0f, 1f),
                                     (off.y / h).coerceIn(0f, 1f),
+                                    (off.x / w).coerceIn(0f, 1f),
+                                    (off.y / h).coerceIn(0f, 1f),
+                                    4, // 4 = 双击选词（直接弹卡片）
                                 )
                             }
                         }
                     )
                 }
-        ) {
-            if (bitmap != null && !bitmap!!.isRecycled) {
-                Image(
-                    bitmap = bitmap!!.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
-            } else {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                .pointerInput(pageIndex) {
+                    // 长按选词 + 长按后拖动扩选
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { off ->
+                            val w = size.width.toFloat()
+                            val h = size.height.toFloat()
+                            if (w > 0f && h > 0f) {
+                                startFx = (off.x / w).coerceIn(0f, 1f)
+                                startFy = (off.y / h).coerceIn(0f, 1f)
+                                lastFx = startFx
+                                lastFy = startFy
+                                moved = false
+                                onSelectionGesture?.invoke(pageIndex, startFx, startFy, lastFx, lastFy, 0)
+                            }
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            val w = size.width.toFloat()
+                            val h = size.height.toFloat()
+                            if (w > 0f && h > 0f) {
+                                lastFx = (change.position.x / w).coerceIn(0f, 1f)
+                                lastFy = (change.position.y / h).coerceIn(0f, 1f)
+                                moved = true
+                                onSelectionGesture?.invoke(pageIndex, startFx, startFy, lastFx, lastFy, 1)
+                            }
+                        },
+                        onDragEnd = {
+                            // phase 3 = 长按未拖动就松手（终点应取锚定词末尾，而不是起点字符）
+                            onSelectionGesture?.invoke(pageIndex, startFx, startFy, lastFx, lastFy, if (moved) 2 else 3)
+                        },
+                        onDragCancel = {
+                            onSelectionGesture?.invoke(pageIndex, startFx, startFy, lastFx, lastFy, if (moved) 2 else 3)
+                        },
                     )
+                }
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (bitmap != null && !bitmap!!.isRecycled) {
+                    Image(
+                        bitmap = bitmap!!.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+
+                // 朗读跟随高亮（绿色）
+                if (ttsSelection != null && ttsSelection.rects.isNotEmpty() && ttsSelection.pageWidthPt > 0f) {
+                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                        val sx = size.width / ttsSelection.pageWidthPt
+                        val sy = size.height / ttsSelection.pageHeightPt
+                        ttsSelection.rects.forEach { r ->
+                            drawRect(
+                                color = Color(0x6634D399),
+                                topLeft = androidx.compose.ui.geometry.Offset(r.left * sx, r.top * sy),
+                                size = androidx.compose.ui.geometry.Size(
+                                    (r.right - r.left) * sx,
+                                    (r.bottom - r.top) * sy,
+                                ),
+                            )
+                        }
+                    }
+                }
+
+                // 选区高亮：pt 坐标 → 控件像素
+                if (selection != null && selection.rects.isNotEmpty() && selection.pageWidthPt > 0f) {
+                    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                        val sx = size.width / selection.pageWidthPt
+                        val sy = size.height / selection.pageHeightPt
+                        selection.rects.forEach { r ->
+                            drawRect(
+                                color = Color(0x553B82F6),
+                                topLeft = androidx.compose.ui.geometry.Offset(r.left * sx, r.top * sy),
+                                size = androidx.compose.ui.geometry.Size(
+                                    (r.right - r.left) * sx,
+                                    (r.bottom - r.top) * sy,
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         }
