@@ -1,0 +1,50 @@
+InkRead v1.1.74 (Build 20232) — 更新说明 / What's New
+=====================================================
+
+【Google Play「更新说明」— English（直接粘贴这一段）】
+-----------------------------------------------------
+We are now InkRead.
+
+• PDF: read books in their original layout, page by page — tap the left or right edge to turn pages
+• PDF: tap any word or sentence to hear it, translate it or look it up
+• PDF: new Read Aloud button — listens through the whole book and turns pages on its own, highlighting each sentence
+• TXT files now convert on your phone: no sign-in, no upload
+• PDF import is now instant and fully on-device, no server conversion
+
+【Google Play「更新说明」— 简体中文（直接粘贴这一段）】
+-----------------------------------------------------
+我们更名为 InkRead（墨阅）。
+
+• PDF 原版版式阅读：逐页阅读，点屏幕左右两侧即可翻页
+• PDF 点哪读哪：长按选词，可朗读、翻译、查词典
+• PDF 新增「朗读本页」：可连续朗读全书，自动翻页并逐句高亮
+• TXT 文件改为手机本地转换，无需登录、不上传
+• PDF 导入改为本地秒级完成，不再走服务器转换
+
+【商店标题 / Title】
+-----------------------------------------------------
+English : InkRead: EPUB/PDF Read Aloud        (28 / 30 字符)
+简体中文 : 墨阅 InkRead：EPUB/PDF 朗读阅读器   (25 / 30 字符)
+
+【简短说明 / Short description】
+-----------------------------------------------------
+English : EPUB/PDF/MOBI reader with TTS read-aloud, sentence sync and bilingual view.  (75 / 80 字符)
+简体中文 : EPUB/PDF/MOBI 全格式阅读器，TTS 朗读逐句高亮同步，双语对照，无广告不追踪。 (39 / 80 字符)
+
+【本次变更技术清单（内部留档）】
+-----------------------------------------------------
+1. 品牌：Android 端所有用户可见英文品牌名 MoReader/MoYue → InkRead（中文名「墨阅」保留）
+2. 新增：PDF 单页渲染 + 左右点按翻页（修复旧版翻页按钮失效）
+3. 新增：PDF「朗读本页 / 连续朗读全书」，自动翻页 + 句子级绿色高亮
+4. 新增：PDF 文字层（PdfBox）选词 → 朗读 / 翻译 / 词典
+5. 变更：TXT → EPUB 转为手机本地转换（TxtConverter），导入不再需要登录、不上传
+6. 下线：服务器端「PDF 转流式精读本」（含 PdfImportManager、云端转换队列、AI 分级纠错 UI）
+        导入 PDF 一律本地入库并原版式阅读；WebDAV 网盘中的 PDF 同样本地直读
+7. 修正：英文界面最后一处残留旧品牌名（云盘未连接提示）
+
+【不可变更项（改了就出事）】
+-----------------------------------------------------
+- applicationId / namespace: com.moyue.app.tingshu / com.moyue.app
+- 签名: moreader.keystore（证书 DN: CN=Moreader，仅内部标识，用户不可见）
+- JS 桥对象 MoreaderBridge；WebDAV 元数据文件 .moreader.json
+- Chrome 扩展 ID: gkhkkojmgcobdlpijepiigecpglmnedh

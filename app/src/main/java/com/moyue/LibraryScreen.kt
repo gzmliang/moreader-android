@@ -37,7 +37,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.moyue.app.data.BookRepository
 import com.moyue.app.data.models.*
-import com.moyue.app.sync.PdfImportManager
 import com.moyue.app.sync.SyncClient
 import com.moyue.app.sync.WebDavClient
 import com.moyue.app.ui.components.SyncSettingsDialog
@@ -77,7 +76,6 @@ fun LibraryScreen(
     val uploadProgress by viewModel.uploadProgress.collectAsStateWithLifecycle()
     val uploadTotal by viewModel.uploadTotal.collectAsStateWithLifecycle()
     val sortOrder by viewModel.sortOrder.collectAsStateWithLifecycle()
-    val pdfImport by PdfImportManager.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     val coroutineScope = rememberCoroutineScope()
@@ -91,43 +89,6 @@ fun LibraryScreen(
     val uploadScope = rememberCoroutineScope()
     val syncClientForUpload = remember { SyncClient(context) }
     val webDavClient = remember { WebDavClient(context) }
-
-    /** 待确认转换选项的 PDF（非空 = 那个小窗正在显示） */
-    var pdfOptionsUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
-
-    /** 小窗里的选择：本书的 AI 纠错级别（1=L1快速 2=L2通读 3=L3精读，默认 L1） */
-    var pdfLlmLevel by remember { mutableStateOf(1) }
-
-    /** 小窗里的开关：顺手修 OCR 认错的字（单独开关，默认关，仅 L2/L3 可用） */
-    var pdfFixOcr by remember { mutableStateOf(false) }
-
-    // Android 13+ 通知权限（后台转换完成后的提醒；拒绝也不影响功能）
-    val notifPermLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { /* 结果不影响转换 */ }
-
-    fun askNotificationPermission() {
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
-                context, android.Manifest.permission.POST_NOTIFICATIONS
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            if (!granted) notifPermLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-
-    /** 选好的 PDF 交给后台任务管理器（上传→云端排队转换→轮询进度→自动入库）
-     *  先弹一个「转换选项」小窗：本书是否用大模型校对章节（每本书单独选，默认开） */
-    fun submitPdfUris(uris: List<Uri>) {
-        if (uris.isEmpty()) return
-        pdfOptionsUris = uris
-    }
-
-    fun startPdfImport(uris: List<Uri>, llmLevel: Int, fixOcr: Boolean) {
-        if (uris.isEmpty()) return
-        val names = uris.map { viewModel.queryDisplayName(context, it) ?: "document.pdf" }
-        askNotificationPermission()
-        PdfImportManager.submit(context, uris, names, llmLevel = llmLevel, fixOcr = fixOcr)
-    }
 
     /** 压缩包里有多本书时，弹出来让用户挑 */
     var zipPickLocal by remember { mutableStateOf<Pair<File, List<File>>?>(null) }
@@ -204,9 +165,8 @@ fun LibraryScreen(
         }
     }
 
-    // 接上云端还没跑完的 PDF 转换任务（App 被杀掉/重新打开也不会白等），并静默检查补齐缺失封面
+    // 静默检查补齐缺失封面
     LaunchedEffect(Unit) {
-        PdfImportManager.resume(context)
         viewModel.repairMissingCovers()
     }
 
@@ -383,7 +343,7 @@ fun LibraryScreen(
                                         }
                                     )
 
-                                    // 导入 PDF（云端转成精读本）
+                                    // 导入 PDF（本地直接读原版版式）
                                     DropdownMenuItem(
                                         text = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_import_menu), fontSize = 13.sp) },
                                         leadingIcon = { Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp)) },
@@ -529,8 +489,6 @@ fun LibraryScreen(
                                     gridState.animateScrollToItem(0)
                                 }
                             },
-                            // 网盘里的 PDF 也支持直接本地入库原样阅读
-                            onPickPdf = { uri, _ -> viewModel.importPdfUri(context, uri) }
                         )
                     }
 
@@ -693,284 +651,6 @@ fun LibraryScreen(
             com.moyue.ui.components.DonateDialog(onDismiss = { showDonateDialog = false })
         }
 
-        // ── 导入 PDF：转换选项（每本书确认一次）──
-        if (pdfOptionsUris.isNotEmpty()) {
-            AlertDialog(
-                onDismissRequest = { pdfOptionsUris = emptyList() },
-                title = {
-                    Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_options_title), fontSize = 15.sp)
-                },
-                text = {
-                    Column {
-                        Text(
-                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_options_ai_hint),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        // AI 纠错级别：L1 最快，L2/L3 逐行通读正文（梁老师定的默认＝L1 快速）
-                        listOf(
-                            0 to com.moyue.app.R.string.pdf_options_off,
-                            1 to com.moyue.app.R.string.pdf_options_l1,
-                            2 to com.moyue.app.R.string.pdf_options_l2,
-                            3 to com.moyue.app.R.string.pdf_options_l3
-                        ).forEach { (level, res) ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { pdfLlmLevel = level }
-                            ) {
-                                RadioButton(
-                                    selected = pdfLlmLevel == level,
-                                    onClick = { pdfLlmLevel = level },
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    androidx.compose.ui.res.stringResource(res),
-                                    fontSize = 13.sp,
-                                    color = if (pdfLlmLevel == level) MaterialTheme.colorScheme.onSurface
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_options_ocr_fix),
-                                    fontSize = 13.sp,
-                                    color = if (pdfLlmLevel >= 2) MaterialTheme.colorScheme.onSurface
-                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                                Text(
-                                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_options_ocr_fix_hint),
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(Modifier.width(6.dp))
-                            Switch(
-                                checked = pdfFixOcr && pdfLlmLevel >= 2,
-                                onCheckedChange = { pdfFixOcr = it },
-                                enabled = pdfLlmLevel >= 2
-                            )
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        val picked = pdfOptionsUris
-                        pdfOptionsUris = emptyList()
-                        startPdfImport(picked, pdfLlmLevel, pdfFixOcr)
-                    }) {
-                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_options_start))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { pdfOptionsUris = emptyList() }) {
-                        Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cancel))
-                    }
-                },
-            )
-        }
-
-        // ── PDF 后台转换：进度弹窗（可「后台继续」）+ 结果提示 ──
-        val focusEntry = pdfImport.focus
-        if (pdfImport.dialogVisible && focusEntry != null) {
-            when (focusEntry.phase) {
-                PdfImportManager.Phase.PENDING,
-                PdfImportManager.Phase.UPLOADING,
-                PdfImportManager.Phase.CONVERTING,
-                PdfImportManager.Phase.DOWNLOADING,
-                PdfImportManager.Phase.IMPORTING -> AlertDialog(
-                    onDismissRequest = { PdfImportManager.dismissDialog() },
-                    title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_convert_title)) },
-                    text = {
-                        Column {
-                            Text(focusEntry.fileName, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Spacer(Modifier.height(12.dp))
-                            LinearProgressIndicator(
-                                progress = { focusEntry.percent.coerceIn(0, 100).toFloat() / 100f },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Spacer(Modifier.height(10.dp))
-                            Text(
-                                "${focusEntry.percent}%  ·  " + androidx.compose.ui.res.stringResource(pdfStageRes(focusEntry)),
-                                fontSize = 13.sp,
-                            )
-                            if (focusEntry.phase == PdfImportManager.Phase.UPLOADING &&
-                                focusEntry.stage == PdfImportManager.STAGE_UPLOAD &&
-                                focusEntry.uploadTotalBytes > 0
-                            ) {
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    androidx.compose.ui.res.stringResource(
-                                        com.moyue.app.R.string.pdf_progress_uploaded,
-                                        pdfFormatBytes(focusEntry.uploadSentBytes),
-                                        pdfFormatBytes(focusEntry.uploadTotalBytes)),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                                )
-                            }
-                            if (focusEntry.pagesTotal > 0) {
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    androidx.compose.ui.res.stringResource(
-                                        com.moyue.app.R.string.pdf_progress_pages,
-                                        focusEntry.pagesDone, focusEntry.pagesTotal),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                                )
-                            }
-                            if (focusEntry.etaSeconds > 0) {
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    androidx.compose.ui.res.stringResource(
-                                        com.moyue.app.R.string.pdf_progress_eta, pdfFormatEta(focusEntry.etaSeconds)),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                                )
-                            }
-                            if (pdfImport.queuedCount > 1) {
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    androidx.compose.ui.res.stringResource(
-                                        com.moyue.app.R.string.pdf_banner_queue, pdfImport.queuedCount - 1),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                                )
-                            }
-                            Spacer(Modifier.height(10.dp))
-                            Text(
-                                androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_convert_background_hint),
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { PdfImportManager.dismissDialog() }) {
-                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_convert_background))
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { PdfImportManager.cancel(focusEntry.localId) }) {
-                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_convert_cancel))
-                        }
-                    },
-                )
-
-                PdfImportManager.Phase.DONE -> AlertDialog(
-                    onDismissRequest = { PdfImportManager.clearFinished() },
-                    title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_convert_title)) },
-                    text = {
-                        Column {
-                            Text(
-                                androidx.compose.ui.res.stringResource(
-                                    com.moyue.app.R.string.pdf_convert_done, focusEntry.title),
-                                fontSize = 14.sp,
-                            )
-                            // AI 纠错干了多少活（L1/L2/L3）：清了水印/广告多少处、修了多少 OCR 错字
-                            if (focusEntry.llmCutLines > 0 || focusEntry.llmOcrFixes > 0) {
-                                Spacer(Modifier.height(6.dp))
-                                Text(
-                                    androidx.compose.ui.res.stringResource(
-                                        com.moyue.app.R.string.pdf_convert_ai_report,
-                                        focusEntry.llmCutLines, focusEntry.llmOcrFixes),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            // 没清掉多少也要说：拿不出证据、本档没敢动的那批（提示可以升档重跑）
-                            if (focusEntry.llmUncleared > 0) {
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    androidx.compose.ui.res.stringResource(
-                                        com.moyue.app.R.string.pdf_convert_ai_uncleared,
-                                        focusEntry.llmUncleared),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            val bookId = focusEntry.bookId
-                            PdfImportManager.clearFinished()
-                            if (bookId != null) onOpenBook(bookId, false)
-                        }) {
-                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_open_now))
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { PdfImportManager.clearFinished() }) {
-                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_convert_close))
-                        }
-                    },
-                )
-
-                PdfImportManager.Phase.FAILED -> AlertDialog(
-                    onDismissRequest = { PdfImportManager.clearFinished() },
-                    title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_convert_title)) },
-                    text = {
-                        val msg = when (focusEntry.errorCode) {
-                            "login_required" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_login_required)
-                            "scanned" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_scanned)
-                            "too_large" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_too_large)
-                            "empty" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_empty)
-                            "ocr_too_long" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_ocr_too_long)
-                            "ocr_unavailable" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_ocr_unavailable)
-                            "network" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_network)
-                            "network_stalled" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_stalled)
-                            "prepare_failed" -> androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_prepare_failed)
-                            "import_failed" -> androidx.compose.ui.res.stringResource(
-                                com.moyue.app.R.string.pdf_error_import_failed, focusEntry.message ?: "")
-                            else -> androidx.compose.ui.res.stringResource(
-                                com.moyue.app.R.string.pdf_error_failed, focusEntry.message ?: "")
-                        }
-                        Text(msg, fontSize = 14.sp)
-                    },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            val needLogin = focusEntry.errorCode == "login_required"
-                            PdfImportManager.clearFinished()
-                            if (needLogin) showSyncSettings = true
-                        }) {
-                            Text(
-                                if (focusEntry.errorCode == "login_required")
-                                    androidx.compose.ui.res.stringResource(com.moyue.app.R.string.cloud_shelf_login_btn)
-                                else androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_convert_close)
-                            )
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { PdfImportManager.clearFinished() }) {
-                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_convert_close))
-                        }
-                    },
-                )
-
-                PdfImportManager.Phase.CANCELED -> AlertDialog(
-                    onDismissRequest = { PdfImportManager.clearFinished() },
-                    title = { Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_convert_title)) },
-                    text = {
-                        Text(
-                            androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_error_canceled),
-                            fontSize = 14.sp,
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { PdfImportManager.clearFinished() }) {
-                            Text(androidx.compose.ui.res.stringResource(com.moyue.app.R.string.pdf_convert_close))
-                        }
-                    },
-                )
-            }
-        }
-
         // Load cloud books when logged in
         val syncClient = remember { SyncClient(context) }
         LaunchedEffect(syncClient.isLoggedIn()) {
@@ -987,7 +667,6 @@ fun LibraryScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center,
             ) {
-                PdfJobBanner(pdfImport, Modifier.align(Alignment.TopCenter)) { PdfImportManager.openDialog() }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
                         Icons.Default.AutoStories,
@@ -1045,7 +724,6 @@ fun LibraryScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                PdfJobBanner(pdfImport) { PdfImportManager.openDialog() }
                 // 搜索结果显示提示
                 if (searchQuery.isNotBlank()) {
                     Text(
@@ -1363,76 +1041,4 @@ private fun CloudOnlyBookCard(
             }
         }
     }
-}
-
-/** 书架顶部的 PDF 转换进度横条（点一下就把进度弹窗重新打开） */
-@Composable
-private fun PdfJobBanner(
-    state: PdfImportManager.State,
-    modifier: Modifier = Modifier,
-    onOpen: () -> Unit,
-) {
-    val entry = state.active ?: return
-    Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
-        shape = RoundedCornerShape(10.dp),
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .clickable { onOpen() },
-    ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    androidx.compose.ui.res.stringResource(
-                        com.moyue.app.R.string.pdf_banner_title, entry.title, entry.percent),
-                    fontSize = 13.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                if (state.queuedCount > 1) {
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        androidx.compose.ui.res.stringResource(
-                            com.moyue.app.R.string.pdf_banner_queue, state.queuedCount - 1),
-                        fontSize = 11.sp,
-                    )
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            LinearProgressIndicator(
-                progress = { entry.percent.coerceIn(0, 100).toFloat() / 100f },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
-}
-
-/** 转换阶段 → 本地化文案（服务端只回英文阶段名，本地化由 App 负责，不显示服务端中文） */
-private fun pdfStageRes(e: PdfImportManager.Entry): Int = when {
-    e.phase == PdfImportManager.Phase.PENDING -> com.moyue.app.R.string.pdf_phase_uploading
-    e.phase == PdfImportManager.Phase.UPLOADING -> if (e.stage == PdfImportManager.STAGE_COPY)
-        com.moyue.app.R.string.pdf_phase_copying else com.moyue.app.R.string.pdf_phase_uploading
-    e.phase == PdfImportManager.Phase.DOWNLOADING -> com.moyue.app.R.string.pdf_phase_downloading
-    e.phase == PdfImportManager.Phase.IMPORTING -> com.moyue.app.R.string.pdf_phase_importing
-    e.stage == "queued" -> com.moyue.app.R.string.pdf_phase_queued
-    e.stage == "ocr" -> com.moyue.app.R.string.pdf_phase_ocr
-    e.stage == "build" || e.stage == "done" -> com.moyue.app.R.string.pdf_phase_packaging
-    else -> com.moyue.app.R.string.pdf_phase_analyzing
-}
-
-/** 字节数 → "12.3 MB"（语言无关，不额外增加 i18n 词条） */
-private fun pdfFormatBytes(bytes: Long): String {
-    if (bytes <= 0) return "0 MB"
-    val mb = bytes / 1048576.0
-    return if (mb >= 1) String.format(java.util.Locale.US, "%.1f MB", mb)
-    else String.format(java.util.Locale.US, "%.0f KB", bytes / 1024.0)
-}
-
-/** 预计剩余时间 → m:ss / h:mm:ss（语言无关，不额外增加 i18n 词条） */
-private fun pdfFormatEta(sec: Int): String {
-    val s = sec.coerceAtLeast(0)
-    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60)
-    else "%d:%02d".format(s / 60, s % 60)
 }

@@ -40,7 +40,6 @@ enum class BookSortOrder {
     PROGRESS,    // 阅读进度
 }
 
-/** PDF 导入（服务端转换）的进度状态见 com.moyue.app.sync.PdfImportManager */
 
 class LibraryViewModel(
     private val repository: BookRepository,
@@ -395,10 +394,6 @@ class LibraryViewModel(
     private fun toastLong(context: Context, msg: String) {
         android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
     }
-
-    // ── PDF 导入 ────────────────────────────────────────
-    // v1.1.1 起 PDF 走「云端后台任务 + 进度轮询」，实现搬到 sync/PdfImportManager.kt
-    // （这里只保留 Uri 相关的工具方法）
 
     fun queryDisplayName(context: Context, uri: Uri): String? {
         // 1. 优先尝试 OpenableColumns 查询

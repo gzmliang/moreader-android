@@ -2,6 +2,30 @@
 
 ---
 
+## 🌟 v1.1.74 (Build 20232) — 品牌改名 InkRead + PDF 原版式朗读 + 下线服务器转换
+
+> **拍板背景**：① Play 上存在同名竞品 `MoReader`（CANTREE，5 万+下载），梁老师决定英文品牌名改为 **InkRead**（中文名「墨阅」保留）；② 梁老师明确指示「服务器端 PDF 转精读本的路线撤掉，这个做减法」，PDF 一律本地原版式阅读；③ 补上 PDF 连续朗读与翻页失效两个硬伤。
+
+### 1. 品牌改名 InkRead
+- `values/strings.xml` + `values-en/strings.xml`：`app_name`、`library_title`、云同步名称、单词本导出标题、帮助页、打赏弹窗全部换新；中文界面里的「墨阅」保持不变。
+- 英文界面最后一处残留（云盘未连接提示）同步修正。
+- 不动：`applicationId`/`namespace`、`moreader.keystore`、`MoreaderBridge`、`.moreader.json`、Chrome 扩展 ID。
+
+### 2. PDF 原版式阅读：单页渲染 + 朗读 + 点哪读哪
+- PDF 阅读器从「长列表 + 缩放层」改为「当前页 index + 单页渲染」，顺带修好长期存在的「翻页按钮点了没反应」。
+- 新增点屏幕左右各 25% 区域翻页，中间点切工具栏；双指缩放保留。
+- 新增顶栏「▶ 朗读本页」：逐句朗读、句子绿色高亮，读完整页自动翻下一章页，可连续读完全书。
+- 新增文字层（PdfBox `PdfTextLayer`）：长按选词 → 原文朗读 / 流式翻译 / 词典查询；扫描版 PDF 明确提示无文字层。
+
+### 3. 下线服务器端 PDF 转精读本
+- 删除 `sync/PdfImportManager.kt`、`SyncClient` 云端转换队列接口、转换选项与进度 UI、相关字符串 54 条。
+- 导入 PDF（本地选择 / 网盘）一律走 `BookRepository.importPdfFile` 本地入库 + 原版式阅读。
+
+### 4. TXT 本地转换
+- `TxtConverter` 在手机端完成编码识别、智能分章、段落还原，导入 TXT 不再需要登录、不再上传。
+
+---
+
 ## 🌟 v1.1.71 (Build 20223) — 修复 AI 音色 Base URL 为空导致 App 直接崩溃
 
 > **拍板背景**：梁老师点朗读时 App 闪退，堆栈为 `IllegalArgumentException: Expected URL scheme 'http' or 'https' but no scheme was found for /audio...`，崩在 `AIVoiceTTSProvider.speak`。根因：AI 音色的 Base URL 默认为空，旧代码直接拿空串拼 `/audio/speech`，OkHttp 在 UI 线程同步抛异常，整个进程崩溃。

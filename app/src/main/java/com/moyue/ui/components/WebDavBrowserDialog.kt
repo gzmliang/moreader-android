@@ -23,10 +23,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import com.moyue.app.data.BookRepository
-import com.moyue.app.sync.PdfImportManager
-import com.moyue.app.sync.SyncClient
 import com.moyue.app.sync.WebDavClient
 import kotlinx.coroutines.Dispatchers
 import com.moyue.app.util.DAV_HANDLED_EXTS
@@ -50,8 +47,6 @@ fun WebDavBrowserDialog(
     webDavClient: WebDavClient,
     onDismiss: () -> Unit,
     onBookImported: () -> Unit = {},
-    /** 选了 PDF 之后交给调用方（好让用户先在「AI 纠错级别」小窗里选一档）；缺省走 L1 直达转换 */
-    onPickPdf: ((Uri, String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -222,30 +217,21 @@ fun WebDavBrowserDialog(
         )
     }
 
-    /** PDF：投递到现有的云端转换队列（本地导入 PDF 用的是同一条通道） */
-    fun submitPdfFile(pdfFile: File) {
-        val client = SyncClient(context)
-        if (!client.isLoggedIn()) {
-            toast(context.getString(com.moyue.app.R.string.webdav_pdf_need_login), long = true)
-            pdfFile.delete()
-            return
-        }
-        val uri = runCatching {
-            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdfFile)
-        }.getOrNull()
-        if (uri == null) {
-            toast(context.getString(com.moyue.app.R.string.webdav_pdf_prepare_failed), long = true)
-            pdfFile.delete()
-            return
-        }
-        if (onPickPdf != null) {
-            onPickPdf(uri, pdfFile.name)
+    /** PDF：本地直接入库，按原版版式阅读（服务端转精读本已下线） */
+    suspend fun submitPdfFile(pdfFile: File) {
+        try {
+            val repo = BookRepository(context)
+            val book = repo.importPdfFile(pdfFile, rawTitle = pdfFile.name)
+            if (repo.isRecentDuplicate) {
+                toast(context.getString(com.moyue.app.R.string.import_duplicate_skip, book.title), long = true)
+            } else {
+                toast(context.getString(com.moyue.app.R.string.webdav_imported_success, book.title, ""), long = true)
+            }
+            onBookImported()
             onDismiss()
-            return
+        } catch (e: Exception) {
+            toast(context.getString(com.moyue.app.R.string.import_failed), long = true)
         }
-        PdfImportManager.submit(context, listOf(uri), listOf(pdfFile.name))
-        toast(context.getString(com.moyue.app.R.string.webdav_pdf_queued), long = true)
-        onDismiss()
     }
 
     /** 本地文件（已下载/已解压）按扩展名分派 */
