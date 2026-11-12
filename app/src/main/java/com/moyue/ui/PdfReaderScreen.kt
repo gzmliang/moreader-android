@@ -21,6 +21,7 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -64,7 +65,36 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
+private const val PREF_PDF_CONTINUOUS_SCROLL = "pdf_continuous_scroll"
+
+/**
+ * 连续滚动模式下，取「占据视口最多」的那一页作为当前页。
+ * 用 firstVisibleItemIndex 会在「上一页还没完全滑出」时一直停在上一页，页码与进度都会误报。
+ */
+private fun LazyListState.dominantPage(): Int {
+    val info = layoutInfo.visibleItemsInfo
+    if (info.isEmpty()) return firstVisibleItemIndex
+    val viewportStart = layoutInfo.viewportStartOffset
+    val viewportEnd = layoutInfo.viewportEndOffset
+    var bestIndex = info.first().index
+    var bestVisible = -1
+    info.forEach { item ->
+        val top = maxOf(item.offset, viewportStart)
+        val bottom = minOf(item.offset + item.size, viewportEnd)
+        val visible = bottom - top
+        if (visible > bestVisible) {
+            bestVisible = visible
+            bestIndex = item.index
+        }
+    }
+    return bestIndex
+}
+
 class PdfDocumentHolder(val file: File) {
+    companion object {
+        /** 位图缓存按字节计量（约 4 张满页），避免连续滚动模式下按“张数”缓存把内存吃爆 */
+        private const val CACHE_MAX_BYTES = 64 * 1024 * 1024
+    }
     private var pfd: ParcelFileDescriptor? = null
     var renderer: PdfRenderer? = null
         private set
@@ -72,7 +102,9 @@ class PdfDocumentHolder(val file: File) {
     var pageCount by mutableIntStateOf(0)
         private set
     private val pageDimensions = mutableMapOf<Int, Pair<Int, Int>>()
-    private val bitmapCache = LruCache<Int, Bitmap>(10)
+    private val bitmapCache = object : LruCache<Int, Bitmap>(CACHE_MAX_BYTES) {
+        override fun sizeOf(key: Int, value: Bitmap): Int = value.byteCount
+    }
 
     fun open(): Boolean {
         return try {
@@ -291,6 +323,28 @@ fun PdfReaderScreen(
     // scrollToItem / 翻页 / 朗读自动跟随全部失效），改为「当前页 index」驱动。
     var currentPage by remember { mutableIntStateOf(initialPage) }
 
+    // 阅读模式开关（持久化）：true = 连续上下滚动（所有页连成一列），false = 单页左右翻页
+    // 保留两种模式：连续滚动是常规阅读习惯，单页模式是朗读跟随最稳
+    val prefs = remember {
+        context.getSharedPreferences("moreader_config", android.content.Context.MODE_PRIVATE)
+    }
+    var continuousScroll by remember {
+        mutableStateOf(prefs.getBoolean(PREF_PDF_CONTINUOUS_SCROLL, true))
+    }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialPage)
+    // 程序化跳页信号（朗读跟随 / 滑块 / 翻页按钮）；-1 表示不动
+    var scrollToPageSignal by remember { mutableIntStateOf(-1) }
+    // 连续模式下每一页各自独立的双指缩放（不放在外层，否则会吃掉单指滚动）
+    val pageScales = remember { mutableStateMapOf<Int, Float>() }
+    val pageOffsets = remember { mutableStateMapOf<Int, Offset>() }
+
+    /** 统一跳页入口：两种模式共用（连续模式额外驱动列表滚动） */
+    fun goToPage(page: Int) {
+        val target = page.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+        currentPage = target
+        if (continuousScroll) scrollToPageSignal = target
+    }
+
     // 保存进度函数
     fun saveProgress() {
         val page = currentPage
@@ -304,6 +358,26 @@ fun PdfReaderScreen(
     LaunchedEffect(currentPage) {
         delay(600)
         saveProgress()
+    }
+
+    // 连续滚动模式：列表可见位置即当前页（页码显示与进度保存都跟着走）
+    // 朗读期间不改 currentPage，避免滚动动画途中的中间页覆盖朗读页
+    LaunchedEffect(
+        continuousScroll,
+        listState.firstVisibleItemIndex,
+        listState.firstVisibleItemScrollOffset
+    ) {
+        if (continuousScroll && !ttsReading) {
+            currentPage = listState.dominantPage().coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+        }
+    }
+
+    // 程序化跳页：只在连续模式、且信号变化时滚动；用户手动滚动不会被强行吸附
+    LaunchedEffect(continuousScroll, scrollToPageSignal) {
+        if (continuousScroll) {
+            val target = if (scrollToPageSignal >= 0) scrollToPageSignal else currentPage
+            listState.animateScrollToItem(target.coerceIn(0, (pageCount - 1).coerceAtLeast(0)))
+        }
     }
 
     BackHandler {
@@ -673,8 +747,8 @@ fun PdfReaderScreen(
                                             page++
                                             continue
                                         }
-                                        // 朗读跨页：直接切当前页（单页渲染，天然同步）
-                                        currentPage = page
+                                        // 朗读跨页：直接切当前页（单页渲染天然同步；连续滚动模式会滚到该页）
+                                        goToPage(page)
                                         for (sent in sents) {
                                             if (!ttsReading) break
                                             ttsHighlight = com.moyue.reader.PdfTextLayer
@@ -715,6 +789,37 @@ fun PdfReaderScreen(
                                 if (ttsReading) Icons.Default.StopCircle else Icons.Default.VolumeUp,
                                 contentDescription = stringResource(com.moyue.app.R.string.pdf_read_page),
                                 tint = if (ttsReading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        // 阅读模式切换：上下滚动 ⇄ 左右翻页（选择会记住）
+                        IconButton(
+                            onClick = {
+                                continuousScroll = !continuousScroll
+                                prefs.edit()
+                                    .putBoolean(PREF_PDF_CONTINUOUS_SCROLL, continuousScroll)
+                                    .apply()
+                                if (continuousScroll) scrollToPageSignal = currentPage
+                                Toast.makeText(
+                                    context,
+                                    context.getString(
+                                        R.string.pdf_reader_mode_switched,
+                                        context.getString(
+                                            if (continuousScroll) R.string.pdf_reader_mode_scroll
+                                            else R.string.pdf_reader_mode_page
+                                        )
+                                    ),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        ) {
+                            Icon(
+                                if (continuousScroll) Icons.Default.ViewCarousel else Icons.Default.ViewAgenda,
+                                contentDescription = stringResource(
+                                    if (continuousScroll) R.string.pdf_reader_switch_to_page
+                                    else R.string.pdf_reader_switch_to_scroll
+                                ),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(20.dp),
                             )
                         }
@@ -769,7 +874,7 @@ fun PdfReaderScreen(
                         ) {
                             TextButton(
                                 onClick = {
-                                    currentPage = (currentPage - 1).coerceAtLeast(0)
+                                    goToPage(currentPage - 1)
                                 },
                                 enabled = currentPage > 0
                             ) {
@@ -786,7 +891,7 @@ fun PdfReaderScreen(
 
                             TextButton(
                                 onClick = {
-                                    currentPage = (currentPage + 1).coerceAtMost(pageCount - 1)
+                                    goToPage(currentPage + 1)
                                 },
                                 enabled = currentPage < pageCount - 1
                             ) {
@@ -804,9 +909,7 @@ fun PdfReaderScreen(
                                 value = sliderValue,
                                 onValueChange = { sliderValue = it },
                                 onValueChangeFinished = {
-                                    coroutineScope.launch {
-                                        currentPage = sliderValue.toInt().coerceIn(0, pageCount - 1)
-                                    }
+                                    goToPage(sliderValue.toInt())
                                 },
                                 valueRange = 0f..(pageCount - 1).toFloat(),
                                 modifier = Modifier
@@ -824,134 +927,187 @@ fun PdfReaderScreen(
         val screenWidthPx = with(density) { screenWidth.dp.roundToPx() }
         val targetRenderWidth = (screenWidthPx * 1.5f).toInt().coerceAtMost(2048)
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(Color(0xFFEEEEEE))
-                .pointerInput(currentPage, pageCount) {
-                    detectTapGestures(
-                        onTap = { /* 单击统一由 PdfPageItem 处理（子元素会先消费点击） */ },
-                        onDoubleTap = {
-                            if (scale > 1f) {
-                                scale = 1f
-                                offset = Offset.Zero
-                            } else {
-                                scale = 2.0f
-                            }
-                        }
-                    )
-                }
-                // 只在「双指」时缩放/平移；单指一律放给 LazyColumn 去滚动。
-                // 原来是 Modifier.transformable，它连单指拖动也当 pan 消费掉，
-                // 导致滑动翻页、animateScrollToItem、朗读自动翻页全部失效。
-                .pointerInput(Unit) {
-                    awaitEachGesture {
-                        var event = awaitPointerEvent()
-                        while (event.changes.size < 2 && event.changes.any { it.pressed }) {
-                            event = awaitPointerEvent()
-                        }
-                        if (event.changes.size < 2) return@awaitEachGesture
-                        do {
-                            event = awaitPointerEvent()
-                            if (event.changes.size >= 2) {
-                                val zoom = event.calculateZoom()
-                                val pan = event.calculatePan()
-                                if (zoom != 1f) {
-                                    scale = (scale * zoom).coerceIn(1f, 3.5f)
-                                }
-                                if (scale > 1f) offset += pan else offset = Offset.Zero
-                                event.changes.forEach { it.consume() }
-                            }
-                        } while (event.changes.any { it.pressed })
-                    }
-                }
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = offset.x
-                    translationY = offset.y
-                }
-        ) {
-            PdfPageItem(
-                holder = currentHolder,
-                pageIndex = currentPage,
-                targetRenderWidth = targetRenderWidth,
-                screenWidthDp = screenWidth,
-                selection = pdfSelection?.takeIf { it.pageIndex == currentPage },
-                ttsSelection = ttsHighlight?.takeIf { it.pageIndex == currentPage },
-                onPageTap = { fx ->
-                    when {
-                        fx < 0.25f && currentPage > 0 -> currentPage--
-                        fx > 0.75f && currentPage < pageCount - 1 -> currentPage++
-                        else -> showControls = !showControls
-                    }
-                },
-                onSelectionGesture = { idx, sfx, sfy, efx, efy, phase ->
-                            // phase 3 = 长按但没拖动就松手（多数是翻页后手指停住误触）
-                            // → 直接忽略，不弹菜单，不打扰阅读
-                            if (phase == 3) {
-                                pdfSelection = null
-                                selectionAnchor = null
-                            } else coroutineScope.launch {
-                                val pdfFile = currentHolder.file
-                                val page = withContext(Dispatchers.IO) {
-                                    com.moyue.reader.PdfTextLayer.extract(pdfFile, idx, context)
-                                }
-                                if (page == null || page.isEmpty) {
-                                    if (phase == 0) {
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            "这一页没有文字层（扫描版 PDF 不支持选词）",
-                                            android.widget.Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                    return@launch
-                                }
-                                val startIdx = com.moyue.reader.PdfTextLayer.charIndexAt(
-                                    page, sfx * page.widthPt, sfy * page.heightPt
-                                ) ?: return@launch
 
-                                // 长按起点锚定成「单词 / 中文分句」，之后拖动只调整另一端
-                                val anchor = if (phase == 0 || phase == 4) {
-                                    com.moyue.reader.PdfTextLayer.wordRange(page, startIdx)
-                                        .also { selectionAnchor = it }
-                                } else {
-                                    selectionAnchor ?: com.moyue.reader.PdfTextLayer.wordRange(page, startIdx)
-                                }
+        // 点按页面：左右两端翻页，中间切工具栏（两种模式通用）
+        val onPageTap: (Float) -> Unit = { fx ->
+            when {
+                fx < 0.25f && currentPage > 0 -> goToPage(currentPage - 1)
+                fx > 0.75f && currentPage < pageCount - 1 -> goToPage(currentPage + 1)
+                else -> showControls = !showControls
+            }
+        }
 
-                                // phase 0/3 = 长按（未拖动 / 未移动就松手）→ 终点取锚定词末尾
-                                // phase 1/2 = 拖动中/拖动松手 → 终点取手指位置
-                                val curIdx = if (phase == 0 || phase == 4) {
-                                    anchor.second
-                                } else {
-                                    com.moyue.reader.PdfTextLayer.charIndexAt(
-                                        page, efx * page.widthPt, efy * page.heightPt
-                                    ) ?: anchor.second
-                                }
-                                val sel = if (curIdx >= anchor.first) {
-                                    com.moyue.reader.PdfTextLayer.resolveRange(page, anchor.first, curIdx)
-                                } else {
-                                    com.moyue.reader.PdfTextLayer.resolveRange(page, curIdx, anchor.second)
-                                }
-                                if (sel != null) {
-                                    pdfSelection = sel.copy(pageIndex = idx)
-                                    if (phase == 2 || phase == 4) {
-                                        lookupHit = com.moyue.reader.PdfTextLayer.Hit(
-                                            sentence = sel.text,
-                                            lineText = sel.text,
-                                            pageIndex = idx,
-                                        )
-                                    }
-                                } else if (phase == 2) {
+        // 长按选词 / 拖动扩选（两种模式通用）
+        val onSelectionGesture: (Int, Float, Float, Float, Float, Int) -> Unit =
+            { idx, sfx, sfy, efx, efy, phase ->
+                        // phase 3 = 长按但没拖动就松手（多数是翻页后手指停住误触）
+                        // → 直接忽略，不弹菜单，不打扰阅读
+                        if (phase == 3) {
+                            pdfSelection = null
+                            selectionAnchor = null
+                        } else coroutineScope.launch {
+                            val pdfFile = currentHolder.file
+                            val page = withContext(Dispatchers.IO) {
+                                com.moyue.reader.PdfTextLayer.extract(pdfFile, idx, context)
+                            }
+                            if (page == null || page.isEmpty) {
+                                if (phase == 0) {
                                     android.widget.Toast.makeText(
-                                        context, "这里没有识别到文字", android.widget.Toast.LENGTH_SHORT
+                                        context,
+                                        "这一页没有文字层（扫描版 PDF 不支持选词）",
+                                        android.widget.Toast.LENGTH_SHORT
                                     ).show()
                                 }
-                                if (phase == 2 || phase == 4) selectionAnchor = null
+                                return@launch
                             }
+                            val startIdx = com.moyue.reader.PdfTextLayer.charIndexAt(
+                                page, sfx * page.widthPt, sfy * page.heightPt
+                            ) ?: return@launch
+
+                            // 长按起点锚定成「单词 / 中文分句」，之后拖动只调整另一端
+                            val anchor = if (phase == 0 || phase == 4) {
+                                com.moyue.reader.PdfTextLayer.wordRange(page, startIdx)
+                                    .also { selectionAnchor = it }
+                            } else {
+                                selectionAnchor ?: com.moyue.reader.PdfTextLayer.wordRange(page, startIdx)
+                            }
+
+                            // phase 0/3 = 长按（未拖动 / 未移动就松手）→ 终点取锚定词末尾
+                            // phase 1/2 = 拖动中/拖动松手 → 终点取手指位置
+                            val curIdx = if (phase == 0 || phase == 4) {
+                                anchor.second
+                            } else {
+                                com.moyue.reader.PdfTextLayer.charIndexAt(
+                                    page, efx * page.widthPt, efy * page.heightPt
+                                ) ?: anchor.second
+                            }
+                            val sel = if (curIdx >= anchor.first) {
+                                com.moyue.reader.PdfTextLayer.resolveRange(page, anchor.first, curIdx)
+                            } else {
+                                com.moyue.reader.PdfTextLayer.resolveRange(page, curIdx, anchor.second)
+                            }
+                            if (sel != null) {
+                                pdfSelection = sel.copy(pageIndex = idx)
+                                if (phase == 2 || phase == 4) {
+                                    lookupHit = com.moyue.reader.PdfTextLayer.Hit(
+                                        sentence = sel.text,
+                                        lineText = sel.text,
+                                        pageIndex = idx,
+                                    )
+                                }
+                            } else if (phase == 2) {
+                                android.widget.Toast.makeText(
+                                    context, "这里没有识别到文字", android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            if (phase == 2 || phase == 4) selectionAnchor = null
                         }
-            )
+            }
+
+        if (continuousScroll) {
+            // ── 上下滚动模式：所有页连成一列，手指上下拉着读 ──
+            // 缩放只作用于当前这一页（不套外层 graphicsLayer，避免再吃掉单指滚动）
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(Color(0xFFEEEEEE)),
+                contentPadding = PaddingValues(vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(count = pageCount, key = { it }) { index ->
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        PdfPageItem(
+                            holder = currentHolder,
+                            pageIndex = index,
+                            targetRenderWidth = targetRenderWidth,
+                            screenWidthDp = screenWidth,
+                            selection = pdfSelection?.takeIf { it.pageIndex == index },
+                            ttsSelection = ttsHighlight?.takeIf { it.pageIndex == index },
+                            zoomScale = pageScales[index] ?: 1f,
+                            zoomOffset = pageOffsets[index] ?: Offset.Zero,
+                            onZoomChange = { s, o ->
+                                pageScales[index] = s
+                                pageOffsets[index] = o
+                            },
+                            onPageTap = onPageTap,
+                            onSelectionGesture = onSelectionGesture,
+                        )
+                        Text(
+                            text = stringResource(R.string.pdf_reader_page_indicator, index + 1, pageCount),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                        )
+                    }
+                }
+            }
+        } else {
+            // ── 左右翻页模式：一页一屏，双指缩放作用于整页 ──
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(Color(0xFFEEEEEE))
+                    .pointerInput(currentPage, pageCount) {
+                        detectTapGestures(
+                            onTap = { /* 单击统一由 PdfPageItem 处理（子元素会先消费点击） */ },
+                            onDoubleTap = {
+                                if (scale > 1f) {
+                                    scale = 1f
+                                    offset = Offset.Zero
+                                } else {
+                                    scale = 2.0f
+                                }
+                            }
+                        )
+                    }
+                    // 只在「双指」时缩放/平移；单指一律放给 LazyColumn 去滚动。
+                    // 原来是 Modifier.transformable，它连单指拖动也当 pan 消费掉，
+                    // 导致滑动翻页、animateScrollToItem、朗读自动翻页全部失效。
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            var event = awaitPointerEvent()
+                            while (event.changes.size < 2 && event.changes.any { it.pressed }) {
+                                event = awaitPointerEvent()
+                            }
+                            if (event.changes.size < 2) return@awaitEachGesture
+                            do {
+                                event = awaitPointerEvent()
+                                if (event.changes.size >= 2) {
+                                    val zoom = event.calculateZoom()
+                                    val pan = event.calculatePan()
+                                    if (zoom != 1f) {
+                                        scale = (scale * zoom).coerceIn(1f, 3.5f)
+                                    }
+                                    if (scale > 1f) offset += pan else offset = Offset.Zero
+                                    event.changes.forEach { it.consume() }
+                                }
+                            } while (event.changes.any { it.pressed })
+                        }
+                    }
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offset.x
+                        translationY = offset.y
+                    }
+            ) {
+                PdfPageItem(
+                    holder = currentHolder,
+                    pageIndex = currentPage,
+                    targetRenderWidth = targetRenderWidth,
+                    screenWidthDp = screenWidth,
+                    selection = pdfSelection?.takeIf { it.pageIndex == currentPage },
+                    ttsSelection = ttsHighlight?.takeIf { it.pageIndex == currentPage },
+                    onPageTap = onPageTap,
+                    onSelectionGesture = onSelectionGesture,
+                )
+            }
         }
     }
 
@@ -987,6 +1143,10 @@ private fun PdfPageItem(
     ttsSelection: com.moyue.reader.PdfTextLayer.Selection? = null,
     onSelectionGesture: ((Int, Float, Float, Float, Float, Int) -> Unit)? = null,
     onPageTap: ((Float) -> Unit)? = null,
+    // 连续滚动模式：每页各自的双指缩放（由外部 state 持有，滚走再滚回来不丢）
+    zoomScale: Float = 1f,
+    zoomOffset: Offset = Offset.Zero,
+    onZoomChange: ((Float, Offset) -> Unit)? = null,
 ) {
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
     var aspectRatio by remember { mutableFloatStateOf(1f / 1.414f) }
@@ -1006,6 +1166,10 @@ private fun PdfPageItem(
     var lastFy by remember(pageIndex) { mutableFloatStateOf(0f) }
     var moved by remember(pageIndex) { mutableStateOf(false) }
 
+    // pointerInput 块不会因为参数变化而重启，手势里必须读「最新」的缩放/位移
+    val liveScale by rememberUpdatedState(zoomScale)
+    val liveOffset by rememberUpdatedState(zoomOffset)
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1019,6 +1183,39 @@ private fun PdfPageItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(aspectRatio)
+                .then(
+                    if (onZoomChange != null) Modifier
+                        // 只在「双指」时缩放/平移；单指拖到一律放给 LazyColumn 去上下滚动。
+                        .pointerInput(pageIndex) {
+                            awaitEachGesture {
+                                var event = awaitPointerEvent()
+                                while (event.changes.size < 2 && event.changes.any { it.pressed }) {
+                                    event = awaitPointerEvent()
+                                }
+                                if (event.changes.size < 2) return@awaitEachGesture
+                                var s = liveScale
+                                var o = liveOffset
+                                do {
+                                    event = awaitPointerEvent()
+                                    if (event.changes.size >= 2) {
+                                        val zoom = event.calculateZoom()
+                                        val pan = event.calculatePan()
+                                        if (zoom != 1f) s = (s * zoom).coerceIn(1f, 3.5f)
+                                        if (s > 1f) o += pan else o = Offset.Zero
+                                        onZoomChange(s, o)
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                } while (event.changes.any { it.pressed })
+                            }
+                        }
+                        .graphicsLayer {
+                            scaleX = zoomScale
+                            scaleY = zoomScale
+                            translationX = zoomOffset.x
+                            translationY = zoomOffset.y
+                        }
+                    else Modifier
+                )
                 .pointerInput(pageIndex) {
                     // 双击 = 选中该位置的单词（浏览器 / Acrobat 同款手势），单击仍是切工具栏
                     detectTapGestures(

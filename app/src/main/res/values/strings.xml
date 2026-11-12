@@ -1073,6 +1073,11 @@ AI Voice（云端 TTS）：
     <string name="pdf_reader_prev_page">上一页</string>
     <string name="pdf_reader_next_page">下一页</string>
     <string name="pdf_reader_jump_page">跳至第 %1$d 页</string>
+    <string name="pdf_reader_mode_scroll">上下滚动</string>
+    <string name="pdf_reader_mode_page">左右翻页</string>
+    <string name="pdf_reader_mode_switched">阅读模式：%1$s</string>
+    <string name="pdf_reader_switch_to_scroll">切换到上下滚动</string>
+    <string name="pdf_reader_switch_to_page">切换到左右翻页</string>
     <string name="pdf_open_failed">无法打开该 PDF 文档，文件可能损坏或已被移动</string>
     <string name="import_failed">导入失败，请检查文件是否完整</string>
     <string name="rename_book">修改书名</string>

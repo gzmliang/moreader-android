@@ -1016,6 +1016,11 @@ Drag the slider to adjust reading speed
     <string name="pdf_reader_prev_page">Previous</string>
     <string name="pdf_reader_next_page">Next</string>
     <string name="pdf_reader_jump_page">Jump to Page %1$d</string>
+    <string name="pdf_reader_mode_scroll">scrolling</string>
+    <string name="pdf_reader_mode_page">page turning</string>
+    <string name="pdf_reader_mode_switched">Reading mode: %1$s</string>
+    <string name="pdf_reader_switch_to_scroll">Switch to scrolling</string>
+    <string name="pdf_reader_switch_to_page">Switch to page turning</string>
     <string name="pdf_open_failed">Failed to open this PDF document. The file may be corrupt or moved.</string>
     <string name="import_failed">Import failed. Please check if the file is intact.</string>
     <string name="rename_book">Rename Book</string>
